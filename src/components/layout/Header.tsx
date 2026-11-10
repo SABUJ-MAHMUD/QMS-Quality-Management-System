@@ -17,6 +17,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
@@ -150,8 +151,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
           </div>
         </div>
 
-        {/* Right Section: Day/Night Switch, Date, Notifications, User Profile */}
-        <div className="flex items-center gap-2.5">
+        {/* Right Section: PWA Install, Day/Night Switch, Date, Notifications, User Profile */}
+        <div className="flex items-center gap-2">
+          {/* In-App PWA Install Prompt Button */}
+          <PWAInstallButton variant="header" />
+
           {/* Day / Night Mode Switch */}
           <button
             onClick={toggleTheme}

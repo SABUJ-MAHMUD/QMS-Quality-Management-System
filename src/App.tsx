@@ -10,6 +10,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Footer } from './components/layout/Footer';
 import { DemoBanner } from './components/common/DemoBanner';
 import { FilterBar } from './components/common/FilterBar';
+import { PWAUpdateToast } from './components/common/PWAUpdateToast';
 
 import { LoginPortalView } from './components/auth/LoginPortalView';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -78,6 +79,7 @@ export default function App() {
   return (
     <AppProvider>
       <MainLayout />
+      <PWAUpdateToast />
     </AppProvider>
   );
 }

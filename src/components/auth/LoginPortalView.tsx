@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 
 export const LoginPortalView: React.FC = () => {
   const { login, theme, toggleTheme } = useApp();
@@ -343,6 +344,11 @@ export const LoginPortalView: React.FC = () => {
                 <span>{isSigningIn ? 'Authenticating...' : 'Sign In to QMS'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* Install QMS as PWA button */}
+              <div className="pt-2">
+                <PWAInstallButton variant="login" />
+              </div>
             </form>
 
             {/* Encrypted Session Footer */}
