@@ -1,0 +1,313 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e10]:
+        - heading "Northern Fashions Ltd." [level=2] [ref=e11]
+        - paragraph [ref=e12]: Knitwear Manufacturing QMS
+      - generic [ref=e13]:
+        - generic [ref=e14]: Core QMS Modules
+        - button "Dashboard" [ref=e15]
+        - button "PDF Report Upload Auto OCR" [ref=e26]:
+          - generic [ref=e27]: PDF Report Upload
+          - generic [ref=e33]: Auto OCR
+        - button "Inspection Database 6" [ref=e860]:
+          - generic [ref=e36]: Inspection Database
+          - generic [ref=e42]: "6"
+        - button "OQL Analytics Aggregated" [ref=e44]:
+          - generic [ref=e45]: OQL Analytics
+          - generic [ref=e50]: Aggregated
+        - button "Defect Analysis Pareto" [active] [ref=e52]:
+          - generic [ref=e53]: Defect Analysis
+          - generic [ref=e58]: Pareto
+        - button "Defect Master" [ref=e60]
+        - button "RCA & CAPA 1 Active" [ref=e67]:
+          - generic [ref=e68]: RCA & CAPA
+          - generic [ref=e72]: 1 Active
+        - button "Monitoring & Effectiveness" [ref=e74]
+        - button "Reports & Export Excel/PDF" [ref=e79]:
+          - generic [ref=e80]: Reports & Export
+          - generic [ref=e85]: Excel/PDF
+        - button "Settings" [ref=e87]
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: Buyer Protocol
+          - generic [ref=e96]: OQL Target 4.5%
+        - paragraph [ref=e97]: BESTSELLER Inspection Standards
+        - paragraph [ref=e98]: OQL = (Total Defects ÷ Inspected Qty) × 100
+    - generic [ref=e99]:
+      - banner [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: GQA
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - heading "Garment Quality Analytics" [level=1] [ref=e106]
+                - generic [ref=e107]: QMS
+              - paragraph [ref=e108]: Digital Quality Intelligence System
+          - generic [ref=e109]:
+            - textbox "Search reports, styles, defects..." [ref=e114]
+            - generic [ref=e115]:
+              - generic [ref=e116]: "Buyer:"
+              - combobox [ref=e117] [cursor=pointer]:
+                - option "All Buyers" [selected]
+                - option "BESTSELLER"
+            - generic [ref=e118]:
+              - generic [ref=e119]: "FY:"
+              - combobox [ref=e120] [cursor=pointer]:
+                - option "All FYs" [selected]
+                - option "FY26/27 (Aug 26 - Jul 27)"
+                - option "FY25/26 (Aug 25 - Jul 26)"
+          - generic [ref=e121]:
+            - generic [ref=e122]: Fri, 30 Oct 2026
+            - button "View notifications" [ref=e127]
+            - button "Northern QMS QMS Manager" [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: Northern QMS
+                - generic [ref=e136]: QMS Manager
+      - generic [ref=e141]:
+        - generic [ref=e142]:
+          - generic [ref=e143]: DEMO DATA ACTIVE
+          - generic [ref=e146]: Demonstration records (e.g. DEMO-001 OQL 5.77%) are loaded for system evaluation. Never present demo data as actual factory inspection results.
+        - button "Clear Demo Data" [ref=e148]
+      - generic [ref=e153]:
+        - generic [ref=e154]: "Filters:"
+        - combobox [ref=e158]:
+          - option "All Months" [selected]
+          - option "October 2026"
+          - option "September 2026"
+          - option "August 2026"
+          - option "July 2026"
+        - combobox [ref=e159]:
+          - option "All Styles" [selected]
+          - option "22031973"
+          - option "DEMO-STYLE-001"
+          - option "DEMO-STYLE-002"
+          - option "DEMO-STYLE-003"
+        - combobox [ref=e160]:
+          - option "All Orders" [selected]
+          - option "NOF4778898"
+          - option "DEMO-001"
+          - option "DEMO-002"
+          - option "DEMO-003"
+          - option "DEMO-004"
+          - option "DEMO-005"
+        - combobox [ref=e161]:
+          - option "All Defect Groups" [selected]
+          - option "Seams & Stitching"
+          - option "Cleanliness"
+          - option "Neckline"
+          - option "Collar & Cuffs"
+          - option "Button & Buttonhole"
+          - option "Measurement"
+          - option "Garment Appearance"
+          - option "Fabric Defects"
+          - option "Printing & Embroidery"
+          - option "Accessories"
+          - option "Product Safety"
+          - option "Others"
+        - combobox [ref=e162]:
+          - option "All Severities" [selected]
+          - option "Critical"
+          - option "Major"
+          - option "Minor"
+        - combobox [ref=e163]:
+          - option "All Results" [selected]
+          - option "Passed"
+          - option "Failed"
+      - main [ref=e164]:
+        - generic [ref=e1162]:
+          - generic [ref=e1164]:
+            - heading "Defect Analysis & Month-wise Intelligence Column Chart & Pareto" [level=2] [ref=e1165]:
+              - text: Defect Analysis & Month-wise Intelligence
+              - generic [ref=e1166]: Column Chart & Pareto
+            - paragraph [ref=e1167]: Month-wise Defect Comparison Column Chart, quality group classification, and 80/20 Pareto distribution analysis.
+          - generic [ref=e1168]:
+            - generic [ref=e1169]:
+              - generic [ref=e1170]:
+                - heading "Month-wise Defect Comparison Column Chart" [level=3] [ref=e1173]
+                - paragraph [ref=e1176]: Side-by-side column comparison of defects across inspection months for each defect group.
+              - generic [ref=e1177]:
+                - button "All Months Column View" [ref=e1178]
+                - button "Direct Two-Month Comparison" [ref=e1179]
+            - generic [ref=e1183]:
+              - strong [ref=e1184]: "How it works:"
+              - text: Whenever you upload an inspection report under a target month (e.g. October 2026 or September 2026) in the
+              - emphasis [ref=e1185]: “PDF Report Upload”
+              - text: tab, its defects are automatically categorized and reflected side-by-side in this Column Chart.
+            - generic [ref=e1188]:
+              - list [ref=e1190]:
+                - listitem [ref=e1191]:
+                  - img "2026-07 legend icon" [ref=e1192]
+                  - text: 2026-07
+                - listitem [ref=e1194]:
+                  - img "2026-08 legend icon" [ref=e1195]
+                  - text: 2026-08
+                - listitem [ref=e1197]:
+                  - img "2026-09 legend icon" [ref=e1198]
+                  - text: 2026-09
+                - listitem [ref=e1200]:
+                  - img "2026-10 legend icon" [ref=e1201]
+                  - text: 2026-10
+              - application [ref=e1203]:
+                - generic [ref=e1270]:
+                  - generic [ref=e1271]:
+                    - generic [ref=e1272]: Seams & Stitching
+                    - generic [ref=e1274]: Cleanliness
+                    - generic [ref=e1276]: Neckline
+                    - generic [ref=e1278]: Button & Buttonhole
+                    - generic [ref=e1280]: Measurement
+                    - generic [ref=e1282]: Fabric Defects
+                    - generic [ref=e1284]: Others
+                  - generic [ref=e1286]:
+                    - generic [ref=e1287]: "0"
+                    - generic [ref=e1289]: "7"
+                    - generic [ref=e1291]: "14"
+                    - generic [ref=e1293]: "21"
+                    - generic [ref=e1295]: "28"
+                  - generic [ref=e1297]: Defect Quantity
+          - generic [ref=e1298]:
+            - generic [ref=e1299]:
+              - generic [ref=e1300]:
+                - 'heading "Chart A: Defect Pareto Chart (80/20 Rule)" [level=3] [ref=e1301]'
+                - paragraph [ref=e1304]: Columns represent defect counts in descending order; red curve represents cumulative percentage (%).
+              - generic [ref=e1305]: Target top 80% defect categories via RCA & CAPA
+            - generic [ref=e1308]:
+              - list [ref=e1310]:
+                - listitem [ref=e1311]:
+                  - img "Cumulative % legend icon" [ref=e1312]
+                  - text: Cumulative %
+                - listitem [ref=e1314]:
+                  - img "Defect Quantity legend icon" [ref=e1315]
+                  - text: Defect Quantity
+              - application [ref=e1317]:
+                - generic [ref=e1390]:
+                  - generic [ref=e1391]:
+                    - generic [ref=e1392]: Uncut Thread
+                    - generic [ref=e1394]: Broken Stitching
+                    - generic [ref=e1396]: Oil Spot
+                    - generic [ref=e1398]: Skip Stitch
+                    - generic [ref=e1400]: Open Seam
+                    - generic [ref=e1402]: Needle Hole / Cut
+                    - generic [ref=e1404]: Out of Tolerance Measurement
+                    - generic [ref=e1406]: Dirty Garment
+                    - generic [ref=e1408]: Other Defects
+                    - generic [ref=e1410]: Loose Button
+                    - generic [ref=e1412]: Seam Puckering
+                    - generic [ref=e1414]: Uneven Neckline
+                  - generic [ref=e1416]:
+                    - generic [ref=e1417]: "0"
+                    - generic [ref=e1419]: "10"
+                    - generic [ref=e1421]: "20"
+                    - generic [ref=e1423]: "30"
+                    - generic [ref=e1425]: "40"
+                  - generic [ref=e1427]: Defect Qty
+                  - generic [ref=e1428]:
+                    - generic [ref=e1429]: 0%
+                    - generic [ref=e1431]: 25%
+                    - generic [ref=e1433]: 50%
+                    - generic [ref=e1435]: 75%
+                    - generic [ref=e1437]: 100%
+                  - generic [ref=e1439]: Cumulative %
+          - generic [ref=e1440]:
+            - generic [ref=e1441]:
+              - generic [ref=e1442]:
+                - 'heading "Chart B: Defect Group Distribution" [level=3] [ref=e1443]'
+                - paragraph [ref=e1447]: Percentage distribution across 12 QMS groups
+              - application [ref=e1451]
+              - generic [ref=e1476]:
+                - generic [ref=e1477]:
+                  - generic [ref=e1478]: Cleanliness
+                  - generic [ref=e1480]: "68"
+                - generic [ref=e1481]:
+                  - generic [ref=e1482]: Seams & Stitching
+                  - generic [ref=e1484]: "48"
+                - generic [ref=e1485]:
+                  - generic [ref=e1486]: Measurement
+                  - generic [ref=e1488]: "6"
+                - generic [ref=e1489]:
+                  - generic [ref=e1490]: Fabric Defects
+                  - generic [ref=e1492]: "6"
+                - generic [ref=e1493]:
+                  - generic [ref=e1494]: Button & Buttonhole
+                  - generic [ref=e1496]: "4"
+                - generic [ref=e1497]:
+                  - generic [ref=e1498]: Others
+                  - generic [ref=e1500]: "4"
+                - generic [ref=e1501]:
+                  - generic [ref=e1502]: Neckline
+                  - generic [ref=e1504]: "1"
+            - generic [ref=e1505]:
+              - generic [ref=e1506]:
+                - 'heading "Chart C: Severity Breakdown" [level=3] [ref=e1507]'
+                - paragraph [ref=e1512]: AQL severity classification proportions
+              - application [ref=e1516]
+              - generic [ref=e1529]:
+                - generic [ref=e1530]:
+                  - generic [ref=e1531]: Critical Defects
+                  - generic [ref=e1533]: "13"
+                - generic [ref=e1534]:
+                  - generic [ref=e1535]: Major Defects
+                  - generic [ref=e1537]: "71"
+                - generic [ref=e1538]:
+                  - generic [ref=e1539]: Minor Defects
+                  - generic [ref=e1541]: "53"
+            - generic [ref=e1542]:
+              - generic [ref=e1543]:
+                - 'heading "Chart E: Top 10 Recurring Defects" [level=3] [ref=e1544]'
+                - paragraph [ref=e1548]: Highest frequency quality defect items
+              - generic [ref=e1549]:
+                - generic [ref=e1551]:
+                  - generic [ref=e1552]:
+                    - generic [ref=e1553]: "#1"
+                    - text: Uncut Thread
+                  - generic [ref=e1554]: 38 (27.7%)
+                - generic [ref=e1558]:
+                  - generic [ref=e1559]:
+                    - generic [ref=e1560]: "#2"
+                    - text: Broken Stitching
+                  - generic [ref=e1561]: 28 (20.4%)
+                - generic [ref=e1565]:
+                  - generic [ref=e1566]:
+                    - generic [ref=e1567]: "#3"
+                    - text: Oil Spot
+                  - generic [ref=e1568]: 25 (18.2%)
+                - generic [ref=e1572]:
+                  - generic [ref=e1573]:
+                    - generic [ref=e1574]: "#4"
+                    - text: Skip Stitch
+                  - generic [ref=e1575]: 11 (8%)
+                - generic [ref=e1579]:
+                  - generic [ref=e1580]:
+                    - generic [ref=e1581]: "#5"
+                    - text: Open Seam
+                  - generic [ref=e1582]: 6 (4.4%)
+                - generic [ref=e1586]:
+                  - generic [ref=e1587]:
+                    - generic [ref=e1588]: "#6"
+                    - text: Needle Hole / Cut
+                  - generic [ref=e1589]: 6 (4.4%)
+                - generic [ref=e1593]:
+                  - generic [ref=e1594]:
+                    - generic [ref=e1595]: "#7"
+                    - text: Out of Tolerance Measurement
+                  - generic [ref=e1596]: 6 (4.4%)
+                - generic [ref=e1600]:
+                  - generic [ref=e1601]:
+                    - generic [ref=e1602]: "#8"
+                    - text: Dirty Garment
+                  - generic [ref=e1603]: 5 (3.6%)
+                - generic [ref=e1607]:
+                  - generic [ref=e1608]:
+                    - generic [ref=e1609]: "#9"
+                    - text: Other Defects
+                  - generic [ref=e1610]: 4 (2.9%)
+                - generic [ref=e1614]:
+                  - generic [ref=e1615]:
+                    - generic [ref=e1616]: "#10"
+                    - text: Loose Button
+                  - generic [ref=e1617]: 4 (2.9%)
+      - contentinfo [ref=e475]:
+        - generic [ref=e476]:
+          - generic [ref=e477]: Garment Quality Analytics | Digital Quality Intelligence System
+          - generic [ref=e478]: Northern Fashions Ltd. QMS Department • BESTSELLER Buyer Outgoing Quality Level Compliance
+  - generic [aria-hidden] [ref=e479]: "25"

@@ -1,0 +1,6 @@
+{
+  "name": "Garment Quality Analytics",
+  "description": "Digital Quality Intelligence System for Northern Fashions Ltd. QMS platform for BESTSELLER buyer OQL inspection reports, automated defect classification, trend analytics, RCA & CAPA management, and effectiveness monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

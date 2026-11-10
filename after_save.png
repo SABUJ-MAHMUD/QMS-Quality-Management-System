@@ -1,0 +1,302 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e10]:
+        - heading "Northern Fashions Ltd." [level=2] [ref=e11]
+        - paragraph [ref=e12]: Knitwear Manufacturing QMS
+      - generic [ref=e13]:
+        - generic [ref=e14]: Core QMS Modules
+        - button "Dashboard" [ref=e15]
+        - button "PDF Report Upload Auto OCR" [ref=e26]:
+          - generic [ref=e27]: PDF Report Upload
+          - generic [ref=e33]: Auto OCR
+        - button "Inspection Database 6" [ref=e860]:
+          - generic [ref=e36]: Inspection Database
+          - generic [ref=e42]: "6"
+        - button "OQL Analytics Aggregated" [ref=e44]:
+          - generic [ref=e45]: OQL Analytics
+          - generic [ref=e50]: Aggregated
+        - button "Defect Analysis Pareto" [ref=e52]:
+          - generic [ref=e53]: Defect Analysis
+          - generic [ref=e58]: Pareto
+        - button "Defect Master" [ref=e60]
+        - button "RCA & CAPA 1 Active" [ref=e67]:
+          - generic [ref=e68]: RCA & CAPA
+          - generic [ref=e72]: 1 Active
+        - button "Monitoring & Effectiveness" [ref=e74]
+        - button "Reports & Export Excel/PDF" [ref=e79]:
+          - generic [ref=e80]: Reports & Export
+          - generic [ref=e85]: Excel/PDF
+        - button "Settings" [ref=e87]
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: Buyer Protocol
+          - generic [ref=e96]: OQL Target 4.5%
+        - paragraph [ref=e97]: BESTSELLER Inspection Standards
+        - paragraph [ref=e98]: OQL = (Total Defects ÷ Inspected Qty) × 100
+    - generic [ref=e99]:
+      - banner [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: GQA
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - heading "Garment Quality Analytics" [level=1] [ref=e106]
+                - generic [ref=e107]: QMS
+              - paragraph [ref=e108]: Digital Quality Intelligence System
+          - generic [ref=e109]:
+            - textbox "Search reports, styles, defects..." [ref=e114]
+            - generic [ref=e115]:
+              - generic [ref=e116]: "Buyer:"
+              - combobox [ref=e117] [cursor=pointer]:
+                - option "All Buyers" [selected]
+                - option "BESTSELLER"
+            - generic [ref=e118]:
+              - generic [ref=e119]: "FY:"
+              - combobox [ref=e120] [cursor=pointer]:
+                - option "All FYs" [selected]
+                - option "FY26/27 (Aug 26 - Jul 27)"
+                - option "FY25/26 (Aug 25 - Jul 26)"
+          - generic [ref=e121]:
+            - generic [ref=e122]: Fri, 30 Oct 2026
+            - button "View notifications" [ref=e127]
+            - button "Northern QMS QMS Manager" [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: Northern QMS
+                - generic [ref=e136]: QMS Manager
+      - generic [ref=e141]:
+        - generic [ref=e142]:
+          - generic [ref=e143]: DEMO DATA ACTIVE
+          - generic [ref=e146]: Demonstration records (e.g. DEMO-001 OQL 5.77%) are loaded for system evaluation. Never present demo data as actual factory inspection results.
+        - button "Clear Demo Data" [ref=e148]
+      - generic [ref=e153]:
+        - generic [ref=e154]: "Filters:"
+        - combobox [ref=e158]:
+          - option "All Months" [selected]
+          - option "October 2026"
+          - option "September 2026"
+          - option "August 2026"
+          - option "July 2026"
+        - combobox [ref=e159]:
+          - option "All Styles" [selected]
+          - option "22031973"
+          - option "DEMO-STYLE-001"
+          - option "DEMO-STYLE-002"
+          - option "DEMO-STYLE-003"
+        - combobox [ref=e160]:
+          - option "All Orders" [selected]
+          - option "NOF4778898"
+          - option "DEMO-001"
+          - option "DEMO-002"
+          - option "DEMO-003"
+          - option "DEMO-004"
+          - option "DEMO-005"
+        - combobox [ref=e161]:
+          - option "All Defect Groups" [selected]
+          - option "Seams & Stitching"
+          - option "Cleanliness"
+          - option "Neckline"
+          - option "Collar & Cuffs"
+          - option "Button & Buttonhole"
+          - option "Measurement"
+          - option "Garment Appearance"
+          - option "Fabric Defects"
+          - option "Printing & Embroidery"
+          - option "Accessories"
+          - option "Product Safety"
+          - option "Others"
+        - combobox [ref=e162]:
+          - option "All Severities" [selected]
+          - option "Critical"
+          - option "Major"
+          - option "Minor"
+        - combobox [ref=e163]:
+          - option "All Results" [selected]
+          - option "Passed"
+          - option "Failed"
+      - main [ref=e164]:
+        - generic [ref=e863]:
+          - generic [ref=e864]:
+            - generic [ref=e865]:
+              - heading "Inspection Database 6 Records" [level=2] [ref=e866]:
+                - text: Inspection Database
+                - generic [ref=e867]: 6 Records
+              - paragraph [ref=e868]: Central repository of approved buyer OQL inspection reports, defect breakdowns, and audit trails.
+            - generic [ref=e869]:
+              - button "Export to Excel" [ref=e870]
+              - button "New Inspection Report" [ref=e874]
+          - table [ref=e880]:
+            - rowgroup [ref=e881]:
+              - row [ref=e882]:
+                - columnheader "Date" [ref=e883] [cursor=pointer]
+                - columnheader "Report No" [ref=e889] [cursor=pointer]
+                - columnheader "Buyer / Factory" [ref=e895]
+                - columnheader "Order / Style" [ref=e896]
+                - columnheader "Order Qty" [ref=e897] [cursor=pointer]
+                - columnheader "Inspected" [ref=e903] [cursor=pointer]
+                - columnheader "Crit" [ref=e909]
+                - columnheader "Maj" [ref=e910]
+                - columnheader "Min" [ref=e911]
+                - columnheader "Total" [ref=e912] [cursor=pointer]
+                - columnheader "OQL (%)" [ref=e918] [cursor=pointer]
+                - columnheader "Result" [ref=e924]
+                - columnheader "Actions" [ref=e925]
+            - rowgroup [ref=e926]:
+              - row [ref=e927]:
+                - cell "2026-10-29" [ref=e928]
+                - cell "BS-OQL-NOF4778898" [ref=e929]
+                - cell "BESTSELLER NORTHERN FASHION LTD." [ref=e932]:
+                  - generic [ref=e933]: BESTSELLER
+                  - generic [ref=e934]: NORTHERN FASHION LTD.
+                - cell "NOF4778898 22031973" [ref=e935]:
+                  - generic [ref=e936]: NOF4778898
+                  - generic [ref=e937]: "22031973"
+                - cell "2,010" [ref=e938]
+                - cell "50" [ref=e939]
+                - cell "0" [ref=e940]
+                - cell "2" [ref=e941]
+                - cell "1" [ref=e942]
+                - cell "3" [ref=e943]
+                - cell "6.00%" [ref=e944]
+                - cell "FAILED" [ref=e946]
+                - cell [ref=e948]:
+                  - generic [ref=e949]:
+                    - button "View Details & Defect Breakdown" [ref=e950]
+                    - button "View Simulated Original PDF" [ref=e954]
+                    - button "Edit Report" [ref=e958]
+                    - button "Delete Report" [ref=e961]
+              - row [ref=e965]:
+                - cell "2026-10-18" [ref=e966]
+                - cell "BS-OQL-2026-1018-02 DEMO" [ref=e967]:
+                  - generic [ref=e968]:
+                    - generic [ref=e969]: BS-OQL-2026-1018-02
+                    - generic [ref=e970]: DEMO
+                - cell "BESTSELLER Northern Fashions Ltd." [ref=e971]:
+                  - generic [ref=e972]: BESTSELLER
+                  - generic [ref=e973]: Northern Fashions Ltd.
+                - cell "DEMO-002 DEMO-STYLE-002" [ref=e974]:
+                  - generic [ref=e975]: DEMO-002
+                  - generic [ref=e976]: DEMO-STYLE-002
+                - cell "6,500" [ref=e977]
+                - cell "400" [ref=e978]
+                - cell "1" [ref=e979]
+                - cell "9" [ref=e980]
+                - cell "6" [ref=e981]
+                - cell "16" [ref=e982]
+                - cell "4.00%" [ref=e983]
+                - cell "PASSED" [ref=e985]
+                - cell [ref=e987]:
+                  - generic [ref=e988]:
+                    - button "View Details & Defect Breakdown" [ref=e989]
+                    - button "View Simulated Original PDF" [ref=e993]
+                    - button "Edit Report" [ref=e997]
+                    - button "Delete Report" [ref=e1000]
+              - row [ref=e1004]:
+                - cell "2026-10-15" [ref=e1005]
+                - cell "BS-OQL-2026-1015-01 DEMO" [ref=e1006]:
+                  - generic [ref=e1007]:
+                    - generic [ref=e1008]: BS-OQL-2026-1015-01
+                    - generic [ref=e1009]: DEMO
+                - cell "BESTSELLER Northern Fashions Ltd." [ref=e1010]:
+                  - generic [ref=e1011]: BESTSELLER
+                  - generic [ref=e1012]: Northern Fashions Ltd.
+                - cell "DEMO-001 DEMO-STYLE-001" [ref=e1013]:
+                  - generic [ref=e1014]: DEMO-001
+                  - generic [ref=e1015]: DEMO-STYLE-001
+                - cell "10,000" [ref=e1016]
+                - cell "520" [ref=e1017]
+                - cell "5" [ref=e1018]
+                - cell "15" [ref=e1019]
+                - cell "10" [ref=e1020]
+                - cell "30" [ref=e1021]
+                - cell "5.77%" [ref=e1022]
+                - cell "FAILED" [ref=e1024]
+                - cell [ref=e1026]:
+                  - generic [ref=e1027]:
+                    - button "View Details & Defect Breakdown" [ref=e1028]
+                    - button "View Simulated Original PDF" [ref=e1032]
+                    - button "Edit Report" [ref=e1036]
+                    - button "Delete Report" [ref=e1039]
+              - row [ref=e1043]:
+                - cell "2026-09-22" [ref=e1044]
+                - cell "BS-OQL-2026-0922-01 DEMO" [ref=e1045]:
+                  - generic [ref=e1046]:
+                    - generic [ref=e1047]: BS-OQL-2026-0922-01
+                    - generic [ref=e1048]: DEMO
+                - cell "BESTSELLER Northern Fashions Ltd." [ref=e1049]:
+                  - generic [ref=e1050]: BESTSELLER
+                  - generic [ref=e1051]: Northern Fashions Ltd.
+                - cell "DEMO-003 DEMO-STYLE-001" [ref=e1052]:
+                  - generic [ref=e1053]: DEMO-003
+                  - generic [ref=e1054]: DEMO-STYLE-001
+                - cell "12,000" [ref=e1055]
+                - cell "520" [ref=e1056]
+                - cell "3" [ref=e1057]
+                - cell "18" [ref=e1058]
+                - cell "12" [ref=e1059]
+                - cell "33" [ref=e1060]
+                - cell "6.35%" [ref=e1061]
+                - cell "FAILED" [ref=e1063]
+                - cell [ref=e1065]:
+                  - generic [ref=e1066]:
+                    - button "View Details & Defect Breakdown" [ref=e1067]
+                    - button "View Simulated Original PDF" [ref=e1071]
+                    - button "Edit Report" [ref=e1075]
+                    - button "Delete Report" [ref=e1078]
+              - row [ref=e1082]:
+                - cell "2026-08-14" [ref=e1083]
+                - cell "BS-OQL-2026-0814-01 DEMO" [ref=e1084]:
+                  - generic [ref=e1085]:
+                    - generic [ref=e1086]: BS-OQL-2026-0814-01
+                    - generic [ref=e1087]: DEMO
+                - cell "BESTSELLER Northern Fashions Ltd." [ref=e1088]:
+                  - generic [ref=e1089]: BESTSELLER
+                  - generic [ref=e1090]: Northern Fashions Ltd.
+                - cell "DEMO-004 DEMO-STYLE-003" [ref=e1091]:
+                  - generic [ref=e1092]: DEMO-004
+                  - generic [ref=e1093]: DEMO-STYLE-003
+                - cell "8,000" [ref=e1094]
+                - cell "520" [ref=e1095]
+                - cell "0" [ref=e1096]
+                - cell "12" [ref=e1097]
+                - cell "7" [ref=e1098]
+                - cell "19" [ref=e1099]
+                - cell "3.65%" [ref=e1100]
+                - cell "PASSED" [ref=e1102]
+                - cell [ref=e1104]:
+                  - generic [ref=e1105]:
+                    - button "View Details & Defect Breakdown" [ref=e1106]
+                    - button "View Simulated Original PDF" [ref=e1110]
+                    - button "Edit Report" [ref=e1114]
+                    - button "Delete Report" [ref=e1117]
+              - row [ref=e1121]:
+                - cell "2026-07-10" [ref=e1122]
+                - cell "BS-OQL-2026-0710-01 DEMO" [ref=e1123]:
+                  - generic [ref=e1124]:
+                    - generic [ref=e1125]: BS-OQL-2026-0710-01
+                    - generic [ref=e1126]: DEMO
+                - cell "BESTSELLER Northern Fashions Ltd." [ref=e1127]:
+                  - generic [ref=e1128]: BESTSELLER
+                  - generic [ref=e1129]: Northern Fashions Ltd.
+                - cell "DEMO-005 DEMO-STYLE-002" [ref=e1130]:
+                  - generic [ref=e1131]: DEMO-005
+                  - generic [ref=e1132]: DEMO-STYLE-002
+                - cell "7,200" [ref=e1133]
+                - cell "520" [ref=e1134]
+                - cell "4" [ref=e1135]
+                - cell "16" [ref=e1136]
+                - cell "11" [ref=e1137]
+                - cell "31" [ref=e1138]
+                - cell "5.96%" [ref=e1139]
+                - cell "FAILED" [ref=e1141]
+                - cell [ref=e1143]:
+                  - generic [ref=e1144]:
+                    - button "View Details & Defect Breakdown" [ref=e1145]
+                    - button "View Simulated Original PDF" [ref=e1149]
+                    - button "Edit Report" [ref=e1153]
+                    - button "Delete Report" [ref=e1156]
+      - contentinfo [ref=e475]:
+        - generic [ref=e476]:
+          - generic [ref=e477]: Garment Quality Analytics | Digital Quality Intelligence System
+          - generic [ref=e478]: Northern Fashions Ltd. QMS Department • BESTSELLER Buyer Outgoing Quality Level Compliance
+  - generic [aria-hidden] [ref=e479]: "15"

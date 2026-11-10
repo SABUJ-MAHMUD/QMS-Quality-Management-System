@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "InspectionReport": {
+      "title": "InspectionReport",
+      "description": "BESTSELLER and Garment quality inspection report data with OQL calculations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique report record ID" },
+        "reportNumber": { "type": "string", "description": "Report number or NOF serial" },
+        "inspectionDate": { "type": "string", "description": "Date of inspection (YYYY-MM-DD)" },
+        "buyer": { "type": "string", "description": "Buyer name, e.g., BESTSELLER" },
+        "factory": { "type": "string", "description": "Factory name, Northern Fashions Ltd." },
+        "orderNumber": { "type": "string", "description": "Order or PO number" },
+        "styleNumber": { "type": "string", "description": "Garment style code" },
+        "styleDescription": { "type": "string", "description": "Item description" },
+        "inspector": { "type": "string", "description": "Quality inspector name" },
+        "orderQuantity": { "type": "number", "description": "Total order quantity" },
+        "inspectedQuantity": { "type": "number", "description": "Sample quantity inspected" },
+        "totalDefectQuantity": { "type": "number", "description": "Total defects identified" },
+        "criticalDefectQuantity": { "type": "number", "description": "Critical defects found" },
+        "majorDefectQuantity": { "type": "number", "description": "Major defects found" },
+        "minorDefectQuantity": { "type": "number", "description": "Minor defects found" },
+        "oql": { "type": "number", "description": "Observed Quality Level percentage" },
+        "targetOql": { "type": "number", "description": "Target OQL threshold, e.g., 4.5%" },
+        "inspectionResult": { "type": "string", "description": "PASSED or FAILED" },
+        "remarks": { "type": "string", "description": "Inspector conclusion and comments" },
+        "pdfFileName": { "type": "string", "description": "Original PDF report filename" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" },
+        "updatedAt": { "type": "string", "description": "ISO last update timestamp" }
+      },
+      "required": ["reportNumber", "inspectionDate", "buyer", "orderNumber", "styleNumber", "inspectedQuantity", "totalDefectQuantity", "oql", "inspectionResult"]
+    },
+    "DefectGroup": {
+      "title": "DefectGroup",
+      "description": "Garment defect classification category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Defect group ID" },
+        "groupCode": { "type": "string", "description": "Short code e.g. SEW, FAB" },
+        "groupName": { "type": "string", "description": "Group name e.g. Sewing Defects" },
+        "description": { "type": "string", "description": "Category scope" },
+        "color": { "type": "string", "description": "Theme color code" }
+      },
+      "required": ["groupCode", "groupName"]
+    },
+    "DefectMaster": {
+      "title": "DefectMaster",
+      "description": "Standardized defect dictionary item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Defect catalog ID" },
+        "defectCode": { "type": "string", "description": "Unique defect code" },
+        "defectGroupId": { "type": "string", "description": "Parent defect group ID" },
+        "standardDefectName": { "type": "string", "description": "Standard name of the defect" },
+        "defaultSeverity": { "type": "string", "description": "Critical, Major, or Minor" },
+        "description": { "type": "string", "description": "Defect description" }
+      },
+      "required": ["defectCode", "defectGroupId", "standardDefectName", "defaultSeverity"]
+    },
+    "CAPARecord": {
+      "title": "CAPARecord",
+      "description": "Corrective and Preventive Action management record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "CAPA ID" },
+        "capaCode": { "type": "string", "description": "Unique code e.g. CAPA-2026-001" },
+        "reportId": { "type": "string", "description": "Associated inspection report ID" },
+        "defectCategory": { "type": "string", "description": "Primary defect group" },
+        "rootCause": { "type": "string", "description": "5-Why / Ishikawa root cause" },
+        "correctiveAction": { "type": "string", "description": "Immediate containment action" },
+        "preventiveAction": { "type": "string", "description": "Long-term recurrence prevention" },
+        "owner": { "type": "string", "description": "Responsible person" },
+        "targetDate": { "type": "string", "description": "Target completion date" },
+        "capaStatus": { "type": "string", "description": "Open, In Progress, Implemented, Closed" },
+        "effectivenessStatus": { "type": "string", "description": "Pending, Effective, Ineffective" }
+      },
+      "required": ["capaCode", "defectCategory", "rootCause", "correctiveAction", "owner", "targetDate", "capaStatus"]
+    },
+    "MonitoringRecord": {
+      "title": "MonitoringRecord",
+      "description": "Post-CAPA effectiveness check audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Monitoring record ID" },
+        "capaId": { "type": "string", "description": "Linked CAPA record ID" },
+        "capaCode": { "type": "string", "description": "Linked CAPA code" },
+        "checkDate": { "type": "string", "description": "Verification date" },
+        "checkedBy": { "type": "string", "description": "QMS Auditor name" },
+        "followUpFindings": { "type": "string", "description": "Verification observations" },
+        "effectivenessStatus": { "type": "string", "description": "Effective or Ineffective" },
+        "nextAuditDate": { "type": "string", "description": "Next scheduled audit if any" },
+        "remarks": { "type": "string", "description": "Additional notes" }
+      },
+      "required": ["capaId", "capaCode", "checkDate", "checkedBy", "effectivenessStatus"]
+    }
+  },
+  "firestore": {
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/InspectionReport" },
+      "description": "Inspection reports for garments and BESTSELLER AQL audits"
+    },
+    "/defect_groups/{groupId}": {
+      "schema": { "$ref": "#/entities/DefectGroup" },
+      "description": "Classification categories for garment defects"
+    },
+    "/defect_master/{defectId}": {
+      "schema": { "$ref": "#/entities/DefectMaster" },
+      "description": "Master defect catalog"
+    },
+    "/capas/{capaId}": {
+      "schema": { "$ref": "#/entities/CAPARecord" },
+      "description": "Corrective and Preventive Action records"
+    },
+    "/monitoring/{monitoringId}": {
+      "schema": { "$ref": "#/entities/MonitoringRecord" },
+      "description": "Effectiveness audit records"
+    }
+  }
+}

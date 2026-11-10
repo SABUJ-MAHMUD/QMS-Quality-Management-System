@@ -1,0 +1,311 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e10]:
+        - heading "Northern Fashions Ltd." [level=2] [ref=e11]
+        - paragraph [ref=e12]: Knitwear Manufacturing QMS
+      - generic [ref=e13]:
+        - generic [ref=e14]: Core QMS Modules
+        - button "Dashboard" [ref=e15]
+        - button "PDF Report Upload Auto OCR" [ref=e26]:
+          - generic [ref=e27]: PDF Report Upload
+          - generic [ref=e33]: Auto OCR
+        - button "Inspection Database 5" [ref=e35]:
+          - generic [ref=e36]: Inspection Database
+          - generic [ref=e42]: "5"
+        - button "OQL Analytics Aggregated" [ref=e44]:
+          - generic [ref=e45]: OQL Analytics
+          - generic [ref=e50]: Aggregated
+        - button "Defect Analysis Pareto" [ref=e52]:
+          - generic [ref=e53]: Defect Analysis
+          - generic [ref=e58]: Pareto
+        - button "Defect Master" [ref=e60]
+        - button "RCA & CAPA 1 Active" [ref=e67]:
+          - generic [ref=e68]: RCA & CAPA
+          - generic [ref=e72]: 1 Active
+        - button "Monitoring & Effectiveness" [ref=e74]
+        - button "Reports & Export Excel/PDF" [ref=e79]:
+          - generic [ref=e80]: Reports & Export
+          - generic [ref=e85]: Excel/PDF
+        - button "Settings" [ref=e87]
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: Buyer Protocol
+          - generic [ref=e96]: OQL Target 4.5%
+        - paragraph [ref=e97]: BESTSELLER Inspection Standards
+        - paragraph [ref=e98]: OQL = (Total Defects ÷ Inspected Qty) × 100
+    - generic [ref=e99]:
+      - banner [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: GQA
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - heading "Garment Quality Analytics" [level=1] [ref=e106]
+                - generic [ref=e107]: QMS
+              - paragraph [ref=e108]: Digital Quality Intelligence System
+          - generic [ref=e109]:
+            - textbox "Search reports, styles, defects..." [ref=e114]
+            - generic [ref=e115]:
+              - generic [ref=e116]: "Buyer:"
+              - combobox [ref=e117] [cursor=pointer]:
+                - option "All Buyers" [selected]
+                - option "BESTSELLER"
+            - generic [ref=e118]:
+              - generic [ref=e119]: "FY:"
+              - combobox [ref=e120] [cursor=pointer]:
+                - option "All FYs" [selected]
+                - option "FY26/27 (Aug 26 - Jul 27)"
+                - option "FY25/26 (Aug 25 - Jul 26)"
+          - generic [ref=e121]:
+            - generic [ref=e122]: Fri, 30 Oct 2026
+            - button "View notifications" [ref=e127]
+            - button "Northern QMS QMS Manager" [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: Northern QMS
+                - generic [ref=e136]: QMS Manager
+      - generic [ref=e141]:
+        - generic [ref=e142]:
+          - generic [ref=e143]: DEMO DATA ACTIVE
+          - generic [ref=e146]: Demonstration records (e.g. DEMO-001 OQL 5.77%) are loaded for system evaluation. Never present demo data as actual factory inspection results.
+        - button "Clear Demo Data" [ref=e148]
+      - generic [ref=e153]:
+        - generic [ref=e154]: "Filters:"
+        - combobox [ref=e158]:
+          - option "All Months" [selected]
+          - option "October 2026"
+          - option "September 2026"
+          - option "August 2026"
+          - option "July 2026"
+        - combobox [ref=e159]:
+          - option "All Styles" [selected]
+          - option "DEMO-STYLE-001"
+          - option "DEMO-STYLE-002"
+          - option "DEMO-STYLE-003"
+        - combobox [ref=e160]:
+          - option "All Orders" [selected]
+          - option "DEMO-001"
+          - option "DEMO-002"
+          - option "DEMO-003"
+          - option "DEMO-004"
+          - option "DEMO-005"
+        - combobox [ref=e161]:
+          - option "All Defect Groups" [selected]
+          - option "Seams & Stitching"
+          - option "Cleanliness"
+          - option "Neckline"
+          - option "Collar & Cuffs"
+          - option "Button & Buttonhole"
+          - option "Measurement"
+          - option "Garment Appearance"
+          - option "Fabric Defects"
+          - option "Printing & Embroidery"
+          - option "Accessories"
+          - option "Product Safety"
+          - option "Others"
+        - combobox [ref=e162]:
+          - option "All Severities" [selected]
+          - option "Critical"
+          - option "Major"
+          - option "Minor"
+        - combobox [ref=e163]:
+          - option "All Results" [selected]
+          - option "Passed"
+          - option "Failed"
+      - main [ref=e164]:
+        - generic [ref=e165]:
+          - generic [ref=e166]:
+            - generic [ref=e167]:
+              - heading "Quality Management System Dashboard BESTSELLER OQL" [level=2] [ref=e168]:
+                - text: Quality Management System Dashboard
+                - generic [ref=e169]: BESTSELLER OQL
+              - paragraph [ref=e170]: Real-time Outgoing Quality Level intelligence, defect metrics, and CAPA compliance for Northern Fashions Ltd.
+            - generic [ref=e171]:
+              - button "Upload PDF Report" [ref=e172]
+              - button "Detailed Analytics" [ref=e176]
+          - generic [ref=e179]:
+            - generic [ref=e180]:
+              - generic [ref=e181]: Reports
+              - generic [ref=e186]: "5"
+              - generic [ref=e187]: Approved Inspections
+            - generic [ref=e188]:
+              - generic [ref=e189]: Orders
+              - generic [ref=e201]: "5"
+              - generic [ref=e202]: Active Production Orders
+            - generic [ref=e203]:
+              - generic [ref=e204]: Order Qty
+              - generic [ref=e211]: 43,700
+              - generic [ref=e212]: Garments in Lot Scope
+            - generic [ref=e213]:
+              - generic [ref=e214]: Inspected Qty
+              - generic [ref=e219]: 2,480
+              - generic [ref=e220]: Sample Garments Audited
+            - generic [ref=e221]:
+              - generic [ref=e222]: Total Defects
+              - generic [ref=e226]: "129"
+              - generic [ref=e227]: Critical + Major + Minor
+            - generic [ref=e228]:
+              - generic [ref=e229]: Critical
+              - generic [ref=e233]: "13"
+              - generic [ref=e234]: Zero-Tolerance Defects
+            - generic [ref=e235]:
+              - generic [ref=e236]: Major
+              - generic [ref=e240]: "70"
+              - generic [ref=e241]: Functional / Cosmetic AQL
+            - generic [ref=e242]:
+              - generic [ref=e243]: Minor
+              - generic [ref=e247]: "46"
+              - generic [ref=e248]: Workmanship Irregularities
+            - generic [ref=e249]:
+              - generic [ref=e250]: Aggregated OQL
+              - generic [ref=e256]:
+                - generic [ref=e257]: 5.20%
+                - generic [ref=e258]: +0.7%
+              - generic [ref=e262]:
+                - generic [ref=e263]: "Target: 4.50%"
+                - generic [ref=e264]: "Prev: 4.85%"
+            - generic [ref=e265]:
+              - generic [ref=e266]: Pass Rate
+              - generic [ref=e272]: 40%
+              - generic [ref=e273]: Passed vs Total Audits
+          - generic [ref=e274]:
+            - generic [ref=e275]:
+              - generic [ref=e276]:
+                - generic [ref=e277]:
+                  - heading "Monthly Aggregated OQL (%) vs Target (4.50%)" [level=3] [ref=e278]
+                  - paragraph [ref=e279]: "Formula: (Sum of Defects ÷ Sum of Inspected) × 100 per period"
+                - button "Full Trend Charts" [ref=e280]
+              - generic [ref=e286]:
+                - list [ref=e288]:
+                  - listitem [ref=e289]:
+                    - img "Actual OQL legend icon" [ref=e290]
+                    - text: Actual OQL
+                  - listitem [ref=e292]:
+                    - img "Total Defects legend icon" [ref=e293]
+                    - text: Total Defects
+                - application [ref=e295]:
+                  - generic [ref=e320]:
+                    - generic [ref=e321]:
+                      - generic [ref=e322]: 2026-07
+                      - generic [ref=e324]: 2026-08
+                      - generic [ref=e326]: 2026-09
+                      - generic [ref=e328]: 2026-10
+                    - generic [ref=e330]:
+                      - generic [ref=e331]: 0%
+                      - generic [ref=e333]: 2%
+                      - generic [ref=e335]: 4%
+                      - generic [ref=e337]: 6%
+                      - generic [ref=e339]: 8%
+                    - generic [ref=e341]:
+                      - generic [ref=e342]: "0"
+                      - generic [ref=e344]: "15"
+                      - generic [ref=e346]: "30"
+                      - generic [ref=e348]: "45"
+                      - generic [ref=e350]: "60"
+                    - generic [ref=e352]: "Target: 4.5%"
+            - generic [ref=e353]:
+              - generic [ref=e354]:
+                - generic [ref=e355]:
+                  - heading "Defect Severity Ratio" [level=3] [ref=e356]
+                  - button "Pareto" [ref=e357]
+                - paragraph [ref=e358]: Distribution across Critical, Major, and Minor
+                - application [ref=e362]
+              - generic [ref=e363]:
+                - generic [ref=e364]:
+                  - generic [ref=e365]: Critical Defects
+                  - generic [ref=e367]: "13"
+                - generic [ref=e368]:
+                  - generic [ref=e369]: Major Defects
+                  - generic [ref=e371]: "70"
+                - generic [ref=e372]:
+                  - generic [ref=e373]: Minor Defects
+                  - generic [ref=e375]: "46"
+          - generic [ref=e376]:
+            - generic [ref=e377]:
+              - generic [ref=e378]:
+                - generic [ref=e379]:
+                  - heading "Recent Inspection Reports" [level=3] [ref=e380]
+                  - paragraph [ref=e381]: Latest audited production orders at Northern Fashions Ltd.
+                - button "View Full Database (5)" [ref=e382]
+              - table [ref=e386]:
+                - rowgroup [ref=e387]:
+                  - row [ref=e388]:
+                    - columnheader "Date" [ref=e389]
+                    - columnheader "Report No" [ref=e390]
+                    - columnheader "Order / Style" [ref=e391]
+                    - columnheader "Inspected" [ref=e392]
+                    - columnheader "Defects" [ref=e393]
+                    - columnheader "OQL (%)" [ref=e394]
+                    - columnheader "Result" [ref=e395]
+                - rowgroup [ref=e396]:
+                  - row [ref=e397]:
+                    - cell "2026-10-15" [ref=e398]
+                    - cell "BS-OQL-2026-1015-01DEMO" [ref=e399]
+                    - cell "DEMO-001 DEMO-STYLE-001" [ref=e400]:
+                      - generic [ref=e401]: DEMO-001
+                      - generic [ref=e402]: DEMO-STYLE-001
+                    - cell "520" [ref=e403]
+                    - cell "30" [ref=e404]
+                    - cell "5.77%" [ref=e405]
+                    - cell "FAILED" [ref=e407]
+                  - row [ref=e409]:
+                    - cell "2026-10-18" [ref=e410]
+                    - cell "BS-OQL-2026-1018-02DEMO" [ref=e411]
+                    - cell "DEMO-002 DEMO-STYLE-002" [ref=e412]:
+                      - generic [ref=e413]: DEMO-002
+                      - generic [ref=e414]: DEMO-STYLE-002
+                    - cell "400" [ref=e415]
+                    - cell "16" [ref=e416]
+                    - cell "4.00%" [ref=e417]
+                    - cell "PASSED" [ref=e419]
+                  - row [ref=e421]:
+                    - cell "2026-09-22" [ref=e422]
+                    - cell "BS-OQL-2026-0922-01DEMO" [ref=e423]
+                    - cell "DEMO-003 DEMO-STYLE-001" [ref=e424]:
+                      - generic [ref=e425]: DEMO-003
+                      - generic [ref=e426]: DEMO-STYLE-001
+                    - cell "520" [ref=e427]
+                    - cell "33" [ref=e428]
+                    - cell "6.35%" [ref=e429]
+                    - cell "FAILED" [ref=e431]
+                  - row [ref=e433]:
+                    - cell "2026-08-14" [ref=e434]
+                    - cell "BS-OQL-2026-0814-01DEMO" [ref=e435]
+                    - cell "DEMO-004 DEMO-STYLE-003" [ref=e436]:
+                      - generic [ref=e437]: DEMO-004
+                      - generic [ref=e438]: DEMO-STYLE-003
+                    - cell "520" [ref=e439]
+                    - cell "19" [ref=e440]
+                    - cell "3.65%" [ref=e441]
+                    - cell "PASSED" [ref=e443]
+                  - row [ref=e445]:
+                    - cell "2026-07-10" [ref=e446]
+                    - cell "BS-OQL-2026-0710-01DEMO" [ref=e447]
+                    - cell "DEMO-005 DEMO-STYLE-002" [ref=e448]:
+                      - generic [ref=e449]: DEMO-005
+                      - generic [ref=e450]: DEMO-STYLE-002
+                    - cell "520" [ref=e451]
+                    - cell "31" [ref=e452]
+                    - cell "5.96%" [ref=e453]
+                    - cell "FAILED" [ref=e455]
+            - generic [ref=e457]:
+              - generic [ref=e458]:
+                - heading "Active CAPA Alerts" [level=3] [ref=e459]
+                - button "Manage CAPA" [ref=e462]
+              - paragraph [ref=e463]: Corrective actions pending verification
+              - generic [ref=e465]:
+                - generic [ref=e466]:
+                  - generic [ref=e467]: CAPA-2026-002
+                  - generic [ref=e468]: In Progress
+                - generic [ref=e469]: Oil Spot (Cleanliness)
+                - generic [ref=e470]:
+                  - strong [ref=e471]: "Root Cause:"
+                  - text: Needle bar oil seal degradation on 5-thread overlock machine resulting in microscopic lubricant droplets landing on white knit panels.
+                - generic [ref=e472]:
+                  - generic [ref=e473]: "Resp: Kabir Hossain"
+                  - generic [ref=e474]: "Target: 2026-10-22"
+      - contentinfo [ref=e475]:
+        - generic [ref=e476]:
+          - generic [ref=e477]: Garment Quality Analytics | Digital Quality Intelligence System
+          - generic [ref=e478]: Northern Fashions Ltd. QMS Department • BESTSELLER Buyer Outgoing Quality Level Compliance
+  - generic [aria-hidden] [ref=e479]: "15"

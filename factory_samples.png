@@ -1,0 +1,250 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e10]:
+        - heading "Northern Fashions Ltd." [level=2] [ref=e11]
+        - paragraph [ref=e12]: Knitwear Manufacturing QMS
+      - generic [ref=e13]:
+        - generic [ref=e14]: Core QMS Modules
+        - button "Dashboard" [ref=e15]
+        - button "PDF Report Upload Auto OCR" [ref=e26]:
+          - generic [ref=e27]: PDF Report Upload
+          - generic [ref=e33]: Auto OCR
+        - button "Inspection Database 5" [ref=e35]:
+          - generic [ref=e36]: Inspection Database
+          - generic [ref=e42]: "5"
+        - button "OQL Analytics Aggregated" [ref=e44]:
+          - generic [ref=e45]: OQL Analytics
+          - generic [ref=e50]: Aggregated
+        - button "Defect Analysis Pareto" [ref=e52]:
+          - generic [ref=e53]: Defect Analysis
+          - generic [ref=e58]: Pareto
+        - button "Defect Master" [ref=e60]
+        - button "RCA & CAPA 1 Active" [ref=e67]:
+          - generic [ref=e68]: RCA & CAPA
+          - generic [ref=e72]: 1 Active
+        - button "Monitoring & Effectiveness" [ref=e74]
+        - button "Reports & Export Excel/PDF" [ref=e79]:
+          - generic [ref=e80]: Reports & Export
+          - generic [ref=e85]: Excel/PDF
+        - button "Settings" [ref=e87]
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: Buyer Protocol
+          - generic [ref=e96]: OQL Target 4.5%
+        - paragraph [ref=e97]: BESTSELLER Inspection Standards
+        - paragraph [ref=e98]: OQL = (Total Defects ÷ Inspected Qty) × 100
+    - generic [ref=e99]:
+      - banner [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: GQA
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - heading "Garment Quality Analytics" [level=1] [ref=e106]
+                - generic [ref=e107]: QMS
+              - paragraph [ref=e108]: Digital Quality Intelligence System
+          - generic [ref=e109]:
+            - textbox "Search reports, styles, defects..." [ref=e114]
+            - generic [ref=e115]:
+              - generic [ref=e116]: "Buyer:"
+              - combobox [ref=e117] [cursor=pointer]:
+                - option "All Buyers" [selected]
+                - option "BESTSELLER"
+            - generic [ref=e118]:
+              - generic [ref=e119]: "FY:"
+              - combobox [ref=e120] [cursor=pointer]:
+                - option "All FYs" [selected]
+                - option "FY26/27 (Aug 26 - Jul 27)"
+                - option "FY25/26 (Aug 25 - Jul 26)"
+          - generic [ref=e121]:
+            - generic [ref=e122]: Fri, 30 Oct 2026
+            - button "View notifications" [ref=e127]
+            - button "Northern QMS QMS Manager" [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: Northern QMS
+                - generic [ref=e136]: QMS Manager
+      - generic [ref=e141]:
+        - generic [ref=e142]:
+          - generic [ref=e143]: DEMO DATA ACTIVE
+          - generic [ref=e146]: Demonstration records (e.g. DEMO-001 OQL 5.77%) are loaded for system evaluation. Never present demo data as actual factory inspection results.
+        - button "Clear Demo Data" [ref=e148]
+      - generic [ref=e153]:
+        - generic [ref=e154]: "Filters:"
+        - combobox [ref=e158]:
+          - option "All Months" [selected]
+          - option "October 2026"
+          - option "September 2026"
+          - option "August 2026"
+          - option "July 2026"
+        - combobox [ref=e159]:
+          - option "All Styles" [selected]
+          - option "DEMO-STYLE-001"
+          - option "DEMO-STYLE-002"
+          - option "DEMO-STYLE-003"
+        - combobox [ref=e160]:
+          - option "All Orders" [selected]
+          - option "DEMO-001"
+          - option "DEMO-002"
+          - option "DEMO-003"
+          - option "DEMO-004"
+          - option "DEMO-005"
+        - combobox [ref=e161]:
+          - option "All Defect Groups" [selected]
+          - option "Seams & Stitching"
+          - option "Cleanliness"
+          - option "Neckline"
+          - option "Collar & Cuffs"
+          - option "Button & Buttonhole"
+          - option "Measurement"
+          - option "Garment Appearance"
+          - option "Fabric Defects"
+          - option "Printing & Embroidery"
+          - option "Accessories"
+          - option "Product Safety"
+          - option "Others"
+        - combobox [ref=e162]:
+          - option "All Severities" [selected]
+          - option "Critical"
+          - option "Major"
+          - option "Minor"
+        - combobox [ref=e163]:
+          - option "All Results" [selected]
+          - option "Passed"
+          - option "Failed"
+      - main [ref=e164]:
+        - generic [ref=e510]:
+          - generic [ref=e511]:
+            - generic [ref=e512]:
+              - heading "PDF Inspection Report Upload & Data Capture NOF Serials Supported" [level=2] [ref=e513]:
+                - text: PDF Inspection Report Upload & Data Capture
+                - generic [ref=e514]: NOF Serials Supported
+              - paragraph [ref=e515]:
+                - text: Upload factory PDF inspection reports or screenshots. The system automatically detects
+                - strong [ref=e516]: NOF Serials
+                - text: (e.g. NOF4778898) and extracts defect records.
+            - button "Clear Demo Data & Start Clean" [ref=e517]
+          - generic [ref=e521]:
+            - generic [ref=e522]:
+              - generic [ref=e525]: "Target Inspection Month:"
+              - combobox [ref=e526]:
+                - option "October 2026 (Current)" [selected]
+                - option "September 2026"
+                - option "August 2026"
+                - option "July 2026"
+                - option "November 2026"
+                - option "December 2026"
+            - generic [ref=e527]:
+              - text: Uploaded reports for this month immediately feed into the
+              - strong [ref=e528]: Month-wise Defect Comparison Column Chart
+              - text: .
+          - generic [ref=e529]:
+            - button "PDF & Image File Upload (Drag & Drop / Browse)" [ref=e530]
+            - button "Factory BESTSELLER Reports (NOF Serials)" [active] [ref=e535]
+            - button "Paste Report Text / OCR" [ref=e539]
+          - generic [ref=e578]:
+            - generic [ref=e580]:
+              - heading "Northern Fashions Ltd. Factory Inspection Reports" [level=3] [ref=e581]
+              - paragraph [ref=e585]: Exact factory files matching BESTSELLER OQL audit standards with verified NOF serials. Click any report to extract and inspect live.
+            - generic [ref=e586]:
+              - generic [ref=e587]:
+                - generic [ref=e588]:
+                  - generic [ref=e589]: NOF Serial
+                  - generic [ref=e595]:
+                    - heading "NOF4778898 (22031973) - SEW-01 Final Inspection" [level=4] [ref=e596]
+                    - paragraph [ref=e597]: ONSCONNOR LIFE STRAIGHT PANTS SWEAT NOOS
+                  - generic [ref=e598]:
+                    - generic [ref=e599]:
+                      - generic [ref=e600]: "Order (NOF):"
+                      - generic [ref=e601]: NOF4778898
+                    - generic [ref=e602]:
+                      - generic [ref=e603]: "Style No:"
+                      - generic [ref=e604]: "22031973"
+                    - generic [ref=e605]:
+                      - generic [ref=e606]: "Inspected Qty:"
+                      - generic [ref=e607]: 50 pcs
+                    - generic [ref=e608]:
+                      - generic [ref=e609]: "Defects Found:"
+                      - generic [ref=e610]: 3 items
+                - button "Extract & Validate This Report" [ref=e611]
+              - generic [ref=e616]:
+                - generic [ref=e617]:
+                  - generic [ref=e618]: NOF Serial
+                  - generic [ref=e624]:
+                    - heading "NOF4702657 (15381667) - SEW-02 Final Inspection" [level=4] [ref=e625]
+                    - paragraph [ref=e626]: JACK & JONES Organic Cotton Crewneck Tee
+                  - generic [ref=e627]:
+                    - generic [ref=e628]:
+                      - generic [ref=e629]: "Order (NOF):"
+                      - generic [ref=e630]: NOF4702657
+                    - generic [ref=e631]:
+                      - generic [ref=e632]: "Style No:"
+                      - generic [ref=e633]: "15381667"
+                    - generic [ref=e634]:
+                      - generic [ref=e635]: "Inspected Qty:"
+                      - generic [ref=e636]: 125 pcs
+                    - generic [ref=e637]:
+                      - generic [ref=e638]: "Defects Found:"
+                      - generic [ref=e639]: 4 items
+                - button "Extract & Validate This Report" [ref=e640]
+              - generic [ref=e645]:
+                - generic [ref=e646]:
+                  - generic [ref=e647]: NOF Serial
+                  - generic [ref=e653]:
+                    - heading "NOF4693851 (13250961) - SEW-03 Final Inspection" [level=4] [ref=e654]
+                    - paragraph [ref=e655]: ONLY Knit Raglan Sleeve Pullover
+                  - generic [ref=e656]:
+                    - generic [ref=e657]:
+                      - generic [ref=e658]: "Order (NOF):"
+                      - generic [ref=e659]: NOF4693851
+                    - generic [ref=e660]:
+                      - generic [ref=e661]: "Style No:"
+                      - generic [ref=e662]: "13250961"
+                    - generic [ref=e663]:
+                      - generic [ref=e664]: "Inspected Qty:"
+                      - generic [ref=e665]: 80 pcs
+                    - generic [ref=e666]:
+                      - generic [ref=e667]: "Defects Found:"
+                      - generic [ref=e668]: 2 items
+                - button "Extract & Validate This Report" [ref=e669]
+              - generic [ref=e674]:
+                - generic [ref=e675]:
+                  - generic [ref=e676]: NOF Serial
+                  - generic [ref=e682]:
+                    - heading "NOF4692769 (13264486) - SEW-03 Final Inspection" [level=4] [ref=e683]
+                    - paragraph [ref=e684]: SELECTED HOMME Cotton Pique Polo
+                  - generic [ref=e685]:
+                    - generic [ref=e686]:
+                      - generic [ref=e687]: "Order (NOF):"
+                      - generic [ref=e688]: NOF4692769
+                    - generic [ref=e689]:
+                      - generic [ref=e690]: "Style No:"
+                      - generic [ref=e691]: "13264486"
+                    - generic [ref=e692]:
+                      - generic [ref=e693]: "Inspected Qty:"
+                      - generic [ref=e694]: 125 pcs
+                    - generic [ref=e695]:
+                      - generic [ref=e696]: "Defects Found:"
+                      - generic [ref=e697]: 3 items
+                - button "Extract & Validate This Report" [ref=e698]
+          - generic [ref=e558]:
+            - generic [ref=e559]:
+              - generic [ref=e560]: NOF Serial Auto-Detection
+              - paragraph [ref=e564]:
+                - text: Northern Fashions NOF serial numbers (e.g.
+                - strong [ref=e565]: NOF4778898
+                - text: ) are automatically identified and mapped as the primary job order.
+            - generic [ref=e566]:
+              - generic [ref=e567]: Month-wise Audit Tracking
+              - paragraph [ref=e570]:
+                - text: Assigned inspection months feed directly into the
+                - strong [ref=e571]: Month-wise Defect Comparison Column Chart
+                - text: for monthly intelligence.
+            - generic [ref=e572]:
+              - generic [ref=e573]: Interactive Data Validation
+              - paragraph [ref=e577]: Verify extracted defect names, severities, and quantities with real-time OQL computation before committing to the inspection database.
+      - contentinfo [ref=e475]:
+        - generic [ref=e476]:
+          - generic [ref=e477]: Garment Quality Analytics | Digital Quality Intelligence System
+          - generic [ref=e478]: Northern Fashions Ltd. QMS Department • BESTSELLER Buyer Outgoing Quality Level Compliance
+  - generic [aria-hidden] [ref=e479]: "15"
