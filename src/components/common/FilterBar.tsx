@@ -6,7 +6,15 @@ export const FilterBar: React.FC = () => {
   const { filters, setFilters, resetFilters, defectGroups, reports } = useApp();
 
   const styles = Array.from(new Set(reports.map((r) => r.styleNumber))).filter(Boolean);
-  const orders = Array.from(new Set(reports.map((r) => r.orderNumber))).filter(Boolean);
+  const orders = Array.from(
+    new Set(
+      reports.flatMap((r) => {
+        const full = r.orderNumber;
+        const individual = full.split(/\s*[\+,]\s*/).map((s) => s.trim()).filter(Boolean);
+        return [full, ...individual];
+      })
+    )
+  ).filter(Boolean);
 
   const hasActiveFilters =
     filters.buyer !== 'ALL' ||
@@ -38,6 +46,7 @@ export const FilterBar: React.FC = () => {
             className="bg-transparent text-slate-800 dark:text-slate-100 font-semibold focus:outline-none cursor-pointer"
           >
             <option value="ALL" className="dark:bg-slate-800">All Months</option>
+            <option value="2026-11" className="dark:bg-slate-800">November 2026</option>
             <option value="2026-10" className="dark:bg-slate-800">October 2026</option>
             <option value="2026-09" className="dark:bg-slate-800">September 2026</option>
             <option value="2026-08" className="dark:bg-slate-800">August 2026</option>

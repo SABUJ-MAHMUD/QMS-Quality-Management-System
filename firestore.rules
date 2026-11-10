@@ -18,58 +18,37 @@ service cloud.firestore {
 
     // 1. Inspection Reports
     match /reports/{reportId} {
-      allow read: if isValidId(reportId);
-      allow create, update: if isValidId(reportId) &&
-        incoming().reportNumber is string && incoming().reportNumber.size() <= 100 &&
-        incoming().inspectionDate is string &&
-        incoming().buyer is string &&
-        incoming().orderNumber is string &&
-        incoming().styleNumber is string &&
-        incoming().inspectedQuantity is number &&
-        incoming().totalDefectQuantity is number &&
-        incoming().oql is number;
-      allow delete: if isValidId(reportId);
+      allow get: if isValidId(reportId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(reportId);
     }
 
     // 2. Defect Groups Catalog
     match /defect_groups/{groupId} {
-      allow read: if isValidId(groupId);
-      allow create, update: if isValidId(groupId) &&
-        incoming().groupCode is string &&
-        incoming().groupName is string;
-      allow delete: if isValidId(groupId);
+      allow get: if isValidId(groupId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(groupId);
     }
 
     // 3. Defect Master Catalog
     match /defect_master/{defectId} {
-      allow read: if isValidId(defectId);
-      allow create, update: if isValidId(defectId) &&
-        incoming().defectCode is string &&
-        incoming().defectGroupId is string &&
-        incoming().standardDefectName is string;
-      allow delete: if isValidId(defectId);
+      allow get: if isValidId(defectId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(defectId);
     }
 
     // 4. CAPA Records
     match /capas/{capaId} {
-      allow read: if isValidId(capaId);
-      allow create, update: if isValidId(capaId) &&
-        incoming().capaCode is string &&
-        incoming().defectCategory is string &&
-        incoming().rootCause is string &&
-        incoming().correctiveAction is string;
-      allow delete: if isValidId(capaId);
+      allow get: if isValidId(capaId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(capaId);
     }
 
     // 5. Monitoring & Effectiveness Checks
     match /monitoring/{monitoringId} {
-      allow read: if isValidId(monitoringId);
-      allow create, update: if isValidId(monitoringId) &&
-        incoming().capaId is string &&
-        incoming().checkDate is string &&
-        incoming().checkedBy is string &&
-        incoming().effectivenessStatus is string;
-      allow delete: if isValidId(monitoringId);
+      allow get: if isValidId(monitoringId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(monitoringId);
     }
   }
 }

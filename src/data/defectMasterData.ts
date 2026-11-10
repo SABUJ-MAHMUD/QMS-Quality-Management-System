@@ -205,6 +205,50 @@ export const INITIAL_DEFECT_MASTER: DefectMasterItem[] = [
   },
   {
     id: 'dm-18',
+    standardDefectName: 'Collar Points Not Uniform',
+    defectGroupId: 'dg-4',
+    severity: 'Major',
+    keywords: ['ne-7', 'collar points not uniform', 'collar points not uniform and balanced', 'collar point uneven', 'unbalanced collar'],
+    buyer: 'BESTSELLER',
+    approvedStatus: true,
+    createdAt: '2026-08-01',
+    updatedAt: '2026-08-01',
+  },
+  {
+    id: 'dm-19',
+    standardDefectName: 'Shine Mark',
+    defectGroupId: 'dg-7',
+    severity: 'Major',
+    keywords: ['pr-4', 'shine mark', 'iron shine', 'press mark', 'gloss mark'],
+    buyer: 'BESTSELLER',
+    approvedStatus: true,
+    createdAt: '2026-08-01',
+    updatedAt: '2026-08-01',
+  },
+  {
+    id: 'dm-20',
+    standardDefectName: 'Spot, Stain & Soil Mark',
+    defectGroupId: 'dg-2',
+    severity: 'Minor',
+    keywords: ['cle-1', 'spot, stain and soil marks', 'soil mark', 'stain mark'],
+    buyer: 'BESTSELLER',
+    approvedStatus: true,
+    createdAt: '2026-08-01',
+    updatedAt: '2026-08-01',
+  },
+  {
+    id: 'dm-21',
+    standardDefectName: 'Foreign Yarns',
+    defectGroupId: 'dg-8',
+    severity: 'Minor',
+    keywords: ['fa-10', 'foreign yarns', 'foreign yarn', 'fly yarn', 'colored yarn'],
+    buyer: 'BESTSELLER',
+    approvedStatus: true,
+    createdAt: '2026-08-01',
+    updatedAt: '2026-08-01',
+  },
+  {
+    id: 'dm-22',
     standardDefectName: 'Other Defects',
     defectGroupId: 'dg-12',
     severity: 'Minor',
@@ -270,7 +314,32 @@ export function classifyRawDefect(
     }
   }
 
-  // 3. Fallback heuristic based on common apparel terms
+  // 3. Fallback heuristic based on BESTSELLER defect codes & apparel terms
+  if (/^ne-\d+/i.test(clean) || clean.includes('collar') || clean.includes('neck')) {
+    if (clean.includes('uniform') || clean.includes('balanced') || clean.includes('point')) {
+      return { standardDefectName: 'Collar Points Not Uniform', defectGroupId: 'dg-4', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+    }
+    return { standardDefectName: 'Uneven Neckline', defectGroupId: 'dg-3', severity: 'Major', matchType: 'Auto-Matched', confidence: 90 };
+  }
+
+  if (/^pr-\d+/i.test(clean) || clean.includes('shine') || clean.includes('press mark')) {
+    return { standardDefectName: 'Shine Mark', defectGroupId: 'dg-7', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+  }
+
+  if (/^fa-\d+/i.test(clean) || clean.includes('foreign yarn') || clean.includes('fly yarn')) {
+    return { standardDefectName: 'Foreign Yarns', defectGroupId: 'dg-8', severity: 'Minor', matchType: 'Auto-Matched', confidence: 95 };
+  }
+
+  if (/^cle-\d+/i.test(clean) || /^sl-\d+/i.test(clean)) {
+    if (clean.includes('oil')) {
+      return { standardDefectName: 'Oil Spot', defectGroupId: 'dg-2', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+    }
+    if (clean.includes('thread') || clean.includes('untrimmed')) {
+      return { standardDefectName: 'Uncut Thread', defectGroupId: 'dg-2', severity: 'Minor', matchType: 'Auto-Matched', confidence: 95 };
+    }
+    return { standardDefectName: 'Spot, Stain & Soil Mark', defectGroupId: 'dg-2', severity: 'Minor', matchType: 'Auto-Matched', confidence: 95 };
+  }
+
   if (clean.includes('stitch') || clean.includes('seam') || clean.includes('thread') || clean.includes('needle')) {
     if (clean.includes('broken needle')) {
       return { standardDefectName: 'Broken Needle Fragment', defectGroupId: 'dg-11', severity: 'Critical', matchType: 'Auto-Matched', confidence: 85 };
@@ -289,10 +358,6 @@ export function classifyRawDefect(
       return { standardDefectName: 'Oil Spot', defectGroupId: 'dg-2', severity: 'Major', matchType: 'Auto-Matched', confidence: 85 };
     }
     return { standardDefectName: 'Dirty Garment', defectGroupId: 'dg-2', severity: 'Minor', matchType: 'Auto-Matched', confidence: 80 };
-  }
-
-  if (clean.includes('neck') || clean.includes('rib')) {
-    return { standardDefectName: 'Uneven Neckline', defectGroupId: 'dg-3', severity: 'Major', matchType: 'Auto-Matched', confidence: 80 };
   }
 
   if (clean.includes('button')) {

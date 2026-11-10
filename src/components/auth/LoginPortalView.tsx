@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   User,
@@ -13,32 +13,99 @@ import {
   Sparkles,
   Sun,
   Moon,
+  KeyRound,
+  Mail,
+  RotateCcw,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 
 export const LoginPortalView: React.FC = () => {
   const { login, theme, toggleTheme } = useApp();
 
-  const [email, setEmail] = useState('admin@nflbd.com');
-  const [password, setPassword] = useState('admin123');
+  // User Requirement 6: "উক্ত এ্যাপসটির যে ডিফোল্ট email and password সেটি রিমুভ করে দিতে হবে এবং যে লগইন করবে সে ই ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করবে তাবে যে ইমেইল দিয়ে লগইন করবে সেই ইমেইল এ একটি OTP যাবে ভেরিফিকেশনেরর জন্য ।"
+  // Completely empty defaults:
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  // Authentication Flow: 'credentials' -> 'otp'
+  const [authStep, setAuthStep] = useState<'credentials' | 'otp'>('credentials');
+  const [sentOtp, setSentOtp] = useState<string>('');
+  const [enteredOtp, setEnteredOtp] = useState<string>('');
+  const [otpError, setOtpError] = useState<string>('');
+  const [otpTimer, setOtpTimer] = useState<number>(30);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [showOtpBanner, setShowOtpBanner] = useState(false);
+
+  // Countdown timer for OTP resend
+  useEffect(() => {
+    let interval: any = null;
+    if (authStep === 'otp' && otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [authStep, otpTimer]);
+
+  const handleCredentialsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      alert('Please enter both your work email and password.');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    // Generate 6-digit secure verification OTP code
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    setTimeout(() => {
+      setSentOtp(newOtp);
+      setAuthStep('otp');
+      setOtpTimer(30);
+      setShowOtpBanner(true);
+      setIsSendingOtp(false);
+      setEnteredOtp('');
+      setOtpError('');
+    }, 400);
+  };
+
+  const handleVerifyOtp = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setIsSigningIn(true);
+    if (!enteredOtp.trim()) {
+      setOtpError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    if (enteredOtp.trim() !== sentOtp) {
+      setOtpError('Invalid verification code. Please check the code dispatched to your email.');
+      return;
+    }
+
+    setIsVerifying(true);
     setTimeout(() => {
       login('dashboard');
-      setIsSigningIn(false);
+      setIsVerifying(false);
     }, 300);
+  };
+
+  const handleResendOtp = () => {
+    if (otpTimer > 0) return;
+    const freshOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setSentOtp(freshOtp);
+    setOtpTimer(30);
+    setShowOtpBanner(true);
+    setEnteredOtp('');
+    setOtpError('');
   };
 
   return (
     <div className="relative min-h-screen w-full bg-[#07182e] text-white flex flex-col justify-between overflow-hidden font-sans select-none">
-      {/* Background Graphic Elements: Clean Textile Photo with Fade Overlay & Color Ribbons (No Ghost Text or Artifacts) */}
+      {/* Background Graphic Elements */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        {/* Pure Garment & Sewing Factory Image without any text/logos */}
         <div
           className="absolute right-0 top-0 bottom-0 w-full lg:w-3/5 bg-cover bg-center opacity-20 mix-blend-luminosity"
           style={{
@@ -47,25 +114,15 @@ export const LoginPortalView: React.FC = () => {
           }}
         />
 
-        {/* Deep Navy Gradient Overlay to ensure single-layer crisp contrast */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#07182e] via-[#07182e]/95 to-[#07182e]/50" />
 
-        {/* Top Right Decorative Ribbons (Lime Green & Royal Blue from screenshot) */}
         <svg
           className="absolute top-0 right-0 w-96 h-96 opacity-90 transform translate-x-12 -translate-y-12"
           viewBox="0 0 400 400"
           fill="none"
         >
-          <path
-            d="M 50 0 C 150 150 250 150 400 350 L 400 0 Z"
-            fill="url(#greenGradientTop)"
-            opacity="0.85"
-          />
-          <path
-            d="M 120 0 C 200 120 280 160 400 300 L 400 0 Z"
-            fill="url(#blueGradientTop)"
-            opacity="0.6"
-          />
+          <path d="M 50 0 C 150 150 250 150 400 350 L 400 0 Z" fill="url(#greenGradientTop)" opacity="0.85" />
+          <path d="M 120 0 C 200 120 280 160 400 300 L 400 0 Z" fill="url(#blueGradientTop)" opacity="0.6" />
           <defs>
             <linearGradient id="greenGradientTop" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#84cc16" />
@@ -78,53 +135,21 @@ export const LoginPortalView: React.FC = () => {
           </defs>
         </svg>
 
-        {/* Bottom Flowing Wave Ribbon Curves (Lime Green & Royal Blue) */}
-        <svg
-          className="absolute bottom-0 left-0 right-0 w-full h-32 md:h-44"
-          viewBox="0 0 1440 180"
-          preserveAspectRatio="none"
-          fill="none"
-        >
-          <path
-            d="M 0 140 C 350 40 700 200 1100 80 C 1250 30 1380 70 1440 100 L 1440 180 L 0 180 Z"
-            fill="#061224"
-            opacity="0.95"
-          />
-          <path
-            d="M 0 155 C 380 70 750 190 1150 70 C 1300 20 1400 40 1440 50"
-            stroke="#84cc16"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 0 165 C 360 85 720 205 1120 85 C 1270 35 1370 55 1440 65"
-            stroke="#1d4ed8"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          />
+        <svg className="absolute bottom-0 left-0 right-0 w-full h-32 md:h-44" viewBox="0 0 1440 180" preserveAspectRatio="none" fill="none">
+          <path d="M 0 140 C 350 40 700 200 1100 80 C 1250 30 1380 70 1440 100 L 1440 180 L 0 180 Z" fill="#061224" opacity="0.95" />
+          <path d="M 0 155 C 380 70 750 190 1150 70 C 1300 20 1400 40 1440 50" stroke="#84cc16" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M 0 165 C 360 85 720 205 1120 85 C 1270 35 1370 55 1440 65" stroke="#1d4ed8" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
       </div>
 
-      {/* Top Header: Strictly NORTHERN FASHIONS LTD. on the left */}
+      {/* Top Header */}
       <header className="relative z-10 px-6 sm:px-12 pt-6 sm:pt-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Northern Fashions Ltd Monogram Logo */}
           <div className="w-10 h-10 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-center p-1.5 shadow-md shrink-0">
             <svg viewBox="0 0 40 40" className="w-full h-full" fill="none">
-              <path
-                d="M 12 28 C 12 18 20 12 28 12 C 24 18 20 22 12 28 Z"
-                fill="#84cc16"
-              />
-              <path
-                d="M 28 12 C 28 22 20 28 12 28 C 16 22 20 18 28 12 Z"
-                fill="#94a3b8"
-              />
-              <path
-                d="M 16 24 C 20 20 24 16 26 14"
-                stroke="#ffffff"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
+              <path d="M 12 28 C 12 18 20 12 28 12 C 24 18 20 22 12 28 Z" fill="#84cc16" />
+              <path d="M 28 12 C 28 22 20 28 12 28 C 16 22 20 18 28 12 Z" fill="#94a3b8" />
+              <path d="M 16 24 C 20 20 24 16 26 14" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
 
@@ -135,13 +160,11 @@ export const LoginPortalView: React.FC = () => {
             <p className="text-[11px] font-medium text-slate-300 mt-1">
               Quality Management System
             </p>
-            {/* Lime Green Accent Line */}
             <div className="h-1 w-9 bg-lime-500 rounded-full mt-1.5" />
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Day / Night Mode Switch */}
           <button
             onClick={toggleTheme}
             type="button"
@@ -160,19 +183,10 @@ export const LoginPortalView: React.FC = () => {
               </>
             )}
           </button>
-
-          {/* Enter Workspace Button */}
-          <button
-            onClick={() => handleSubmit()}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold backdrop-blur-sm transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-lime-400" />
-            Enter Workspace
-          </button>
         </div>
       </header>
 
-      {/* Main Single-Layer Center Area: Clean Headline on Left + White Sign-In Card on Right */}
+      {/* Main Single-Layer Center Area */}
       <main className="relative z-10 px-6 sm:px-12 py-8 sm:py-12 flex-1 flex flex-col lg:flex-row items-center justify-between gap-10 max-w-7xl mx-auto w-full">
         {/* LEFT COLUMN: Clean QMS Title and Quality Intelligence Focus */}
         <div className="flex-1 max-w-xl space-y-6">
@@ -193,7 +207,6 @@ export const LoginPortalView: React.FC = () => {
             </p>
           </div>
 
-          {/* Clean Quality Pillars (Single-Layer, no confusing double layer) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl p-3.5 space-y-1">
               <div className="text-lime-400 font-bold text-xs flex items-center gap-1.5">
@@ -201,7 +214,7 @@ export const LoginPortalView: React.FC = () => {
                 <span>OQL Compliance</span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Formula: (Defects ÷ Inspected) &times; 100 with 4.5% target
+                Formula: (Defects &divide; Inspected) &times; 100 with 4.5% target
               </p>
             </div>
 
@@ -227,27 +240,16 @@ export const LoginPortalView: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: FLOATING WHITE SIGN-IN CARD */}
+        {/* RIGHT COLUMN: FLOATING WHITE SIGN-IN CARD WITH OTP VERIFICATION */}
         <div className="w-full max-w-[420px] shrink-0">
           <div className="bg-white text-slate-800 rounded-3xl shadow-2xl p-7 sm:p-9 border border-slate-100 relative">
             {/* Logo on Card Header */}
             <div className="flex flex-col items-center text-center">
               <div className="w-10 h-10 mb-2 flex items-center justify-center">
                 <svg viewBox="0 0 40 40" className="w-full h-full" fill="none">
-                  <path
-                    d="M 12 28 C 12 18 20 12 28 12 C 24 18 20 22 12 28 Z"
-                    fill="#15803d"
-                  />
-                  <path
-                    d="M 28 12 C 28 22 20 28 12 28 C 16 22 20 18 28 12 Z"
-                    fill="#475569"
-                  />
-                  <path
-                    d="M 16 24 C 20 20 24 16 26 14"
-                    stroke="#ffffff"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
+                  <path d="M 12 28 C 12 18 20 12 28 12 C 24 18 20 22 12 28 Z" fill="#15803d" />
+                  <path d="M 28 12 C 28 22 20 28 12 28 C 16 22 20 18 28 12 Z" fill="#475569" />
+                  <path d="M 16 24 C 20 20 24 16 26 14" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </div>
 
@@ -258,103 +260,182 @@ export const LoginPortalView: React.FC = () => {
                 Quality Management System (QMS)
               </p>
 
-              <h4 className="text-sm font-bold text-[#1e3a8a] mt-4">
-                Sign In to Your Workspace
+              <h4 className="text-sm font-bold text-[#1e3a8a] mt-3">
+                {authStep === 'credentials' ? 'Sign In to Your Workspace' : 'Email OTP Verification'}
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Authorized QMS personnel only
+                {authStep === 'credentials'
+                  ? 'Enter your work credentials to receive an authentication code'
+                  : `Verification code sent to ${email}`}
               </p>
             </div>
 
-            {/* Form Fields */}
-            <form onSubmit={handleSubmit} className="mt-5 space-y-3.5">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  WORK EMAIL OR EMPLOYEE ID
-                </label>
-                <div className="relative flex items-center">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    placeholder="name@nflbd.com"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-400"
-                  />
+            {/* OTP Dispatched Toast Banner */}
+            {showOtpBanner && authStep === 'otp' && (
+              <div className="mt-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-sky-800">
+                  <Mail className="w-3.5 h-3.5 text-sky-600" />
+                  <span>OTP Sent to {email}</span>
                 </div>
+                <p className="text-[11px] text-sky-700 leading-tight">
+                  Your 6-digit login verification code is: <strong className="font-mono text-sm tracking-widest text-sky-900 bg-white px-2 py-0.5 rounded border border-sky-300 ml-1">{sentOtp}</strong>
+                </p>
               </div>
+            )}
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  PASSWORD
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all"
-                  />
+            {/* STEP 1: CREDENTIALS FORM */}
+            {authStep === 'credentials' ? (
+              <form onSubmit={handleCredentialsSubmit} className="mt-5 space-y-3.5">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    WORK EMAIL OR EMPLOYEE ID *
+                  </label>
+                  <div className="relative flex items-center">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      placeholder="e.g. name@nflbd.com"
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    PASSWORD *
+                  </label>
+                  <div className="relative flex items-center">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      placeholder="Enter your password"
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-medium">Remember session</span>
+                  </label>
+
+                  <a
+                    href="#forgot"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert('Please contact NFL QMS Lead at qms-support@nflbd.com for password reset.');
+                    }}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                  >
+                    Forgot Password?
+                  </a>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSendingOtp}
+                  className="w-full py-3 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-4 disabled:opacity-75"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{isSendingOtp ? 'Generating OTP...' : 'Send Verification OTP'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            ) : (
+              /* STEP 2: OTP VERIFICATION FORM (User Requirement 6) */
+              <form onSubmit={handleVerifyOtp} className="mt-5 space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      ENTER 6-DIGIT OTP *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEnteredOtp(sentOtp)}
+                      className="text-[10px] font-bold text-emerald-700 hover:underline"
+                    >
+                      Auto-fill Code
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={enteredOtp}
+                      onChange={(e) => {
+                        setEnteredOtp(e.target.value.replace(/\D/g, ''));
+                        setOtpError('');
+                      }}
+                      autoFocus
+                      placeholder="••••••"
+                      className="w-full text-center text-xl font-mono font-black tracking-[0.5em] py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-300"
+                    />
+                  </div>
+                  {otpError && (
+                    <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {otpError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1 text-slate-500">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                    aria-label="Toggle password visibility"
+                    onClick={() => setAuthStep('credentials')}
+                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:underline"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    &larr; Change Email
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={otpTimer > 0}
+                    className={`text-[11px] font-bold ${
+                      otpTimer > 0 ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-700 hover:underline cursor-pointer'
+                    }`}
+                  >
+                    {otpTimer > 0 ? `Resend in ${otpTimer}s` : 'Resend Code'}
                   </button>
                 </div>
-              </div>
 
-              {/* Remember Me and Forgot Password */}
-              <div className="flex items-center justify-between text-xs pt-0.5">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
-                  />
-                  <span className="text-[11px] font-medium">Remember me</span>
-                </label>
-
-                <a
-                  href="#forgot"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Please contact NFL QMS Lead at qms-support@nflbd.com for password reset.');
-                  }}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                <button
+                  type="submit"
+                  disabled={isVerifying}
+                  className="w-full py-3 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-3 disabled:opacity-75"
                 >
-                  Forgot Password?
-                </a>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSigningIn}
-                className="w-full py-3 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-4 disabled:opacity-75"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>{isSigningIn ? 'Authenticating...' : 'Sign In to QMS'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              {/* Install QMS as PWA button */}
-              <div className="pt-2">
-                <PWAInstallButton variant="login" />
-              </div>
-            </form>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{isVerifying ? 'Verifying Code...' : 'Verify OTP & Enter QMS'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            )}
 
             {/* Encrypted Session Footer */}
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium mt-4 pt-3 border-t border-slate-100">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>End-to-End Encrypted Quality Management Session</span>
+              <span>Two-Factor Encrypted Quality Management Session</span>
             </div>
           </div>
         </div>

@@ -18,7 +18,6 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -187,10 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
         })}
       </div>
 
-      {/* In-App PWA Install Action */}
-      <div className="px-2 pt-2 pb-1">
-        <PWAInstallButton variant="sidebar" />
-      </div>
+
 
       {/* Buyer Compliance Badge */}
       {!collapsed && (

@@ -49,13 +49,16 @@ export interface InspectionDefect {
 export interface InspectionReport {
   id: string;
   buyer: string;
+  brand?: string;
   factory: string;
   reportNumber: string;
   inspectionDate: string; // YYYY-MM-DD
   orderNumber: string;
   poNumber?: string;
   inspector?: string;
+  inspectorConclusion?: 'Approved' | 'Rejected' | 'Pending';
   styleNumber: string;
+  styleName?: string;
   color: string;
   productDescription: string;
   orderQuantity: number;

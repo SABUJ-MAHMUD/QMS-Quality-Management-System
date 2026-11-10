@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import {
@@ -16,8 +16,10 @@ import {
   LogOut,
   Sun,
   Moon,
+  Clock,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
@@ -41,18 +43,48 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
+  // Live ticking clock & date (User Requirement 7: "এ্যাপস এর উপরে একটি লাইভ টাইম ঘড়ি ও তারিখ দিয়ে দাও")
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const timeStr = currentTime.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  const todayStr = currentTime.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
   // Derive unique buyers and financial years
   const availableBuyers = Array.from(new Set(reports.map((r) => r.buyer)));
   if (!availableBuyers.includes('BESTSELLER')) availableBuyers.push('BESTSELLER');
 
   const roles: UserRole[] = ['Admin', 'QMS Manager', 'QMS Executive', 'Viewer'];
-
-  const todayStr = new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date());
 
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-sky-100 dark:border-slate-800 shadow-xs transition-colors">
@@ -151,10 +183,25 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
           </div>
         </div>
 
-        {/* Right Section: PWA Install, Day/Night Switch, Date, Notifications, User Profile */}
+        {/* Right Section: Live Clock, Fullscreen, Day/Night Switch, Notifications, User Profile */}
         <div className="flex items-center gap-2">
-          {/* In-App PWA Install Prompt Button */}
-          <PWAInstallButton variant="header" />
+          {/* Live Clock & Date (User Requirement 7: "এ্যাপস এর উপরে একটি লাইভ টাইম ঘড়ি ও তারিখ দিয়ে দাও") */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono">
+            <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+            <span className="text-xs font-black text-emerald-400 tracking-wider whitespace-nowrap">{timeStr}</span>
+            <span className="text-slate-500 font-sans hidden sm:inline">|</span>
+            <span className="text-xs font-semibold text-slate-300 font-sans hidden sm:inline whitespace-nowrap">{todayStr}</span>
+          </div>
+
+          {/* Fullscreen Button (User Requirement 7: "ডেশবোর্ডটি যেন ফুলস্ক্রি হয় ফুল স্ক্রিন করার জন্য একটি বাটুন সংযুক্ত করে দাও") */}
+          <button
+            onClick={handleToggleFullscreen}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all cursor-pointer shadow-2xs"
+            title={isFullscreen ? 'Exit Full Screen' : 'View Full Screen'}
+            aria-label="Toggle Full Screen"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-sky-500" /> : <Maximize2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />}
+          </button>
 
           {/* Day / Night Mode Switch */}
           <button
@@ -175,12 +222,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
               </>
             )}
           </button>
-
-          {/* Current Date Badge */}
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50/60 dark:bg-slate-800 text-sky-800 dark:text-sky-300 text-xs border border-sky-100 dark:border-slate-700 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-            <span>{todayStr}</span>
-          </div>
 
           {/* Notifications Dropdown */}
           <div className="relative">

@@ -138,8 +138,9 @@ export const DatabaseView: React.FC = () => {
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
-                <th className="py-3 px-3">Buyer / Factory</th>
-                <th className="py-3 px-3">Order / Style</th>
+                <th className="py-3 px-3">Brand</th>
+                <th className="py-3 px-3">Order No (NOF)</th>
+                <th className="py-3 px-3">Style No &amp; Name</th>
                 <th
                   onClick={() => handleSort('orderQuantity')}
                   className="py-3 px-3 text-right cursor-pointer hover:bg-slate-100/60"
@@ -186,7 +187,7 @@ export const DatabaseView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {sortedReports.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-8 text-center text-slate-400">
+                  <td colSpan={14} className="py-8 text-center text-slate-400">
                     No inspection records found matching your filters.
                   </td>
                 </tr>
@@ -209,15 +210,31 @@ export const DatabaseView: React.FC = () => {
                     </td>
 
                     <td className="py-2.5 px-3">
-                      <div className="font-semibold text-slate-800">{r.buyer}</div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                        {r.factory}
+                      <span className="font-bold text-sky-800 dark:text-sky-300 px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-xs">
+                        {r.brand || r.buyer || 'ONLY&SONS'}
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3">
+                      <div className="flex flex-wrap gap-1 max-w-[240px]">
+                        {r.orderNumber.includes('+') ? (
+                          r.orderNumber.split('+').map((o, idx) => (
+                            <span
+                              key={idx}
+                              className="font-mono text-[10px] font-bold bg-sky-50 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 px-1.5 py-0.5 rounded border border-sky-200 dark:border-sky-800/60"
+                            >
+                              #{o.trim()}
+                            </span>
+                          ))
+                        ) : (
+                          <div className="font-bold font-mono text-slate-800 dark:text-slate-100">{r.orderNumber}</div>
+                        )}
                       </div>
                     </td>
 
                     <td className="py-2.5 px-3">
-                      <div className="font-semibold text-slate-800">{r.orderNumber}</div>
-                      <div className="text-[10px] text-slate-500">{r.styleNumber}</div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-200">{r.styleNumber}</div>
+                      <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{r.styleName || r.productDescription}</div>
                     </td>
 
                     <td className="py-2.5 px-3 text-right font-medium text-slate-700">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ExtractedInspectionDraft } from '../../utils/pdfParser';
+import { ExtractedInspectionDraft, resolveBrandFromStyle } from '../../utils/pdfParser';
 import { calculateReportOql } from '../../utils/oqlCalculator';
 import {
   CheckCircle2,
@@ -14,6 +14,8 @@ import {
   Hash,
   Eye,
   Calendar,
+  Check,
+  XCircle,
 } from 'lucide-react';
 import { DefectSeverity, InspectionResult } from '../../types';
 
@@ -31,20 +33,26 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   const { defectGroups, defectMaster, addInspectionReport, reports, settings } = useApp();
 
   // Editable form states initialized from extracted draft
-  const [buyer, setBuyer] = useState(draft.buyer);
-  const [factory, setFactory] = useState(draft.factory);
+  const initialBrand = resolveBrandFromStyle(draft.styleNumber, draft.buyer || 'ONLY&SONS');
+  const [buyer, setBuyer] = useState(initialBrand);
+  const [factory, setFactory] = useState(draft.factory || 'NORTHERN FASHION LTD.');
   const [reportNumber, setReportNumber] = useState(draft.reportNumber);
   const [inspectionDate, setInspectionDate] = useState(draft.inspectionDate);
   const [orderNumber, setOrderNumber] = useState(draft.orderNumber);
   const [styleNumber, setStyleNumber] = useState(draft.styleNumber);
   const [color, setColor] = useState(draft.color || 'Solid / Melange');
-  const [productDescription, setProductDescription] = useState(draft.productDescription);
+  const [productDescription, setProductDescription] = useState(draft.styleName || draft.productDescription);
   const [orderQuantity, setOrderQuantity] = useState<number>(Number(draft.orderQuantity) || 0);
   const [inspectedQuantity, setInspectedQuantity] = useState<number>(Number(draft.inspectedQuantity) || 50);
   const [inspectionLevel, setInspectionLevel] = useState(draft.inspectionLevel || 'AQL 2.5/2.5 Level II Reduced');
 
-  const [inspector, setInspector] = useState(draft.inspector || 'Rifat Chowdhury');
+  const [inspector, setInspector] = useState(draft.inspector || 'Salah Uddin');
   const [poNumber, setPoNumber] = useState(draft.poNumber || draft.orderNumber);
+
+  // User Requirement 5: Inspector Conclusion option with Approved (Blue/Green) / Rejected (Red)
+  const [inspectorConclusion, setInspectorConclusion] = useState<'Approved' | 'Rejected'>(
+    draft.inspectorConclusion === 'Rejected' || draft.inspectionResult === 'FAILED' ? 'Rejected' : 'Approved'
+  );
 
   const [defects, setDefects] = useState(draft.defects);
   const [showRawText, setShowRawText] = useState(false);
@@ -66,10 +74,24 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
 
   // Live OQL calculation: (Total Defects / Inspected Quantity) * 100
   const calculatedOql = calculateReportOql(totalDefects, inspectedQuantity, settings.oqlDecimals);
-  // User directive: OQL > 4.5% does NOT mean the report failed. Result is based on AQL criteria / Inspector conclusion.
+
+  // Inspection result mirrors Inspector Conclusion
   const [inspectionResult, setInspectionResult] = useState<InspectionResult>(
-    draft.inspectionResult || (criticalCount === 0 ? 'PASSED' : 'FAILED')
+    draft.inspectionResult || (inspectorConclusion === 'Approved' ? 'PASSED' : 'FAILED')
   );
+
+  // When Inspector Conclusion changes, sync with inspection result
+  const handleConclusionChange = (conclusion: 'Approved' | 'Rejected') => {
+    setInspectorConclusion(conclusion);
+    setInspectionResult(conclusion === 'Approved' ? 'PASSED' : 'FAILED');
+  };
+
+  // When Style Number changes, auto-resolve brand:
+  const handleStyleNumberChange = (newStyle: string) => {
+    setStyleNumber(newStyle);
+    const resolved = resolveBrandFromStyle(newStyle, buyer);
+    setBuyer(resolved);
+  };
 
   // Validation warnings calculation
   const warnings: string[] = [];
@@ -119,13 +141,16 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   const handleSaveAndApprove = (isDraft: boolean = false) => {
     addInspectionReport({
       buyer,
+      brand: buyer,
       factory,
       reportNumber,
       inspectionDate,
       orderNumber,
       poNumber: poNumber || orderNumber,
       inspector,
+      inspectorConclusion,
       styleNumber,
+      styleName: productDescription,
       color,
       productDescription,
       orderQuantity: Number(orderQuantity),
@@ -242,10 +267,17 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
             )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-2 rounded-lg bg-sky-50/50 border border-sky-100">
-                <label className="block text-sky-900 font-bold mb-1">
-                  Order Number (NOF Serial) *
-                </label>
+              <div className="col-span-2 p-2 rounded-lg bg-sky-50/50 border border-sky-100">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sky-900 font-bold">
+                    Order Number (NOF Serial) *
+                  </label>
+                  {orderNumber.includes('+') && (
+                    <span className="text-[10px] bg-sky-600 text-white font-bold px-1.5 py-0.5 rounded shadow-xs">
+                      {orderNumber.split('+').length} Serials Combined
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={orderNumber}
@@ -253,9 +285,21 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                   placeholder="e.g. NOF4778898"
                   className="w-full bg-white border border-sky-300 rounded-lg px-2.5 py-1.5 font-bold text-sky-950 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                 />
-                <span className="text-[10px] text-sky-600 font-semibold mt-0.5 block">
-                  Northern Fashions Job Order
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-sky-700 font-semibold">Captured NOF Serials:</span>
+                  {orderNumber
+                    .split(/\s*[\+,]\s*/)
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0)
+                    .map((nof, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[10px] font-mono font-bold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded border border-sky-200"
+                      >
+                        #{nof}
+                      </span>
+                    ))}
+                </div>
               </div>
 
               <div>
@@ -286,19 +330,26 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 <input
                   type="text"
                   value={styleNumber}
-                  onChange={(e) => setStyleNumber(e.target.value)}
+                  onChange={(e) => handleStyleNumberChange(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
                 />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Prefix: 13 (NAME IT), 15 (ONLY), 22 (ONLY&SONS)
+                </span>
               </div>
 
               <div>
-                <label className="block text-slate-500 font-medium mb-1">Buyer Name</label>
+                <label className="block text-slate-500 font-medium mb-1">Brand</label>
                 <input
                   type="text"
                   value={buyer}
                   onChange={(e) => setBuyer(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
+                  placeholder="e.g. ONLY&SONS / NAME IT / ONLY"
+                  className="w-full bg-white border border-sky-300 rounded-lg px-2.5 py-1.5 font-bold text-sky-900 focus:outline-none focus:border-sky-500"
                 />
+                <span className="text-[10px] text-sky-600 font-semibold mt-0.5 block">
+                  Auto-mapped from Style: {buyer}
+                </span>
               </div>
 
               <div>
@@ -307,7 +358,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                   type="text"
                   value={inspector}
                   onChange={(e) => setInspector(e.target.value)}
-                  placeholder="e.g. Rifat Chowdhury"
+                  placeholder="e.g. Salah Uddin / Rifat Chowdhury"
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
                 />
               </div>
@@ -342,13 +393,49 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 />
               </div>
 
+              {/* Inspector Conclusion Option (User Requirement 5) */}
+              <div className="col-span-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800">Inspector Conclusion</label>
+                  <p className="text-[10px] text-slate-500">
+                    Decision: <strong className={inspectorConclusion === 'Approved' ? 'text-emerald-700' : 'text-rose-700'}>{inspectorConclusion}</strong> &bull; Records this style as <strong className={inspectionResult === 'PASSED' ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>{inspectionResult}</strong>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleConclusionChange('Approved')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                      inspectorConclusion === 'Approved'
+                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Approved (PASSED)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConclusionChange('Rejected')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                      inspectorConclusion === 'Rejected'
+                        ? 'bg-rose-600 text-white ring-2 ring-rose-400'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Rejected (FAILED)
+                  </button>
+                </div>
+              </div>
+
               <div className="col-span-2">
-                <label className="block text-slate-500 font-medium mb-1">Product Description</label>
+                <label className="block text-slate-500 font-medium mb-1">Style Name / Product Description</label>
                 <input
                   type="text"
                   value={productDescription}
                   onChange={(e) => setProductDescription(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-sky-500"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-sky-500 font-medium"
                 />
               </div>
 
