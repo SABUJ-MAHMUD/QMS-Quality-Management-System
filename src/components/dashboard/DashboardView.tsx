@@ -325,6 +325,28 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
+      {/* Zero State Alert when starting fresh from zero */}
+      {reports.length === 0 && (
+        <div className="bg-gradient-to-r from-sky-50 to-emerald-50 dark:from-slate-900 dark:to-slate-900 border border-sky-200 dark:border-sky-900/60 rounded-2xl p-6 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-sky-100 dark:bg-sky-950/80 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800 flex items-center justify-center mx-auto shadow-2xs">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Clean Database Ready (0 Records)</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 max-w-lg mx-auto mt-1">
+              All demo records and uploaded data have been completely wiped. The system is 100% empty and ready for you to start fresh from zero.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('upload')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            Upload Your First PDF Report
+          </button>
+        </div>
+      )}
+
       {/* POWER BI INTERACTIVE SLICERS PANEL (User Requirement 2) */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-md space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">

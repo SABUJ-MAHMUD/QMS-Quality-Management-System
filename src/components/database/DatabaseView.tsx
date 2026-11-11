@@ -24,6 +24,7 @@ export const DatabaseView: React.FC = () => {
     filteredReports,
     deleteInspectionReport,
     updateInspectionReport,
+    clearAllData,
     canManageData,
     settings,
     currentUserRole,
@@ -37,6 +38,12 @@ export const DatabaseView: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<InspectionReport | null>(null);
   const [editingReport, setEditingReport] = useState<InspectionReport | null>(null);
   const [previewPdfReport, setPreviewPdfReport] = useState<InspectionReport | null>(null);
+
+  const handleWipeAll = async () => {
+    if (window.confirm('Are you sure you want to delete ALL data from the app and start completely fresh from zero (0 records)? This will delete all local and cloud records.')) {
+      await clearAllData();
+    }
+  };
 
   // Sorting
   const sortedReports = [...filteredReports].sort((a, b) => {
@@ -97,16 +104,26 @@ export const DatabaseView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {filteredReports.length > 0 && (
+            <button
+              onClick={handleWipeAll}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title="Delete all inspection data and start fresh from zero"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              Reset to Zero
+            </button>
+          )}
           <button
             onClick={() => exportReportsToExcel(filteredReports)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-sky-600" />
             Export to Excel
           </button>
           <button
             onClick={() => setActiveTab('upload')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5" />
             New Inspection Report
@@ -187,8 +204,23 @@ export const DatabaseView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {sortedReports.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-8 text-center text-slate-400">
-                    No inspection records found matching your filters.
+                  <td colSpan={14} className="py-12 text-center">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 border border-sky-200 flex items-center justify-center mx-auto shadow-2xs">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">Clean Database Ready (0 Records)</h4>
+                      <p className="text-xs text-slate-500">
+                        No inspection records exist in the database. Upload factory PDF inspection reports to start tracking OQL metrics and defect rankings from zero.
+                      </p>
+                      <button
+                        onClick={() => setActiveTab('upload')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Upload First PDF Report
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : (

@@ -78,10 +78,11 @@ interface AppContextType {
   addMonitoringRecord: (record: Omit<MonitoringRecord, 'id' | 'createdAt'>) => void;
   deleteMonitoringRecord: (id: string) => void;
 
-  // Demo Data Management
+  // Demo & Data Clearing Management
   hasDemoData: boolean;
   clearDemoData: () => void;
   restoreDemoData: () => void;
+  clearAllData: () => Promise<void>;
 
   // Metrics (Filtered)
   kpiMetrics: {
@@ -111,12 +112,25 @@ interface AppContextType {
   canManageSettings: boolean;
 }
 
+// Clear legacy cached demo or test data on module startup
+try {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('gqa_qms_reports_clean_v3');
+    localStorage.removeItem('gqa_qms_reports_clean_v2');
+    localStorage.removeItem('gqa_qms_reports_clean_v1');
+    localStorage.removeItem('gqa_qms_capa_clean_v3');
+    localStorage.removeItem('gqa_qms_monitoring_clean_v3');
+  }
+} catch {
+  // ignore
+}
+
 const STORAGE_KEYS = {
-  REPORTS: 'gqa_qms_reports_clean_v3',
+  REPORTS: 'gqa_qms_reports_fresh_zero_v6',
   DEFECT_GROUPS: 'gqa_qms_defect_groups_v3',
   DEFECT_MASTER: 'gqa_qms_defect_master_v3',
-  CAPA: 'gqa_qms_capa_clean_v3',
-  MONITORING: 'gqa_qms_monitoring_clean_v3',
+  CAPA: 'gqa_qms_capa_fresh_zero_v6',
+  MONITORING: 'gqa_qms_monitoring_fresh_zero_v6',
   SETTINGS: 'gqa_qms_settings_v3',
   USER_ROLE: 'gqa_qms_role_v3',
   AUTH: 'gqa_qms_auth_v3',
@@ -393,6 +407,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCapas([...INITIAL_DEMO_CAPA, ...userCapas]);
     setMonitoringRecords([...INITIAL_DEMO_MONITORING, ...userMon]);
     addNotification('success', 'Demonstration data restored for testing & evaluation.');
+  };
+
+  const clearAllData = async () => {
+    setReports([]);
+    setCapas([]);
+    setMonitoringRecords([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.REPORTS);
+      localStorage.removeItem(STORAGE_KEYS.CAPA);
+      localStorage.removeItem(STORAGE_KEYS.MONITORING);
+      localStorage.removeItem('gqa_qms_reports_clean_v3');
+      localStorage.removeItem('gqa_qms_reports_fresh_zero_v6');
+      localStorage.removeItem('gqa_qms_capa_clean_v3');
+      localStorage.removeItem('gqa_qms_monitoring_clean_v3');
+    } catch {
+      // ignore
+    }
+    // Delete any documents from Firestore
+    try {
+      const remoteR = await firestoreService.fetchReports();
+      for (const r of remoteR) {
+        await firestoreService.deleteReport(r.id);
+      }
+      const remoteC = await firestoreService.fetchCapas();
+      for (const c of remoteC) {
+        await firestoreService.deleteCapa(c.id);
+      }
+      const remoteM = await firestoreService.fetchMonitoring();
+      for (const m of remoteM) {
+        await firestoreService.deleteMonitoring(m.id);
+      }
+    } catch (err) {
+      console.warn('Firestore purge note:', err);
+    }
+    addNotification('info', 'All inspection reports and test data have been wiped. System is completely blank (0 records) and ready for fresh input.');
   };
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
@@ -687,6 +736,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasDemoData,
         clearDemoData,
         restoreDemoData,
+        clearAllData,
         kpiMetrics,
         notifications,
         addNotification,

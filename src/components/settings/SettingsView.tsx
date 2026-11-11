@@ -22,6 +22,7 @@ export const SettingsView: React.FC = () => {
     hasDemoData,
     clearDemoData,
     restoreDemoData,
+    clearAllData,
     canManageSettings,
   } = useApp();
 
@@ -235,6 +236,19 @@ export const SettingsView: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (window.confirm('Are you sure you want to completely wipe all inspection records and uploaded test data from the application? Everything will be reset to zero.')) {
+                  await clearAllData();
+                }
+              }}
+              disabled={!canManageSettings}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Wipe Database (Reset to 0)
+            </button>
             {hasDemoData ? (
               <button
                 type="button"
