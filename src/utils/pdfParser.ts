@@ -1,16 +1,8 @@
-import * as pdfjsLib from 'pdfjs-dist';
 import { InspectionReport, InspectionDefect, DefectMasterItem, DefectGroup, DefectSeverity } from '../types';
 import { calculateReportOql } from './oqlCalculator';
 import { classifyRawDefect } from '../data/defectMasterData';
 
-// Configure PDF.js worker safely with local fallback
-try {
-  if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
-  }
-} catch (e) {
-  console.warn('Worker configuration note:', e);
-}
+const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export interface ExtractedInspectionDraft {
   buyer: string; // Brand (e.g. ONLY&SONS, ONLY, NAME IT, BESTSELLER)
@@ -320,20 +312,46 @@ export const FACTORY_PDF_REPORTS = [
 
 /**
  * Reconstructs visual lines from PDF.js textContent items using Y/X coordinates
- * so BESTSELLER multi-column tables and label/value pairs preserve row alignment.
+ * off the main render loop with lazy-loaded pdfjs-dist & exact local worker.
  */
 export async function extractTextFromPdfFile(file: File): Promise<string> {
-  // Method 1: PDF.js coordinate-aware row reconstruction
+  // Method 1: Lazy-loaded PDF.js with matching local worker + strict timeout
   try {
+    const pdfjsLib = await import('pdfjs-dist');
+    if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(arrayBuffer),
-      useSystemFonts: true,
+      disableFontFace: true,
+      useSystemFonts: false,
+      stopAtErrors: false,
+      verbosity: 0,
     });
-    const pdfDoc = await loadingTask.promise;
-    let fullText = '';
 
-    for (let pageNum = 1; pageNum <= Math.min(pdfDoc.numPages, 15); pageNum++) {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        try {
+          loadingTask.destroy();
+        } catch {
+          // ignore
+        }
+        reject(new Error('PDF text extraction timed out'));
+      }, 12000);
+    });
+
+    const pdfDoc = await Promise.race([loadingTask.promise, timeoutPromise]);
+    if (timeoutId) clearTimeout(timeoutId);
+    let fullText = '';
+    const maxPages = Math.min(pdfDoc.numPages, 12);
+
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      // Yield between pages so browser UI stays 60fps responsive
+      await yieldToBrowser();
+
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
 
@@ -341,7 +359,6 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
         str: string;
         x: number;
         y: number;
-        width: number;
       }
 
       const items: PositionedItem[] = [];
@@ -354,66 +371,68 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
           str: text,
           x: Number(transform[4]) || 0,
           y: Number(transform[5]) || 0,
-          width: Number(rawItem.width) || 0,
         });
       }
 
-      // Group items into visual rows by Y coordinate (within ~3.5pt tolerance)
-      const rows: Array<{ y: number; items: PositionedItem[] }> = [];
+      // Group items into visual rows by Y coordinate (bucketed to O(n) via Map instead of O(n^2) find)
+      const rowBuckets = new Map<number, { y: number; items: PositionedItem[] }>();
       for (const item of items) {
-        const existingRow = rows.find((r) => Math.abs(r.y - item.y) <= 3.5);
-        if (existingRow) {
-          existingRow.items.push(item);
-        } else {
-          rows.push({ y: item.y, items: [item] });
+        const bucketKey = Math.round(item.y / 3.5);
+        let bucket = rowBuckets.get(bucketKey);
+        if (!bucket) {
+          bucket = { y: item.y, items: [] };
+          rowBuckets.set(bucketKey, bucket);
         }
+        bucket.items.push(item);
       }
 
-      // Sort rows top-to-bottom (higher PDF Y = higher on page)
-      rows.sort((a, b) => b.y - a.y);
+      const rows = Array.from(rowBuckets.values()).sort((a, b) => b.y - a.y);
 
-      const pageLines = rows.map((row) => {
-        row.items.sort((a, b) => a.x - b.x);
-        let line = '';
-        let prevEndX = -Infinity;
-        for (const it of row.items) {
-          const piece = it.str.trim();
-          if (!piece) continue;
-          if (!line) {
-            line = piece;
-          } else {
-            const gap = it.x - prevEndX;
-            line += gap > 1.5 ? ' ' + piece : ' ' + piece;
-          }
-          prevEndX = it.x + it.width;
-        }
-        return line.replace(/\s{2,}/g, ' ').trim();
-      }).filter(Boolean);
+      const pageLines = rows
+        .map((row) => {
+          row.items.sort((a, b) => a.x - b.x);
+          return row.items
+            .map((it) => it.str.trim())
+            .filter(Boolean)
+            .join(' ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        })
+        .filter(Boolean);
 
       fullText += `\n--- Page ${pageNum} ---\n${pageLines.join('\n')}`;
+      try {
+        page.cleanup();
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      await ((pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.() ?? loadingTask.destroy());
+    } catch {
+      // ignore
     }
 
     if (fullText.trim().length > 20) {
       return fullText.trim();
     }
   } catch (err) {
-    console.warn('PDF.js text extraction error, trying direct stream parser:', err);
+    console.warn('PDF.js text extraction note:', err);
   }
 
-  // Method 2: Direct ASCII/UTF-8 Text Stream extraction
+  // Safe fast fallback: only extract clean ASCII text operators from first 150 KB (never scan megabytes of JPEG streams!)
   try {
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let str = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const b = bytes[i];
-      if ((b >= 32 && b <= 126) || b === 10 || b === 13) {
-        str += String.fromCharCode(b);
-      } else if (str.length > 0 && str[str.length - 1] !== ' ') {
-        str += ' ';
-      }
+    const slice = file.slice(0, 150 * 1024);
+    const buffer = await slice.arrayBuffer();
+    const decoded = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+    const readableMatches = decoded.match(/\(([A-Za-z0-9\s:.,\-/+%&()]{4,120})\)\s*Tj/g) || [];
+    if (readableMatches.length > 0) {
+      return readableMatches
+        .map((tok) => tok.replace(/^\(|\)\s*Tj$/g, ''))
+        .join('\n');
     }
-    return str;
+    return file.name;
   } catch {
     return file.name;
   }
@@ -581,11 +600,14 @@ export function extractDataFromText(
   defectGroups: DefectGroup[],
   targetMonth?: string
 ): ExtractedInspectionDraft {
-  const combinedSearch = `${fileName}\n${rawText}`;
+  // Bound text length so even huge OCR dumps execute in < 5ms without UI stalls
+  const safeText = (rawText || '').slice(0, 150000);
+  const combinedSearch = `${fileName}\n${safeText}`;
   const lines = combinedSearch
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter((l) => l.length > 0 && l.length <= 320)
+    .slice(0, 1500);
 
   // 1. Order Number (All NOF Serials)
   const rawNofMatches = combinedSearch.match(/\bNOF\s*\d{5,10}\b/gi) || [];

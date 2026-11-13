@@ -1,10 +1,11 @@
-import * as XLSX from 'xlsx';
-import { InspectionReport, CAPARecord, MonitoringRecord } from '../types';
+import { InspectionReport, CAPARecord } from '../types';
 
-export function exportReportsToExcel(
+export async function exportReportsToExcel(
   reports: InspectionReport[],
   filename: string = 'Garment_Quality_Analytics_Reports.xlsx'
 ) {
+  const XLSX = await import('xlsx');
+
   // 1. Overview sheet
   const overviewData = reports.map((r, index) => ({
     'Sl. No': index + 1,
@@ -56,10 +57,12 @@ export function exportReportsToExcel(
   XLSX.writeFile(wb, filename);
 }
 
-export function exportCapaToExcel(
+export async function exportCapaToExcel(
   capas: CAPARecord[],
   filename: string = 'CAPA_Management_Log.xlsx'
 ) {
+  const XLSX = await import('xlsx');
+
   const capaData = capas.map((c) => ({
     'CAPA ID': c.capaId,
     'Report No': c.reportNumber,

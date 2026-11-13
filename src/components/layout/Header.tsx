@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import {
@@ -26,7 +26,39 @@ interface HeaderProps {
   isSidebarCollapsed?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollapsed }) => {
+const LiveClock: React.FC = React.memo(() => {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeStr = currentTime.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  const todayStr = currentTime.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono">
+      <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+      <span className="text-xs font-black text-emerald-400 tracking-wider whitespace-nowrap">{timeStr}</span>
+      <span className="text-slate-500 font-sans hidden sm:inline">|</span>
+      <span className="text-xs font-semibold text-slate-300 font-sans hidden sm:inline whitespace-nowrap">{todayStr}</span>
+    </div>
+  );
+});
+
+export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSidebarCollapsed }) => {
   const {
     filters,
     setFilters,
@@ -44,15 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
-
-  // Live ticking clock & date (User Requirement 7: "এ্যাপস এর উপরে একটি লাইভ টাইম ঘড়ি ও তারিখ দিয়ে দাও")
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -68,23 +92,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
     }
   };
 
-  const timeStr = currentTime.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  });
-
-  const todayStr = currentTime.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-
   // Derive unique buyers and financial years
-  const availableBuyers = Array.from(new Set(reports.map((r) => r.buyer)));
-  if (!availableBuyers.includes('BESTSELLER')) availableBuyers.push('BESTSELLER');
+  const availableBuyers = useMemo(() => {
+    const buyers = Array.from(new Set(reports.map((r) => r.buyer)));
+    if (!buyers.includes('BESTSELLER')) buyers.push('BESTSELLER');
+    return buyers;
+  }, [reports]);
 
   const roles: UserRole[] = ['Admin', 'QMS Manager', 'QMS Executive', 'Viewer'];
 
@@ -187,13 +200,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
 
         {/* Right Section: Live Clock, Fullscreen, Day/Night Switch, Notifications, User Profile */}
         <div className="flex items-center gap-2">
-          {/* Live Clock & Date (User Requirement 7: "এ্যাপস এর উপরে একটি লাইভ টাইম ঘড়ি ও তারিখ দিয়ে দাও") */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono">
-            <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
-            <span className="text-xs font-black text-emerald-400 tracking-wider whitespace-nowrap">{timeStr}</span>
-            <span className="text-slate-500 font-sans hidden sm:inline">|</span>
-            <span className="text-xs font-semibold text-slate-300 font-sans hidden sm:inline whitespace-nowrap">{todayStr}</span>
-          </div>
+          {/* Live Clock & Date */}
+          <LiveClock />
 
           {/* Fullscreen Button (User Requirement 7: "ডেশবোর্ডটি যেন ফুলস্ক্রি হয় ফুল স্ক্রিন করার জন্য একটি বাটুন সংযুক্ত করে দাও") */}
           <button
@@ -351,4 +359,4 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
       </div>
     </header>
   );
-};
+});

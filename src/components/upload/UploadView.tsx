@@ -61,18 +61,14 @@ export const UploadView: React.FC = () => {
 
   const processFile = async (file: File) => {
     setIsProcessing(true);
-    setProcessingProgress(15);
-    setProcessingStatusText(`Reading file: ${file.name}...`);
+    setProcessingProgress(25);
+    setProcessingStatusText(`Extracting inspection data from ${file.name}...`);
+
+    // Allow the progress UI to paint before heavy extraction starts
+    await new Promise((r) => setTimeout(r, 0));
 
     try {
-      await new Promise((r) => setTimeout(r, 250));
-      setProcessingProgress(45);
-      setProcessingStatusText('Extracting report text & detecting NOF job serial...');
-
-      await new Promise((r) => setTimeout(r, 300));
-      setProcessingProgress(75);
-      setProcessingStatusText('Mapping defect classification & calculating AQL/OQL metrics...');
-
+      setProcessingProgress(60);
       const draft = await parseInspectionPdf(
         file,
         defectMaster,
@@ -82,12 +78,8 @@ export const UploadView: React.FC = () => {
       );
 
       setProcessingProgress(100);
-      setProcessingStatusText('Inspection data captured successfully!');
-
-      setTimeout(() => {
-        setIsProcessing(false);
-        setCurrentDraft(draft);
-      }, 250);
+      setIsProcessing(false);
+      setCurrentDraft(draft);
     } catch (err: any) {
       setIsProcessing(false);
       addNotification('error', `Failed to parse file: ${err?.message || 'Unsupported format'}`);
@@ -103,8 +95,10 @@ export const UploadView: React.FC = () => {
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0]);
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) {
+      processFile(file);
     }
   };
 
@@ -113,12 +107,8 @@ export const UploadView: React.FC = () => {
     if (!sample) return;
 
     setIsProcessing(true);
-    setProcessingProgress(30);
+    setProcessingProgress(50);
     setProcessingStatusText(`Loading factory inspection report: ${sample.orderNumber}...`);
-
-    await new Promise((r) => setTimeout(r, 250));
-    setProcessingProgress(80);
-    setProcessingStatusText('Mapping Northern Fashions NOF serial & defect entries...');
 
     const draft = await parseInspectionPdf(
       { name: sample.fileName, size: 2892000 },
@@ -129,29 +119,20 @@ export const UploadView: React.FC = () => {
     );
 
     setProcessingProgress(100);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setCurrentDraft(draft);
-    }, 200);
+    setIsProcessing(false);
+    setCurrentDraft(draft);
   };
 
   const handleParsePastedText = () => {
     if (!pastedText.trim()) return;
-    setIsProcessing(true);
-    setProcessingProgress(50);
-    setProcessingStatusText('Extracting NOF order serial and defects from text...');
-
-    setTimeout(() => {
-      const draft = extractDataFromText(
-        pastedText,
-        'Manual_Pasted_Inspection.txt',
-        defectMaster,
-        defectGroups,
-        selectedTargetMonth
-      );
-      setIsProcessing(false);
-      setCurrentDraft(draft);
-    }, 250);
+    const draft = extractDataFromText(
+      pastedText,
+      'Manual_Pasted_Inspection.txt',
+      defectMaster,
+      defectGroups,
+      selectedTargetMonth
+    );
+    setCurrentDraft(draft);
   };
 
   return (
