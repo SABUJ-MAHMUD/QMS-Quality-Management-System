@@ -54,6 +54,13 @@ export const PWAUpdateToast: React.FC = () => {
     };
   }, []);
 
+  // Auto-dismiss transient Offline Ready notification after 4 seconds
+  useEffect(() => {
+    if (!offlineReady) return;
+    const timer = setTimeout(() => setOfflineReady(false), 4000);
+    return () => clearTimeout(timer);
+  }, [offlineReady, setOfflineReady]);
+
   const handleUpdateNow = async () => {
     setIsUpdating(true);
     try {
@@ -143,7 +150,7 @@ export const PWAUpdateToast: React.FC = () => {
 
       {/* 2. Offline Ready Notification (Transient) */}
       {offlineReady && (
-        <div className="fixed bottom-6 left-6 z-[90] max-w-sm animate-fade-in">
+        <div className="fixed bottom-6 left-6 z-30 max-w-sm animate-fade-in">
           <div className="rounded-xl border border-emerald-500/40 bg-slate-900/95 p-3.5 shadow-xl backdrop-blur-md text-white flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
             <div className="text-xs">

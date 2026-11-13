@@ -23,7 +23,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
+import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect } from '../../data/defectMasterData';
 
 export const DefectAnalyticsView: React.FC = () => {
   const { filteredReports, setFilters, setActiveTab, addNotification, filters } = useApp();
@@ -66,43 +66,95 @@ export const DefectAnalyticsView: React.FC = () => {
   };
 
   // Compile statistics for each of the 23 Master Defect Categories and their subDefects
+  // Strictly assigns each defect record to ONE sub-defect slot (zero double-counting!)
   const categoryStats = useMemo(() => {
-    const stats = MASTER_DEFECT_23_CATEGORIES.map((cat) => {
-      let totalQty = 0;
-      let inspectionCountSet = new Set<string>();
+    const subQtyMap = new Map<string, number>();
+    const subReportsMap = new Map<string, Set<string>>();
 
-      const subStats = cat.subDefects.map((sub) => {
-        let subQty = 0;
-        let subInspectionSet = new Set<string>();
+    filteredReports.forEach((r) => {
+      r.defects?.forEach((d) => {
+        const qty = Number(d.defectQuantity) || 0;
+        if (qty <= 0) return;
 
-        filteredReports.forEach((r) => {
-          r.defects?.forEach((d) => {
-            const rawName = (d.originalDefectName || '').toLowerCase();
-            const stdName = (d.standardDefectName || '').toLowerCase();
+        const rawName = (d.originalDefectName || '').toLowerCase();
+        const stdName = (d.standardDefectName || '').toLowerCase();
+        const gid = (d.defectGroupId || '').toLowerCase();
+
+        let matchedSubCode: string | null = null;
+
+        // 1. Exact code or exact standard defect name match
+        for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+          for (const sub of cat.subDefects) {
             const subCode = sub.code.toLowerCase();
             const subName = sub.name.toLowerCase();
-
+            const codeBoundaryRegex = new RegExp(`(^|[^a-z0-9])${subCode}([^0-9]|$)`, 'i');
             if (
-              rawName.includes(subCode) ||
-              rawName.includes(subName) ||
-              stdName.includes(subName) ||
-              d.defectGroupId?.toLowerCase() === `dg-${cat.code.toLowerCase()}` ||
-              d.defectGroupId?.toLowerCase() === cat.name.toLowerCase()
+              codeBoundaryRegex.test(rawName) ||
+              stdName === subName ||
+              rawName.includes(subName)
             ) {
-              const qty = Number(d.defectQuantity) || 1;
-              subQty += qty;
-              subInspectionSet.add(r.id);
+              matchedSubCode = sub.code;
+              break;
             }
-          });
-        });
+          }
+          if (matchedSubCode) break;
+        }
 
+        // 2. Fallback via classifyRawDefect (handles compact codes like CL5, CL1, NO1, SL-1)
+        if (!matchedSubCode) {
+          const classified = classifyRawDefect(d.standardDefectName || d.originalDefectName || '');
+          const classStd = classified.standardDefectName.toLowerCase();
+          for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+            const found = cat.subDefects.find((s) => s.name.toLowerCase() === classStd);
+            if (found) {
+              matchedSubCode = found.code;
+              break;
+            }
+          }
+          if (!matchedSubCode) {
+            const targetCat = MASTER_DEFECT_23_CATEGORIES.find(
+              (c) => `dg-${c.code.toLowerCase()}` === (gid || classified.defectGroupId.toLowerCase())
+            );
+            if (targetCat && targetCat.subDefects.length > 0) {
+              matchedSubCode = targetCat.subDefects[0].code;
+            }
+          }
+        }
+
+        // 3. Final group fallback by defectGroupId
+        if (!matchedSubCode && gid) {
+          const targetCat = MASTER_DEFECT_23_CATEGORIES.find(
+            (c) => `dg-${c.code.toLowerCase()}` === gid || c.name.toLowerCase() === gid
+          );
+          if (targetCat && targetCat.subDefects.length > 0) {
+            matchedSubCode = targetCat.subDefects[0].code;
+          }
+        }
+
+        if (matchedSubCode) {
+          subQtyMap.set(matchedSubCode, (subQtyMap.get(matchedSubCode) || 0) + qty);
+          if (!subReportsMap.has(matchedSubCode)) {
+            subReportsMap.set(matchedSubCode, new Set<string>());
+          }
+          subReportsMap.get(matchedSubCode)!.add(r.id);
+        }
+      });
+    });
+
+    return MASTER_DEFECT_23_CATEGORIES.map((cat) => {
+      let totalQty = 0;
+      const inspectionCountSet = new Set<string>();
+
+      const subStats = cat.subDefects.map((sub) => {
+        const subQty = subQtyMap.get(sub.code) || 0;
+        const subSet = subReportsMap.get(sub.code);
         totalQty += subQty;
-        subInspectionSet.forEach((id) => inspectionCountSet.add(id));
+        subSet?.forEach((id) => inspectionCountSet.add(id));
 
         return {
           ...sub,
           quantityAffected: subQty,
-          inspectionsWithDefects: subInspectionSet.size,
+          inspectionsWithDefects: subSet ? subSet.size : 0,
         };
       });
 
@@ -113,8 +165,6 @@ export const DefectAnalyticsView: React.FC = () => {
         subStats,
       };
     });
-
-    return stats;
   }, [filteredReports]);
 
   // Filter categories by search and sort by highest defect count descending

@@ -102,14 +102,17 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   if (!inspectedQuantity || inspectedQuantity <= 0) {
     warnings.push('Inspected sample quantity must be greater than zero.');
   }
+  if (defects.length === 0) {
+    warnings.push('No defect rows detected in this report (OQL = 0.00%). Add defect rows manually if needed.');
+  }
   if (defects.some((d) => !d.defectQuantity || d.defectQuantity <= 0)) {
     warnings.push('One or more defect rows have zero quantity.');
   }
   if (reports.some((r) => r.reportNumber.toLowerCase() === reportNumber.toLowerCase())) {
     warnings.push(`Report number (${reportNumber}) already exists in the database.`);
   }
-  if (!orderNumber.toUpperCase().startsWith('NOF')) {
-    warnings.push('Order number does not start with standard NOF serial prefix.');
+  if (!orderNumber || !orderNumber.toUpperCase().includes('NOF')) {
+    warnings.push('Order number does not include a standard NOF serial prefix.');
   }
 
   // Handlers for defect rows
@@ -125,8 +128,8 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
     const newRow = {
       id: `draft-def-${Date.now()}`,
       originalDefectName: 'Manual Defect Item',
-      standardDefectName: defectMaster[0]?.standardDefectName || 'Broken Stitching',
-      defectGroupId: defectMaster[0]?.defectGroupId || 'dg-1',
+      standardDefectName: defectMaster[0]?.standardDefectName || 'Hole / Needle cut / Yarn cut',
+      defectGroupId: defectMaster[0]?.defectGroupId || 'dg-fa',
       severity: 'Major' as DefectSeverity,
       defectQuantity: 1,
       remarks: 'Added during validation screen',
@@ -557,6 +560,9 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                           }}
                           className="w-full bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-800 focus:outline-none focus:border-sky-500"
                         >
+                          {!defectMaster.some((dm) => dm.standardDefectName === def.standardDefectName) && def.standardDefectName && (
+                            <option value={def.standardDefectName}>{def.standardDefectName}</option>
+                          )}
                           {defectMaster.map((dm) => (
                             <option key={dm.id} value={dm.standardDefectName}>
                               {dm.standardDefectName}
@@ -571,6 +577,9 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                           onChange={(e) => handleDefectChange(idx, 'defectGroupId', e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-800 focus:outline-none focus:border-sky-500"
                         >
+                          {!defectGroups.some((dg) => dg.id === def.defectGroupId) && def.defectGroupId && (
+                            <option value={def.defectGroupId}>{def.defectGroupId}</option>
+                          )}
                           {defectGroups.map((dg) => (
                             <option key={dg.id} value={dg.id}>
                               {dg.groupName}
