@@ -29,9 +29,13 @@ interface AppContextType {
   setActiveTab: (tab: string) => void;
   currentUserRole: UserRole;
   setCurrentUserRole: (role: UserRole) => void;
+  currentUserEmail: string;
+  setCurrentUserEmail: (email: string) => void;
+  currentUserName: string;
+  setCurrentUserName: (name: string) => void;
   isAuthenticated: boolean;
   setIsAuthenticated: (auth: boolean) => void;
-  login: (targetTab?: string) => void;
+  login: (targetTab?: string, userProfile?: { email: string; name?: string; role?: UserRole }) => void;
   logout: () => void;
 
   // Theme (Day / Night Mode)
@@ -164,7 +168,15 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
-    return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'QMS Manager';
+    return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
+  });
+
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => {
+    return localStorage.getItem('NFL_QMS_USER_EMAIL') || 'quality.engineer.bd@gmail.com';
+  });
+
+  const [currentUserName, setCurrentUserName] = useState<string>(() => {
+    return localStorage.getItem('NFL_QMS_USER_NAME') || 'Quality Admin (Lead)';
   });
 
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
@@ -209,17 +221,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const login = (targetTab?: string) => {
+  const login = (targetTab?: string, userProfile?: { email: string; name?: string; role?: UserRole }) => {
     setIsAuthenticated(true);
     try {
       localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
     } catch {
       // ignore
     }
+
+    if (userProfile) {
+      const isSuperAdmin = userProfile.email.toLowerCase().trim() === 'quality.engineer.bd@gmail.com';
+      const effectiveRole: UserRole = isSuperAdmin ? 'Admin' : (userProfile.role || 'QMS Manager');
+      const effectiveName = userProfile.name || (isSuperAdmin ? 'Quality Engineer (Admin)' : 'QMS Officer');
+
+      setCurrentUserRole(effectiveRole);
+      setCurrentUserEmail(userProfile.email);
+      setCurrentUserName(effectiveName);
+
+      try {
+        localStorage.setItem(STORAGE_KEYS.USER_ROLE, effectiveRole);
+        localStorage.setItem('NFL_QMS_USER_EMAIL', userProfile.email);
+        localStorage.setItem('NFL_QMS_USER_NAME', effectiveName);
+      } catch {
+        // ignore
+      }
+    }
+
     if (targetTab) {
       setActiveTab(targetTab);
     }
-    addNotification('success', 'Signed in to Northern Fashions QMS Workspace.');
+    addNotification('success', `Signed in to Northern Fashions QMS Workspace as ${userProfile?.email || currentUserEmail}.`);
   };
 
   const logout = () => {
@@ -700,6 +731,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         currentUserRole,
         setCurrentUserRole,
+        currentUserEmail,
+        setCurrentUserEmail,
+        currentUserName,
+        setCurrentUserName,
         isAuthenticated,
         setIsAuthenticated,
         login,

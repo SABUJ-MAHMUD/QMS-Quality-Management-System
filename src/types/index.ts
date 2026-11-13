@@ -59,6 +59,9 @@ export interface InspectionReport {
   inspectorConclusion?: 'Approved' | 'Rejected' | 'Pending';
   styleNumber: string;
   styleName?: string;
+  floor?: string; // e.g. "SEW-1", "SEW-2", "SEW-3"
+  section?: string;
+  targetMonth?: string; // YYYY-MM
   color: string;
   productDescription: string;
   orderQuantity: number;
@@ -123,6 +126,7 @@ export interface CAPARecord {
   effectivenessStatus: EffectivenessStatus;
   capaStatus: CapaStatus;
   evidenceUrl?: string;
+  showOnDashboard?: boolean;
   createdAt: string;
   updatedAt: string;
   isDemo?: boolean;
@@ -165,4 +169,14 @@ export interface AppSettings {
   factoryName: string;
   defaultBuyer: string;
   oqlDecimals: number;
+}
+
+export interface RegisteredUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  password?: string;
+  isVerified: boolean;
+  createdAt: string;
 }

@@ -9,7 +9,6 @@ import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { Footer } from './components/layout/Footer';
 import { DemoBanner } from './components/common/DemoBanner';
-import { FilterBar } from './components/common/FilterBar';
 import { PWAUpdateToast } from './components/common/PWAUpdateToast';
 
 import { LoginPortalView } from './components/auth/LoginPortalView';
@@ -49,9 +48,6 @@ const MainLayout: React.FC = () => {
 
         {/* Demo Data Alert Banner */}
         <DemoBanner />
-
-        {/* Global Filter Toolbar */}
-        <FilterBar />
 
         {/* Scrollable Viewport */}
         <main className="flex-1 overflow-y-auto bg-slate-50/70 dark:bg-slate-950/80 focus:outline-none">

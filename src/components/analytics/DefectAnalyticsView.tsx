@@ -1,537 +1,425 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
-  PieChart as PieIcon,
-  BarChart3,
-  Layers,
-  Flame,
   TrendingUp,
-  Download,
-  Calendar,
-  ArrowUpDown,
-  CheckCircle2,
-  Info,
+  ChevronDown,
+  ChevronRight,
+  BarChart3,
+  Search,
+  Layers,
+  PieChart as PieIcon,
+  Filter,
+  ExternalLink,
+  Zap,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
-  ComposedChart,
+  BarChart,
   Bar,
-  Line,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
-  PieChart,
-  Pie,
   Cell,
-  BarChart,
+  LabelList,
 } from 'recharts';
-import { computeParetoAnalysis } from '../../utils/oqlCalculator';
+import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
 
 export const DefectAnalyticsView: React.FC = () => {
-  const { filteredReports, defectGroups } = useApp();
+  const { filteredReports, setFilters, setActiveTab, addNotification, filters } = useApp();
 
-  // Month-wise Column Chart display mode
-  const [columnChartMode, setColumnChartMode] = useState<'by_group' | 'two_month_compare'>('by_group');
-
-  // Extract all individual defects from filtered reports
-  const allFilteredDefects = filteredReports.flatMap((r) => r.defects || []);
-
-  // 1. Pareto analysis
-  const paretoData = computeParetoAnalysis(allFilteredDefects, defectGroups);
-
-  // 2. Defect Group Distribution
-  const groupCountMap = new Map<string, number>();
-  defectGroups.forEach((g) => groupCountMap.set(g.id, 0));
-
-  allFilteredDefects.forEach((d) => {
-    const gid = d.defectGroupId || 'dg-12';
-    groupCountMap.set(gid, (groupCountMap.get(gid) || 0) + (Number(d.defectQuantity) || 0));
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    Se: true,
+    Ne: true,
+    Cle: true,
+    Fa: true,
   });
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const groupChartData = defectGroups
-    .map((g) => ({
-      id: g.id,
-      name: g.groupName,
-      value: groupCountMap.get(g.id) || 0,
-      color: g.color || '#3b82f6',
-    }))
-    .filter((g) => g.value > 0)
-    .sort((a, b) => b.value - a.value);
-
-  // 3. Severity Distribution
-  const severityMap = {
-    Critical: 0,
-    Major: 0,
-    Minor: 0,
+  const toggleCategory = (code: string) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [code]: !prev[code],
+    }));
   };
-  allFilteredDefects.forEach((d) => {
-    if (d.severity === 'Critical') severityMap.Critical += Number(d.defectQuantity) || 0;
-    else if (d.severity === 'Major') severityMap.Major += Number(d.defectQuantity) || 0;
-    else if (d.severity === 'Minor') severityMap.Minor += Number(d.defectQuantity) || 0;
-  });
 
-  const severityPieData = [
-    { name: 'Critical', value: severityMap.Critical, color: '#dc2626' },
-    { name: 'Major', value: severityMap.Major, color: '#ea580c' },
-    { name: 'Minor', value: severityMap.Minor, color: '#0284c7' },
-  ].filter((d) => d.value > 0);
-
-  // 4. Top 10 Recurring Defects
-  const top10Defects = paretoData.slice(0, 10);
-
-  // 5. Unique Months available in reports
-  const availableMonths = Array.from(new Set(filteredReports.map((r) => r.inspectionDate.slice(0, 7)))).sort();
-
-  const [compareMonthA, setCompareMonthA] = useState<string>(availableMonths[availableMonths.length - 2] || '2026-09');
-  const [compareMonthB, setCompareMonthB] = useState<string>(availableMonths[availableMonths.length - 1] || '2026-10');
-
-  // Multi-Month Defect Group Comparison Column Chart Data
-  const monthComparisonByGroupData = defectGroups.map((g) => {
-    const row: any = { groupName: g.groupName };
-    availableMonths.forEach((m) => {
-      const monthReps = filteredReports.filter((r) => r.inspectionDate.startsWith(m));
-      const count = monthReps
-        .flatMap((r) => r.defects || [])
-        .filter((d) => d.defectGroupId === g.id)
-        .reduce((sum, d) => sum + (Number(d.defectQuantity) || 0), 0);
-      row[m] = count;
+  const expandAll = () => {
+    const all: Record<string, boolean> = {};
+    MASTER_DEFECT_23_CATEGORIES.forEach((c) => {
+      all[c.code] = true;
     });
-    return row;
-  }).filter((row) => {
-    return availableMonths.some((m) => row[m] > 0);
-  });
+    setExpandedCategories(all);
+  };
 
-  // Direct 2-Month Comparative Column Chart Data
-  const twoMonthComparisonData = defectGroups.map((g) => {
-    const repsA = filteredReports.filter((r) => r.inspectionDate.startsWith(compareMonthA));
-    const repsB = filteredReports.filter((r) => r.inspectionDate.startsWith(compareMonthB));
+  const collapseAll = () => {
+    setExpandedCategories({});
+  };
 
-    const countA = repsA
-      .flatMap((r) => r.defects || [])
-      .filter((d) => d.defectGroupId === g.id)
-      .reduce((s, d) => s + (Number(d.defectQuantity) || 0), 0);
+  // Direct Power BI Link to Main Dashboard
+  const handleLinkToDashboard = (defectIdentifier: string, label: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      defectGroup: defectIdentifier,
+    }));
+    setActiveTab('dashboard');
+    addNotification('info', `Filtered Dashboard for "${label}". Viewing linked analytics.`);
+  };
 
-    const countB = repsB
-      .flatMap((r) => r.defects || [])
-      .filter((d) => d.defectGroupId === g.id)
-      .reduce((s, d) => s + (Number(d.defectQuantity) || 0), 0);
+  // Compile statistics for each of the 23 Master Defect Categories and their subDefects
+  const categoryStats = useMemo(() => {
+    const stats = MASTER_DEFECT_23_CATEGORIES.map((cat) => {
+      let totalQty = 0;
+      let inspectionCountSet = new Set<string>();
 
-    const diff = countB - countA;
+      const subStats = cat.subDefects.map((sub) => {
+        let subQty = 0;
+        let subInspectionSet = new Set<string>();
 
-    return {
-      name: g.groupName,
-      [compareMonthA]: countA,
-      [compareMonthB]: countB,
-      difference: diff,
-    };
-  }).filter((row) => Number(row[compareMonthA]) > 0 || Number(row[compareMonthB]) > 0);
+        filteredReports.forEach((r) => {
+          r.defects?.forEach((d) => {
+            const rawName = (d.originalDefectName || '').toLowerCase();
+            const stdName = (d.standardDefectName || '').toLowerCase();
+            const subCode = sub.code.toLowerCase();
+            const subName = sub.name.toLowerCase();
 
-  const MONTH_COLORS = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+            if (
+              rawName.includes(subCode) ||
+              rawName.includes(subName) ||
+              stdName.includes(subName) ||
+              d.defectGroupId?.toLowerCase() === `dg-${cat.code.toLowerCase()}` ||
+              d.defectGroupId?.toLowerCase() === cat.name.toLowerCase()
+            ) {
+              const qty = Number(d.defectQuantity) || 1;
+              subQty += qty;
+              subInspectionSet.add(r.id);
+            }
+          });
+        });
+
+        totalQty += subQty;
+        subInspectionSet.forEach((id) => inspectionCountSet.add(id));
+
+        return {
+          ...sub,
+          quantityAffected: subQty,
+          inspectionsWithDefects: subInspectionSet.size,
+        };
+      });
+
+      return {
+        ...cat,
+        totalQuantityAffected: totalQty,
+        totalInspectionsWithDefects: inspectionCountSet.size,
+        subStats,
+      };
+    });
+
+    return stats;
+  }, [filteredReports]);
+
+  // Filter categories by search and sort by highest defect count descending
+  const filteredCategoryStats = useMemo(() => {
+    let list = categoryStats;
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.code.toLowerCase().includes(q) ||
+          c.subDefects.some((s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
+      );
+    }
+    // Auto-sort by frequency: category with highest defects automatically floats to row #1
+    return [...list].sort((a, b) => b.totalQuantityAffected - a.totalQuantityAffected);
+  }, [categoryStats, searchTerm]);
+
+  // Data for the Right Chart: 100% Dynamic Parallel Counting from Left Table (No dummy data)
+  const chartData = useMemo(() => {
+    return categoryStats
+      .filter((c) => c.totalQuantityAffected > 0)
+      .map((c) => ({
+        name: c.name,
+        code: c.code,
+        count: c.totalQuantityAffected,
+        color: c.color,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [categoryStats]);
+
+  const totalDefectSum = chartData.reduce((s, c) => s + c.count, 0);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="p-4 space-y-4 max-w-[1700px] mx-auto text-slate-800 dark:text-slate-100">
+      {/* Top Banner matching Excel Mockup */}
+      <div className="bg-[#c6e0b4] dark:bg-emerald-950/70 border border-[#a9d08e] dark:border-emerald-800 px-4 py-2.5 rounded-t-md flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            Defect Analysis &amp; Month-wise Intelligence
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-              Column Chart &amp; Pareto
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Month-wise Defect Comparison Column Chart, quality group classification, and 80/20 Pareto distribution analysis.
+          <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans">
+            OQL &amp; Defects Analysis
+          </h1>
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            23 Master Defect Categories &amp; Frequency Breakdown
           </p>
         </div>
-      </div>
 
-      {/* FEATURE: DEDICATED MONTH-WISE DEFECT COMPARISON COLUMN CHART */}
-      <div className="bg-white rounded-2xl p-5 border border-sky-200 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-600 animate-pulse" />
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-sky-600" />
-                Month-wise Defect Comparison Column Chart
-              </h3>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Side-by-side column comparison of defects across inspection months for each defect group.
-            </p>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search 23 categories..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-1.5 rounded-md text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none"
+            />
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setColumnChartMode('by_group')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                columnChartMode === 'by_group'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              All Months Column View
-            </button>
-            <button
-              onClick={() => setColumnChartMode('two_month_compare')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                columnChartMode === 'two_month_compare'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Direct Two-Month Comparison
-            </button>
-          </div>
-        </div>
-
-        {/* How-to guide in English */}
-        <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-3 flex items-start gap-2 text-xs text-sky-900">
-          <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-          <div>
-            <strong>How it works:</strong> Whenever you upload an inspection report under a target month (e.g. October 2026 or September 2026) in the <em>&ldquo;PDF Report Upload&rdquo;</em> tab, its defects are automatically categorized and reflected side-by-side in this Column Chart.
-          </div>
-        </div>
-
-        {/* Two-Month Selector controls if in compare mode */}
-        {columnChartMode === 'two_month_compare' && (
-          <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-            <span className="font-bold text-slate-700">Select Months to Compare:</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-500">Base Month:</span>
-              <select
-                value={compareMonthA}
-                onChange={(e) => setCompareMonthA(e.target.value)}
-                className="bg-white border border-slate-300 rounded px-2.5 py-1 font-bold text-slate-800"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <span className="text-slate-400 font-bold">&harr;</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-500">Comparison Month:</span>
-              <select
-                value={compareMonthB}
-                onChange={(e) => setCompareMonthB(e.target.value)}
-                className="bg-white border border-slate-300 rounded px-2.5 py-1 font-bold text-slate-800"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* The Recharts Column Chart */}
-        <div className="h-80 w-full pt-2">
-          {columnChartMode === 'by_group' ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={monthComparisonByGroupData}
-                margin={{ top: 20, right: 25, bottom: 35, left: -10 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="groupName"
-                  angle={-15}
-                  textAnchor="end"
-                  interval={0}
-                  tick={{ fontSize: 11, fill: '#475569' }}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: '#64748b' }}
-                  label={{
-                    value: 'Defect Quantity',
-                    angle: -90,
-                    position: 'insideLeft',
-                    fontSize: 11,
-                    fill: '#64748b',
-                  }}
-                />
-                <Tooltip
-                  formatter={(val: any, name: any) => [`${val} defects`, `Month: ${name}`]}
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    border: '1px solid #cbd5e1',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                {availableMonths.map((month, idx) => (
-                  <Bar
-                    key={month}
-                    dataKey={month}
-                    name={month}
-                    fill={MONTH_COLORS[idx % MONTH_COLORS.length]}
-                    radius={[4, 4, 0, 0]}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={twoMonthComparisonData}
-                margin={{ top: 20, right: 25, bottom: 35, left: -10 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  angle={-15}
-                  textAnchor="end"
-                  interval={0}
-                  tick={{ fontSize: 11, fill: '#475569' }}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: '#64748b' }}
-                  label={{
-                    value: 'Defect Quantity',
-                    angle: -90,
-                    position: 'insideLeft',
-                    fontSize: 11,
-                    fill: '#64748b',
-                  }}
-                />
-                <Tooltip
-                  formatter={(val: any, name: any) => [`${val} defects`, `Month: ${name}`]}
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    border: '1px solid #cbd5e1',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                <Bar
-                  dataKey={compareMonthA}
-                  name={`${compareMonthA} (Base)`}
-                  fill="#0284c7"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey={compareMonthB}
-                  name={`${compareMonthB} (Compare)`}
-                  fill="#10b981"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          <button
+            onClick={expandAll}
+            className="px-2.5 py-1.5 rounded bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+          >
+            Expand All
+          </button>
+          <button
+            onClick={collapseAll}
+            className="px-2.5 py-1.5 rounded bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+          >
+            Collapse All
+          </button>
         </div>
       </div>
 
-      {/* CHART A: Defect Pareto Chart (Dual-Axis Composed Chart) */}
-      <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-sky-600" />
-              Chart A: Defect Pareto Chart (80/20 Rule)
-            </h3>
-            <p className="text-xs text-slate-500">
-              Columns represent defect counts in descending order; red curve represents cumulative percentage (%).
-            </p>
+      {/* Main Grid: Left 23 Categories Table | Right Defect Column Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Column (7 cols): Main Defect Category Name Accordion Table */}
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs">
+          <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 flex items-center justify-between">
+            <span>Main Defect Category Name (23 Master Classifications)</span>
+            <span className="text-[11px] bg-sky-800 text-sky-200 px-2 py-0.5 rounded">
+              {filteredCategoryStats.length} Categories
+            </span>
           </div>
-          <div className="text-xs font-semibold text-slate-600">
-            Target top 80% defect categories via RCA &amp; CAPA
+
+          <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 text-[11px] font-black uppercase z-10">
+                <tr>
+                  <th className="p-2.5 w-12 text-center">Code</th>
+                  <th className="p-2.5">Category &amp; Individual Defect Details</th>
+                  <th className="p-2.5 text-center w-28">Inspections</th>
+                  <th className="p-2.5 text-center w-28">Qty Affected</th>
+                  <th className="p-2.5 text-center w-36">Link to Dashbord</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {filteredCategoryStats.map((cat) => {
+                  const isExpanded = !!expandedCategories[cat.code];
+                  return (
+                    <React.Fragment key={cat.code}>
+                      {/* Main Category Row */}
+                      <tr className="bg-slate-50/80 dark:bg-slate-800/40 hover:bg-sky-50 dark:hover:bg-slate-800 font-bold transition-colors select-none">
+                        <td
+                          onClick={() => toggleCategory(cat.code)}
+                          className="p-2.5 text-center cursor-pointer"
+                        >
+                          <span
+                            className="inline-flex items-center justify-center w-7 h-7 rounded text-xs font-black text-white shadow-2xs"
+                            style={{ backgroundColor: cat.color }}
+                          >
+                            {cat.code}
+                          </span>
+                        </td>
+                        <td
+                          onClick={() => toggleCategory(cat.code)}
+                          className="p-2.5 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-sky-600 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                            )}
+                            <div>
+                              <div className="text-slate-900 dark:text-slate-100 font-extrabold text-sm">
+                                {cat.name}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-normal">
+                                {cat.description} ({cat.subDefects.length} sub-defects)
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td
+                          onClick={() => toggleCategory(cat.code)}
+                          className="p-2.5 text-center font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                        >
+                          {cat.totalInspectionsWithDefects}
+                        </td>
+                        <td
+                          onClick={() => toggleCategory(cat.code)}
+                          className="p-2.5 text-center cursor-pointer"
+                        >
+                          <span
+                            className={`font-black px-2 py-0.5 rounded text-xs ${
+                              cat.totalQuantityAffected > 0
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {cat.totalQuantityAffected}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <button
+                            onClick={() => handleLinkToDashboard(cat.name, cat.name)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900 border border-sky-300 dark:border-sky-800 font-bold text-[10px] transition-colors cursor-pointer"
+                            title={`Filter Dashboard for ${cat.name}`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Link to Dashbord
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Sub-Defect Accordion Rows */}
+                      {isExpanded &&
+                        cat.subStats.map((sub) => (
+                          <tr
+                            key={sub.code}
+                            className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-[11px]"
+                          >
+                            <td className="p-2 pl-6 text-center font-mono font-bold text-slate-500">
+                              {sub.code}
+                            </td>
+                            <td className="p-2 pl-8">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                {sub.name}
+                              </span>
+                              <span
+                                className={`ml-2 text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                  sub.defaultSeverity === 'Critical'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : sub.defaultSeverity === 'Major'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                    : 'bg-sky-50 text-sky-700 border-sky-200'
+                                }`}
+                              >
+                                {sub.defaultSeverity}
+                              </span>
+                            </td>
+                            <td className="p-2 text-center text-slate-600 dark:text-slate-400">
+                              {sub.inspectionsWithDefects}
+                            </td>
+                            <td className="p-2 text-center font-bold text-slate-800 dark:text-slate-200">
+                              <span className={sub.quantityAffected > 0 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-slate-400'}>
+                                {sub.quantityAffected}
+                              </span>
+                            </td>
+                            <td className="p-2 text-center whitespace-nowrap">
+                              <button
+                                onClick={() => handleLinkToDashboard(sub.name, `${sub.code}: ${sub.name}`)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 font-semibold text-[10px] transition-colors cursor-pointer"
+                                title={`Filter Dashboard specifically for ${sub.name}`}
+                              >
+                                <ExternalLink className="w-2.5 h-2.5 text-sky-600" />
+                                Link Defect
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className="h-80 w-full">
-          {paretoData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 text-xs">
-              No defect data found for the current filters.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={paretoData} margin={{ top: 20, right: 30, bottom: 25, left: -5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  angle={-20}
-                  textAnchor="end"
-                  interval={0}
-                  height={50}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fontSize: 11, fill: '#64748b' }}
-                  label={{ value: 'Defect Qty', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#64748b' }}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  unit="%"
-                  domain={[0, 100]}
-                  tick={{ fontSize: 11, fill: '#dc2626' }}
-                  label={{ value: 'Cumulative %', angle: 90, position: 'insideRight', fontSize: 11, fill: '#dc2626' }}
-                />
-                <Tooltip
-                  formatter={(val: any, name: any) => {
-                    if (name === 'Cumulative %') return [`${val}%`, name];
-                    if (name === 'Defect Percentage') return [`${val}%`, name];
-                    return [val, name];
-                  }}
-                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                <Bar yAxisId="left" dataKey="quantity" name="Defect Quantity" fill="#0284c7" radius={[4, 4, 0, 0]} />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="cumulativePercentage"
-                  name="Cumulative %"
-                  stroke="#dc2626"
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: '#dc2626' }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Row of Charts B, C, and E */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* CHART B: Defect Group Distribution Pie */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
-          <div className="border-b border-slate-100 pb-2">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-              <PieIcon className="w-4 h-4 text-indigo-600" />
-              Chart B: Defect Group Distribution
-            </h3>
-            <p className="text-xs text-slate-500">Percentage distribution across 12 QMS groups</p>
+        {/* Right Column (5 cols): Defect Column Chart - 100% Dynamic Parallel Sync with Left Table */}
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
+          <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 text-center uppercase tracking-wider flex items-center justify-between">
+            <span className="w-full text-center">Parallel Defect Category Chart (Live Sync)</span>
           </div>
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={groupChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {groupChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val: any, name: any) => [`${val} defects`, name]}
-                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="max-h-32 overflow-y-auto space-y-1.5 text-xs pr-1">
-            {groupChartData.map((g) => (
-              <div key={g.id} className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-slate-700 truncate">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
-                  {g.name}
-                </span>
-                <span className="font-bold text-slate-900">{g.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* CHART C: Critical / Major / Minor Pie */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
-          <div className="border-b border-slate-100 pb-2">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-rose-600" />
-              Chart C: Severity Breakdown
-            </h3>
-            <p className="text-xs text-slate-500">AQL severity classification proportions</p>
-          </div>
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={severityPieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {severityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val: any, name: any) => [`${val} defects`, name]}
-                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-1.5 text-xs pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-slate-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600" /> Critical Defects
+          <div className="p-4 flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                Paralleled live volume &amp; percentage with left table counting
+              </p>
+              <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800">
+                <Zap className="w-3 h-3 text-emerald-600" />
+                Live Parallel
               </span>
-              <span className="font-bold text-rose-700">{severityMap.Critical}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-slate-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-600" /> Major Defects
-              </span>
-              <span className="font-bold text-amber-700">{severityMap.Major}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-slate-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-sky-600" /> Minor Defects
-              </span>
-              <span className="font-bold text-sky-700">{severityMap.Minor}</span>
-            </div>
-          </div>
-        </div>
 
-        {/* CHART E: Top 10 Defects Chart */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
-          <div className="border-b border-slate-100 pb-2">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-emerald-600" />
-              Chart E: Top 10 Recurring Defects
-            </h3>
-            <p className="text-xs text-slate-500">Highest frequency quality defect items</p>
-          </div>
-          <div className="space-y-2 pt-1 max-h-72 overflow-y-auto">
-            {top10Defects.map((def, i) => (
-              <div key={def.name} className="text-xs space-y-1">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-800 truncate max-w-[170px]">
-                    <span className="font-bold text-slate-400 mr-1.5">#{i + 1}</span>
-                    {def.name}
-                  </span>
-                  <span className="font-bold text-slate-900">{def.quantity} ({def.percentage}%)</span>
+            <div className="h-96 w-full">
+              {chartData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                  <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
+                    <BarChart3 className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    No Defect Data in Current Slice
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                    Upload inspection reports (PDF) or adjust filters to generate parallel live category bars.
+                  </p>
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-sky-600 h-full rounded-full"
-                    style={{
-                      width: `${(def.quantity / (top10Defects[0]?.quantity || 1)) * 100}%`,
-                    }}
-                  />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 25, right: 15, left: -10, bottom: 45 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis
+                      dataKey="name"
+                      interval={0}
+                      angle={-25}
+                      textAnchor="end"
+                      tick={{ fontSize: 10, fontWeight: 'bold' }}
+                      height={55}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(val: any) => [
+                        `${val} defects (${totalDefectSum > 0 ? ((Number(val) / totalDefectSum) * 100).toFixed(1) : 0}%)`,
+                        'Count',
+                      ]}
+                    />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color || '#0284c7'} />
+                      ))}
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        formatter={(val: any) => {
+                          const num = Number(val) || 0;
+                          const pct = totalDefectSum > 0 ? Math.round((num / totalDefectSum) * 100) : 0;
+                          return `${num} (${pct}%)`;
+                        }}
+                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Quick Summary Pill Row */}
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800">
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Total Categories</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white">23</div>
+              </div>
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800">
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Active Defects</div>
+                <div className="text-lg font-black text-rose-600 dark:text-rose-400">
+                  {totalDefectSum}
                 </div>
               </div>
-            ))}
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800">
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Top Defect Group</div>
+                <div className="text-sm font-black text-sky-700 dark:text-sky-400 truncate">
+                  {chartData[0]?.name || 'None Recorded'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

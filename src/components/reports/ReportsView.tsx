@@ -9,12 +9,13 @@ import {
   CheckCircle2,
   TrendingUp,
   ShieldAlert,
+  Presentation,
 } from 'lucide-react';
-import { exportReportsToExcel, exportCapaToExcel, printQualityReport } from '../../utils/exportUtils';
+import { exportReportsToExcel, exportCapaToExcel, printQualityReport, exportDashboardToPptx } from '../../utils/exportUtils';
 import { computeParetoAnalysis } from '../../utils/oqlCalculator';
 
 export const ReportsView: React.FC = () => {
-  const { filteredReports, capas, monitoringRecords, defectGroups, settings, kpiMetrics } = useApp();
+  const { filteredReports, capas, monitoringRecords, defectGroups, settings, kpiMetrics, filters } = useApp();
 
   const [selectedReportType, setSelectedReportType] = useState<string>('monthly_oql');
 
@@ -111,17 +112,25 @@ export const ReportsView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5 text-slate-600" />
             Print / Save as PDF
           </button>
           <button
             onClick={handleExcelExport}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             Export to Excel (.xlsx)
+          </button>
+          <button
+            onClick={() => exportDashboardToPptx(filteredReports, capas, filters.month)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#b25900] hover:bg-[#964b00] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            title="Download executive PowerPoint presentation (.pptx) with charts, KPIs, and CAPA logs"
+          >
+            <Presentation className="w-3.5 h-3.5" />
+            Export PPT (.pptx)
           </button>
         </div>
       </div>

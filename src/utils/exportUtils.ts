@@ -142,3 +142,199 @@ export function printQualityReport(title: string, contentHtml: string) {
   printWindow.document.write(html);
   printWindow.document.close();
 }
+
+/**
+ * Export complete Quality Management Presentation as a PowerPoint (.pptx) slide deck
+ * Designed for Northern Fashions Ltd. & BESTSELLER management reviews
+ */
+export async function exportDashboardToPptx(
+  reports: InspectionReport[],
+  capas: CAPARecord[],
+  activeMonth?: string
+) {
+  const pptxModule = await import('pptxgenjs');
+  const PptxGen = pptxModule.default || pptxModule;
+  const pptx = new (PptxGen as any)();
+
+  pptx.layout = 'LAYOUT_16x9';
+  pptx.title = 'Northern Fashions Ltd. - Quality Management Presentation';
+  pptx.company = 'Northern Fashions Ltd.';
+
+  // Slide 1: Dark Title / Cover Slide
+  const slide1 = pptx.addSlide();
+  slide1.background = { color: '0A192F' };
+  slide1.addText('NORTHERN FASHIONS LTD.', {
+    x: 0.8,
+    y: 1.8,
+    w: 8.5,
+    fontSize: 28,
+    bold: true,
+    color: '38BDF8',
+  });
+  slide1.addText('BESTSELLER QMS - Observed Quality Level (OQL) & Defect Analytics', {
+    x: 0.8,
+    y: 2.6,
+    w: 8.5,
+    fontSize: 18,
+    color: 'FFFFFF',
+  });
+  slide1.addText(`Inspection Analysis & Management Action Plan • Month: ${activeMonth || 'Current Period'}`, {
+    x: 0.8,
+    y: 3.3,
+    w: 8.5,
+    fontSize: 13,
+    color: '94A3B8',
+  });
+  slide1.addText('Digital Quality Intelligence System | ISO Apparel OBH Standard', {
+    x: 0.8,
+    y: 6.2,
+    w: 8.5,
+    fontSize: 10,
+    color: '64748B',
+  });
+
+  // Calculate high-level metrics
+  const totalReports = reports.length;
+  const totalOrderQty = reports.reduce((s, r) => s + (Number(r.orderQuantity) || 0), 0);
+  const totalInspected = reports.reduce((s, r) => s + (Number(r.inspectedQuantity) || 0), 0);
+  const totalDefects = reports.reduce((s, r) => s + (Number(r.totalDefectQuantity) || 0), 0);
+  const avgOql = totalInspected > 0 ? ((totalDefects / totalInspected) * 100).toFixed(2) : '0.00';
+  const critDefects = reports.reduce((s, r) => s + (Number(r.criticalDefectQuantity) || 0), 0);
+  const majDefects = reports.reduce((s, r) => s + (Number(r.majorDefectQuantity) || 0), 0);
+  const minDefects = reports.reduce((s, r) => s + (Number(r.minorDefectQuantity) || 0), 0);
+
+  // Slide 2: Executive Summary & KPI Scorecard
+  const slide2 = pptx.addSlide();
+  slide2.addText('Executive Quality Scorecard & Inspection Overview', {
+    x: 0.8,
+    y: 0.6,
+    fontSize: 20,
+    bold: true,
+    color: '0F172A',
+  });
+  const kpiRows = [
+    [
+      { text: 'Inspection KPI Metric', options: { bold: true, fill: { color: 'F1F5F9' } } },
+      { text: 'Quantity / Value', options: { bold: true, fill: { color: 'F1F5F9' } } },
+      { text: 'Target / Benchmark', options: { bold: true, fill: { color: 'F1F5F9' } } },
+      { text: 'Audit Verdict', options: { bold: true, fill: { color: 'F1F5F9' } } },
+    ],
+    ['Inspection Reports Audited', `${totalReports} Reports`, 'All Scheduled Batches', 'Verified'],
+    ['Total Order Scope (Pcs)', `${totalOrderQty.toLocaleString()} Pcs`, 'Production POs', 'Audited'],
+    ['Inspected Sample Scope', `${totalInspected.toLocaleString()} Pcs`, 'AQL 2.5 Level II Sampling', 'Sampled'],
+    ['Total Defect Items', `${totalDefects} Defects`, '0 Critical Defects', critDefects === 0 ? 'Acceptable' : 'High Alert'],
+    ['Observed Quality Level (OQL)', `${avgOql}%`, 'Standard Target: < 4.50%', Number(avgOql) <= 4.5 ? 'PASSED' : 'ACTION REQUIRED'],
+    ['Critical Defects', `${critDefects}`, '0', critDefects === 0 ? 'Pass' : 'Failed'],
+    ['Major Defects', `${majDefects}`, '< 2.5% AQL Limit', 'Monitored'],
+    ['Minor Defects', `${minDefects}`, '< 4.0% AQL Limit', 'Monitored'],
+  ];
+  slide2.addTable(kpiRows, {
+    x: 0.8,
+    y: 1.3,
+    w: 8.5,
+    colW: [2.8, 2.0, 2.2, 1.5],
+    fontSize: 11,
+    rowH: 0.35,
+    border: { pt: 0.5, color: 'CBD5E1' },
+  });
+
+  // Slide 3: Highest Defect Breakdown
+  const slide3 = pptx.addSlide();
+  slide3.addText('Highest Defect Frequency & Analysis', {
+    x: 0.8,
+    y: 0.6,
+    fontSize: 20,
+    bold: true,
+    color: '0F172A',
+  });
+
+  const defectMap = new Map<string, number>();
+  reports.forEach((r) => {
+    (r.defects || []).forEach((d) => {
+      const name = d.standardDefectName || d.originalDefectName;
+      defectMap.set(name, (defectMap.get(name) || 0) + (Number(d.defectQuantity) || 1));
+    });
+  });
+  const topDefects = Array.from(defectMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 7);
+
+  if (topDefects.length > 0) {
+    const defectRows = [
+      [
+        { text: 'Rank', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
+        { text: 'Defect Description', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
+        { text: 'Quantity Affected', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
+        { text: '% Share of Defects', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
+      ],
+      ...topDefects.map(([name, count], i) => [
+        `#${i + 1}`,
+        name,
+        `${count} pcs`,
+        totalDefects > 0 ? `${((count / totalDefects) * 100).toFixed(1)}%` : '0%',
+      ]),
+    ];
+    slide3.addTable(defectRows, {
+      x: 0.8,
+      y: 1.4,
+      w: 8.5,
+      colW: [0.8, 4.5, 1.6, 1.6],
+      fontSize: 11,
+      rowH: 0.4,
+      border: { pt: 0.5, color: 'CBD5E1' },
+    });
+  } else {
+    slide3.addText('No defects recorded in uploaded reports.', { x: 0.8, y: 2.0, fontSize: 13, color: '64748B' });
+  }
+
+  // Slide 4: Root Cause Analysis (RCA) & CAPA Action Plans
+  const slide4 = pptx.addSlide();
+  slide4.addText('RCA & CAPA - Corrective & Preventive Action Plan', {
+    x: 0.8,
+    y: 0.6,
+    fontSize: 20,
+    bold: true,
+    color: '0F172A',
+  });
+
+  const capaToExport = capas.length > 0 ? capas.slice(0, 5) : [];
+  if (capaToExport.length > 0) {
+    const capaRows = [
+      [
+        { text: 'SL', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Defect Name', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Root Cause', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Corrective Action', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Preventive Action', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Responsible', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+        { text: 'Status', options: { bold: true, fill: { color: '0F172A' }, color: 'FFFFFF' } },
+      ],
+      ...capaToExport.map((c, i) => [
+        `${i + 1}`,
+        c.defectName,
+        c.rootCause || 'Root cause analyzed via 5-Why method',
+        c.correctiveAction || c.correction || 'Immediate containment & rework',
+        c.preventiveAction || 'Machine calibration & operator training',
+        c.responsiblePerson || 'Quality In-charge',
+        c.capaStatus,
+      ]),
+    ];
+    slide4.addTable(capaRows, {
+      x: 0.5,
+      y: 1.3,
+      w: 9.0,
+      colW: [0.5, 1.6, 1.8, 1.8, 1.7, 0.9, 0.7],
+      fontSize: 9,
+      rowH: 0.45,
+      border: { pt: 0.5, color: 'CBD5E1' },
+    });
+  } else {
+    slide4.addText('No active CAPA records saved yet. Create CAPAs in the RCA & CAPA module to populate presentation slides.', {
+      x: 0.8,
+      y: 2.0,
+      fontSize: 12,
+      color: '64748B',
+    });
+  }
+
+  const filename = `Northern_Fashions_QMS_Presentation_${(activeMonth || 'Report').replace(/[^a-zA-Z0-9_-]/g, '_')}.pptx`;
+  await pptx.writeFile({ fileName: filename });
+}

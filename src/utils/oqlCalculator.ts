@@ -191,7 +191,20 @@ export function filterReports(
     }
 
     if (filters.defectGroup && filters.defectGroup !== 'ALL') {
-      const hasGroup = report.defects?.some((d) => d.defectGroupId === filters.defectGroup);
+      const q = filters.defectGroup.toLowerCase().trim();
+      const hasGroup = report.defects?.some((d) => {
+        const gid = (d.defectGroupId || '').toLowerCase();
+        const orig = (d.originalDefectName || '').toLowerCase();
+        const std = (d.standardDefectName || '').toLowerCase();
+        return (
+          gid === q ||
+          gid.includes(q) ||
+          orig.includes(q) ||
+          std.includes(q) ||
+          (q.startsWith('dg-') && gid === q) ||
+          (q.includes('-') && (orig.includes(q) || std.includes(q)))
+        );
+      });
       if (!hasGroup) return false;
     }
 

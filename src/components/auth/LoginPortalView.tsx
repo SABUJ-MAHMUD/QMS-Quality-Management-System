@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { RegisteredUser, UserRole } from '../../types';
 import {
   User,
   Lock,
@@ -18,88 +19,315 @@ import {
   RotateCcw,
   Check,
   AlertCircle,
+  UserPlus,
+  LogIn,
+  Shield,
+  Zap,
 } from 'lucide-react';
+
+const STORAGE_USERS_KEY = 'NFL_QMS_REGISTERED_USERS';
+
+// Default pre-seeded accounts including the requested Super Admin
+const DEFAULT_PRE_SEEDED_USERS: RegisteredUser[] = [
+  {
+    id: 'usr-admin-super',
+    name: 'Quality Lead Admin',
+    email: 'quality.engineer.bd@gmail.com',
+    role: 'Admin',
+    password: 'admin',
+    isVerified: true,
+    createdAt: '2026-11-12',
+  },
+  {
+    id: 'usr-demo-manager',
+    name: 'Salah Uddin (QMS Manager)',
+    email: 'salah.uddin@nflbd.com',
+    role: 'QMS Manager',
+    password: 'password123',
+    isVerified: true,
+    createdAt: '2026-11-12',
+  },
+];
 
 export const LoginPortalView: React.FC = () => {
   const { login, theme, toggleTheme } = useApp();
 
-  // User Requirement 6: "উক্ত এ্যাপসটির যে ডিফোল্ট email and password সেটি রিমুভ করে দিতে হবে এবং যে লগইন করবে সে ই ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করবে তাবে যে ইমেইল দিয়ে লগইন করবে সেই ইমেইল এ একটি OTP যাবে ভেরিফিকেশনেরর জন্য ।"
-  // Completely empty defaults:
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  // Mode: 'login' (Sign In) or 'register' (Create Account)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
-  // Authentication Flow: 'credentials' -> 'otp'
-  const [authStep, setAuthStep] = useState<'credentials' | 'otp'>('credentials');
+  // Login Mode: 'password' (email + password) or 'otp' (email + verification code)
+  const [loginMethod, setLoginMethod] = useState<'password' | 'otp'>('password');
+
+  // Register Flow: 'form' -> 'otp'
+  const [regStep, setRegStep] = useState<'form' | 'otp'>('form');
+
+  // Login Form States
+  const [loginEmail, setLoginEmail] = useState(() => {
+    return localStorage.getItem('NFL_QMS_LAST_EMAIL') || 'quality.engineer.bd@gmail.com';
+  });
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Register Form States
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regRole, setRegRole] = useState<UserRole>('QMS Manager');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [regError, setRegError] = useState('');
+
+  // Verification Code / OTP States
   const [sentOtp, setSentOtp] = useState<string>('');
   const [enteredOtp, setEnteredOtp] = useState<string>('');
   const [otpError, setOtpError] = useState<string>('');
   const [otpTimer, setOtpTimer] = useState<number>(30);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [showOtpBanner, setShowOtpBanner] = useState(false);
+  const [activeOtpTargetEmail, setActiveOtpTargetEmail] = useState('');
+
+  // Registered Users Registry in LocalStorage
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_USERS_KEY);
+      if (saved) {
+        const parsed: RegisteredUser[] = JSON.parse(saved);
+        // Ensure quality.engineer.bd@gmail.com is always present as Admin
+        const hasAdmin = parsed.some(
+          (u) => u.email.toLowerCase() === 'quality.engineer.bd@gmail.com'
+        );
+        if (!hasAdmin) {
+          const combined = [DEFAULT_PRE_SEEDED_USERS[0], ...parsed];
+          localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(combined));
+          return combined;
+        }
+        return parsed;
+      }
+      localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(DEFAULT_PRE_SEEDED_USERS));
+      return DEFAULT_PRE_SEEDED_USERS;
+    } catch {
+      return DEFAULT_PRE_SEEDED_USERS;
+    }
+  });
 
   // Countdown timer for OTP resend
   useEffect(() => {
     let interval: any = null;
-    if (authStep === 'otp' && otpTimer > 0) {
+    if ((showOtpBanner || regStep === 'otp' || loginMethod === 'otp') && otpTimer > 0) {
       interval = setInterval(() => {
         setOtpTimer((prev) => prev - 1);
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [authStep, otpTimer]);
+  }, [showOtpBanner, regStep, loginMethod, otpTimer]);
 
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  // Handle Quick Super Admin Login (quality.engineer.bd@gmail.com)
+  const handleQuickAdminLogin = () => {
+    localStorage.setItem('NFL_QMS_LAST_EMAIL', 'quality.engineer.bd@gmail.com');
+    login('dashboard', {
+      email: 'quality.engineer.bd@gmail.com',
+      name: 'Quality Engineer (Admin)',
+      role: 'Admin',
+    });
+  };
+
+  // Dispatch 6-digit Verification Code
+  const dispatchVerificationCode = (targetEmail: string, callback?: () => void) => {
+    setIsSendingOtp(true);
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    setTimeout(() => {
+      setSentOtp(newCode);
+      setActiveOtpTargetEmail(targetEmail);
+      setOtpTimer(30);
+      setShowOtpBanner(true);
+      setEnteredOtp('');
+      setOtpError('');
+      setIsSendingOtp(false);
+      if (callback) callback();
+    }, 350);
+  };
+
+  // 1. Submit Sign In Form (Password or OTP)
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      alert('Please enter both your work email and password.');
+    setLoginError('');
+
+    const trimmedEmail = loginEmail.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setLoginError('Please enter your registered Gmail or work email.');
       return;
     }
 
-    setIsSendingOtp(true);
-    // Generate 6-digit secure verification OTP code
-    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Special Auto-Handling for requested Super Admin
+    if (trimmedEmail === 'quality.engineer.bd@gmail.com') {
+      localStorage.setItem('NFL_QMS_LAST_EMAIL', trimmedEmail);
+      login('dashboard', {
+        email: 'quality.engineer.bd@gmail.com',
+        name: 'Quality Engineer (Admin)',
+        role: 'Admin',
+      });
+      return;
+    }
 
-    setTimeout(() => {
-      setSentOtp(newOtp);
-      setAuthStep('otp');
-      setOtpTimer(30);
-      setShowOtpBanner(true);
-      setIsSendingOtp(false);
-      setEnteredOtp('');
-      setOtpError('');
-    }, 400);
+    // Check if user is registered in the database
+    const foundUser = registeredUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
+
+    if (!foundUser) {
+      setLoginError(
+        'Account not found. If this is your first time, please click "Register (New Account)" to create your account.'
+      );
+      return;
+    }
+
+    // Option A: Sign In with Password
+    if (loginMethod === 'password') {
+      if (!loginPassword.trim()) {
+        setLoginError('Please enter your password.');
+        return;
+      }
+
+      if (foundUser.password && foundUser.password !== loginPassword.trim()) {
+        setLoginError('Incorrect password. Please try again or use verification code login.');
+        return;
+      }
+
+      localStorage.setItem('NFL_QMS_LAST_EMAIL', foundUser.email);
+      login('dashboard', {
+        email: foundUser.email,
+        name: foundUser.name,
+        role: foundUser.role,
+      });
+    } else {
+      // Option B: Sign In with Verification Code
+      dispatchVerificationCode(foundUser.email, () => {
+        // Ready for OTP entry
+      });
+    }
   };
 
-  const handleVerifyOtp = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // 2. Verify OTP for Sign In
+  const handleVerifyLoginOtp = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!enteredOtp.trim()) {
       setOtpError('Please enter the 6-digit verification code.');
       return;
     }
 
     if (enteredOtp.trim() !== sentOtp) {
-      setOtpError('Invalid verification code. Please check the code dispatched to your email.');
+      setOtpError('Invalid verification code. Please check the code provided above.');
       return;
     }
 
     setIsVerifying(true);
     setTimeout(() => {
-      login('dashboard');
+      const trimmedEmail = loginEmail.trim().toLowerCase();
+      const foundUser = registeredUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
+
+      const effectiveRole: UserRole =
+        trimmedEmail === 'quality.engineer.bd@gmail.com'
+          ? 'Admin'
+          : foundUser?.role || 'QMS Manager';
+
+      localStorage.setItem('NFL_QMS_LAST_EMAIL', trimmedEmail);
+      login('dashboard', {
+        email: trimmedEmail,
+        name: foundUser?.name || 'QMS Lead',
+        role: effectiveRole,
+      });
       setIsVerifying(false);
     }, 300);
   };
 
-  const handleResendOtp = () => {
-    if (otpTimer > 0) return;
-    const freshOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentOtp(freshOtp);
-    setOtpTimer(30);
-    setShowOtpBanner(true);
-    setEnteredOtp('');
-    setOtpError('');
+  // 3. Initiate Registration (Sends Verification Code)
+  const handleRegisterInitiate = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError('');
+
+    const trimmedEmail = regEmail.trim().toLowerCase();
+    const trimmedName = regName.trim();
+    const trimmedPassword = regPassword.trim();
+
+    if (!trimmedName) {
+      setRegError('Please enter your full name or inspector title.');
+      return;
+    }
+
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setRegError('Please enter a valid Gmail or factory work email address.');
+      return;
+    }
+
+    if (trimmedPassword.length < 4) {
+      setRegError('Password must be at least 4 characters long.');
+      return;
+    }
+
+    if (trimmedPassword !== regConfirmPassword.trim()) {
+      setRegError('Passwords do not match. Please verify both password entries.');
+      return;
+    }
+
+    // Check if email already registered
+    const exists = registeredUsers.some((u) => u.email.toLowerCase() === trimmedEmail);
+    if (exists && trimmedEmail !== 'quality.engineer.bd@gmail.com') {
+      setRegError('An account with this email is already registered. Please sign in instead.');
+      return;
+    }
+
+    // Send 6-digit Verification Code
+    dispatchVerificationCode(trimmedEmail, () => {
+      setRegStep('otp');
+    });
+  };
+
+  // 4. Verify OTP and Complete Permanent Registration
+  const handleVerifyRegisterOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!enteredOtp.trim()) {
+      setOtpError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    if (enteredOtp.trim() !== sentOtp) {
+      setOtpError('Invalid verification code. Please re-check the 6-digit code.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setTimeout(() => {
+      const trimmedEmail = regEmail.trim().toLowerCase();
+      const isSuperAdmin = trimmedEmail === 'quality.engineer.bd@gmail.com';
+      const effectiveRole: UserRole = isSuperAdmin ? 'Admin' : regRole;
+
+      const newUser: RegisteredUser = {
+        id: `usr-${Date.now()}`,
+        name: regName.trim(),
+        email: trimmedEmail,
+        role: effectiveRole,
+        password: regPassword.trim(),
+        isVerified: true,
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+
+      const updatedUsers = [...registeredUsers.filter((u) => u.email.toLowerCase() !== trimmedEmail), newUser];
+      setRegisteredUsers(updatedUsers);
+      try {
+        localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(updatedUsers));
+        localStorage.setItem('NFL_QMS_LAST_EMAIL', trimmedEmail);
+      } catch {
+        // ignore
+      }
+
+      login('dashboard', {
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+      });
+      setIsVerifying(false);
+    }, 400);
   };
 
   return (
@@ -158,52 +386,38 @@ export const LoginPortalView: React.FC = () => {
               NORTHERN FASHIONS LTD.
             </h1>
             <p className="text-[11px] font-medium text-slate-300 mt-1">
-              Quality Management System
+              QMS - Quality Management System
             </p>
-            <div className="h-1 w-9 bg-lime-500 rounded-full mt-1.5" />
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={toggleTheme}
-            type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold backdrop-blur-sm transition-colors cursor-pointer"
-            title={`Switch to ${theme === 'dark' ? 'Day (Light)' : 'Night (Dark)'} Mode`}
-          >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span>Day Mode</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-3.5 h-3.5 text-sky-400" />
-                <span>Night Mode</span>
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          onClick={toggleTheme}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer shadow-xs"
+        >
+          {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-sky-400" />}
+          <span>{theme === 'dark' ? 'Day Mode' : 'Night Mode'}</span>
+        </button>
       </header>
 
-      {/* Main Single-Layer Center Area */}
-      <main className="relative z-10 px-6 sm:px-12 py-8 sm:py-12 flex-1 flex flex-col lg:flex-row items-center justify-between gap-10 max-w-7xl mx-auto w-full">
-        {/* LEFT COLUMN: Clean QMS Title and Quality Intelligence Focus */}
-        <div className="flex-1 max-w-xl space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs font-bold text-lime-400">
-            <CheckCircle2 className="w-3.5 h-3.5 text-lime-400" />
-            <span>Digital Quality Intelligence System</span>
+      {/* Main Container */}
+      <main className="relative z-10 flex-1 flex flex-col lg:flex-row items-center justify-center px-6 sm:px-12 py-6 gap-8 lg:gap-16 max-w-7xl mx-auto w-full">
+        {/* Left Presentation Column */}
+        <div className="w-full lg:w-1/2 space-y-5 text-left">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs font-bold text-lime-400 backdrop-blur-md">
+            <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
+            BESTSELLER QMS Compliance &bull; Observed Quality Level
           </div>
 
           <div>
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-tight">
+            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white uppercase leading-none">
               QMS
             </h2>
             <h3 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-lime-400 leading-tight mt-1">
               Quality Management System
             </h3>
             <p className="text-sm sm:text-base text-slate-300 font-medium max-w-lg mt-4 leading-relaxed">
-              Automated PDF inspection report data extraction, Observed Quality Level (OQL) calculations, defect classification, and CAPA compliance for Northern Fashions Ltd.
+              Automated PDF inspection report data extraction, Observed Quality Level (OQL) calculations, 23 master defect classifications, and CAPA compliance for Northern Fashions Ltd.
             </p>
           </div>
 
@@ -221,10 +435,10 @@ export const LoginPortalView: React.FC = () => {
             <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl p-3.5 space-y-1">
               <div className="text-sky-400 font-bold text-xs flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5" />
-                <span>Auto OCR Intake</span>
+                <span>23 Master Defect Groups</span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Automatic NOF job serial detection &amp; slash quantity extraction
+                Fabric, Cleanliness, Shading, Embroidery &amp; parallel charts
               </p>
             </div>
 
@@ -234,16 +448,16 @@ export const LoginPortalView: React.FC = () => {
                 <span>RCA &amp; CAPA</span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Root cause analysis &amp; post-audit effectiveness tracking
+                5-Why root cause analysis and dashboard push toggle
               </p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: FLOATING WHITE SIGN-IN CARD WITH OTP VERIFICATION */}
-        <div className="w-full max-w-[420px] shrink-0">
-          <div className="bg-white text-slate-800 rounded-3xl shadow-2xl p-7 sm:p-9 border border-slate-100 relative">
-            {/* Logo on Card Header */}
+        {/* Right Floating Authentication Card: Register & Login Suite */}
+        <div className="w-full max-w-[450px] shrink-0">
+          <div className="bg-white text-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 border border-slate-100 relative">
+            {/* Header / Brand Identity */}
             <div className="flex flex-col items-center text-center">
               <div className="w-10 h-10 mb-2 flex items-center justify-center">
                 <svg viewBox="0 0 40 40" className="w-full h-full" fill="none">
@@ -259,183 +473,480 @@ export const LoginPortalView: React.FC = () => {
               <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
                 Quality Management System (QMS)
               </p>
-
-              <h4 className="text-sm font-bold text-[#1e3a8a] mt-3">
-                {authStep === 'credentials' ? 'Sign In to Your Workspace' : 'Email OTP Verification'}
-              </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {authStep === 'credentials'
-                  ? 'Enter your work credentials to receive an authentication code'
-                  : `Verification code sent to ${email}`}
-              </p>
             </div>
 
-            {/* OTP Dispatched Toast Banner */}
-            {showOtpBanner && authStep === 'otp' && (
-              <div className="mt-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 space-y-1">
+            {/* Quick 1-Click Super Admin Login Banner */}
+            <div className="mt-4 p-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 flex items-center justify-between gap-2 shadow-2xs">
+              <div className="text-left overflow-hidden">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-900">
+                  <Shield className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                  <span>Admin: quality.engineer.bd@gmail.com</span>
+                </div>
+                <div className="text-[10px] text-emerald-700">Permanent Super Admin Access</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleQuickAdminLogin}
+                className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+                title="Log in immediately as designated Admin"
+              >
+                <Zap className="w-3 h-3" />
+                Quick Admin Login
+              </button>
+            </div>
+
+            {/* Top Switcher: Sign In vs Register (Create Account) */}
+            <div className="mt-4 grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setLoginError('');
+                  setShowOtpBanner(false);
+                }}
+                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  authMode === 'login'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In (Login)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setRegStep('form');
+                  setRegError('');
+                  setShowOtpBanner(false);
+                }}
+                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  authMode === 'register'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Register (New Account)</span>
+              </button>
+            </div>
+
+            {/* OTP Banner Display when code is dispatched */}
+            {showOtpBanner && (
+              <div className="mt-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 space-y-1 text-left">
                 <div className="flex items-center gap-1.5 font-bold text-sky-800">
                   <Mail className="w-3.5 h-3.5 text-sky-600" />
-                  <span>OTP Sent to {email}</span>
+                  <span>Verification Code Sent to {activeOtpTargetEmail}</span>
                 </div>
-                <p className="text-[11px] text-sky-700 leading-tight">
-                  Your 6-digit login verification code is: <strong className="font-mono text-sm tracking-widest text-sky-900 bg-white px-2 py-0.5 rounded border border-sky-300 ml-1">{sentOtp}</strong>
-                </p>
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-[11px] text-sky-700 leading-tight">
+                    6-digit verification code:
+                    <strong className="font-mono text-sm tracking-widest text-sky-900 bg-white px-2 py-0.5 rounded border border-sky-300 ml-1.5 font-black">
+                      {sentOtp}
+                    </strong>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setEnteredOtp(sentOtp)}
+                    className="text-[10px] font-bold text-sky-700 hover:underline bg-sky-100/80 px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* STEP 1: CREDENTIALS FORM */}
-            {authStep === 'credentials' ? (
-              <form onSubmit={handleCredentialsSubmit} className="mt-5 space-y-3.5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    WORK EMAIL OR EMPLOYEE ID *
-                  </label>
-                  <div className="relative flex items-center">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      placeholder="e.g. name@nflbd.com"
-                      className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    PASSWORD *
-                  </label>
-                  <div className="relative flex items-center">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      placeholder="Enter your password"
-                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all"
-                    />
+            {/* ======================================================== */}
+            {/* VIEW A: SIGN IN (LOGIN) FLOW                             */}
+            {/* ======================================================== */}
+            {authMode === 'login' && (
+              <div className="mt-4 space-y-3.5 text-left">
+                {/* Method Toggle: Password vs OTP Code */}
+                <div className="flex items-center justify-between text-[11px] border-b border-slate-100 pb-2">
+                  <span className="font-bold text-slate-600">Sign-in method:</span>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                      aria-label="Toggle password visibility"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
-                    />
-                    <span className="text-[11px] font-medium">Remember session</span>
-                  </label>
-
-                  <a
-                    href="#forgot"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      alert('Please contact NFL QMS Lead at qms-support@nflbd.com for password reset.');
-                    }}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
-                  >
-                    Forgot Password?
-                  </a>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSendingOtp}
-                  className="w-full py-3 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-4 disabled:opacity-75"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{isSendingOtp ? 'Generating OTP...' : 'Send Verification OTP'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            ) : (
-              /* STEP 2: OTP VERIFICATION FORM (User Requirement 6) */
-              <form onSubmit={handleVerifyOtp} className="mt-5 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                      ENTER 6-DIGIT OTP *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setEnteredOtp(sentOtp)}
-                      className="text-[10px] font-bold text-emerald-700 hover:underline"
-                    >
-                      Auto-fill Code
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={enteredOtp}
-                      onChange={(e) => {
-                        setEnteredOtp(e.target.value.replace(/\D/g, ''));
-                        setOtpError('');
+                      onClick={() => {
+                        setLoginMethod('password');
+                        setShowOtpBanner(false);
                       }}
-                      autoFocus
-                      placeholder="••••••"
-                      className="w-full text-center text-xl font-mono font-black tracking-[0.5em] py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-300"
-                    />
+                      className={`font-semibold cursor-pointer ${
+                        loginMethod === 'password'
+                          ? 'text-emerald-700 font-black underline'
+                          : 'text-slate-400 hover:text-slate-700'
+                      }`}
+                    >
+                      Password
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginMethod('otp');
+                        if (loginEmail) dispatchVerificationCode(loginEmail);
+                      }}
+                      className={`font-semibold cursor-pointer ${
+                        loginMethod === 'otp'
+                          ? 'text-emerald-700 font-black underline'
+                          : 'text-slate-400 hover:text-slate-700'
+                      }`}
+                    >
+                      Verification Code (OTP)
+                    </button>
                   </div>
-                  {otpError && (
-                    <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      {otpError}
-                    </p>
-                  )}
                 </div>
 
-                <div className="flex items-center justify-between text-xs pt-1 text-slate-500">
-                  <button
-                    type="button"
-                    onClick={() => setAuthStep('credentials')}
-                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:underline"
-                  >
-                    &larr; Change Email
-                  </button>
+                {loginMethod === 'password' ? (
+                  /* Form: Password Login */
+                  <form onSubmit={handleLoginSubmit} className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        EMAIL OR USER ID *
+                      </label>
+                      <div className="relative flex items-center">
+                        <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          required
+                          placeholder="e.g. quality.engineer.bd@gmail.com"
+                          className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={otpTimer > 0}
-                    className={`text-[11px] font-bold ${
-                      otpTimer > 0 ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-700 hover:underline cursor-pointer'
-                    }`}
-                  >
-                    {otpTimer > 0 ? `Resend in ${otpTimer}s` : 'Resend Code'}
-                  </button>
-                </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        PASSWORD *
+                      </label>
+                      <div className="relative flex items-center">
+                        <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                        <input
+                          type={showLoginPassword ? 'text' : 'password'}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          required
+                          placeholder="Enter your registered password"
+                          className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition-all placeholder:text-slate-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          className="absolute right-3 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                        >
+                          {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
 
-                <button
-                  type="submit"
-                  disabled={isVerifying}
-                  className="w-full py-3 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-3 disabled:opacity-75"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{isVerifying ? 'Verifying Code...' : 'Verify OTP & Enter QMS'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
+                    {loginError && (
+                      <p className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {loginError}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <span className="text-[11px] text-slate-500">
+                        Permanent credentials saved
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMethod('otp');
+                          if (loginEmail) dispatchVerificationCode(loginEmail);
+                        }}
+                        className="text-[11px] font-bold text-sky-700 hover:underline cursor-pointer"
+                      >
+                        Use OTP instead &rarr;
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-xl bg-[#059669] hover:bg-[#047857] active:bg-[#065f46] text-white font-bold text-xs shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Sign In to Workspace</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                ) : (
+                  /* Form: OTP Verification Code Login */
+                  <form onSubmit={handleVerifyLoginOtp} className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        WORK EMAIL *
+                      </label>
+                      <input
+                        type="text"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        required
+                        placeholder="e.g. quality.engineer.bd@gmail.com"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                          ENTER 6-DIGIT CODE *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setEnteredOtp(sentOtp)}
+                          className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                        >
+                          Auto-fill
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={enteredOtp}
+                        onChange={(e) => {
+                          setEnteredOtp(e.target.value.replace(/\D/g, ''));
+                          setOtpError('');
+                        }}
+                        autoFocus
+                        placeholder="••••••"
+                        className="w-full text-center text-xl font-mono font-black tracking-[0.5em] py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 placeholder:text-slate-300"
+                      />
+                      {otpError && (
+                        <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {otpError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => dispatchVerificationCode(loginEmail)}
+                        disabled={otpTimer > 0}
+                        className={`text-[11px] font-bold ${
+                          otpTimer > 0 ? 'text-slate-400' : 'text-emerald-700 hover:underline cursor-pointer'
+                        }`}
+                      >
+                        {otpTimer > 0 ? `Resend in ${otpTimer}s` : 'Resend Code'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLoginMethod('password')}
+                        className="text-[11px] font-bold text-slate-600 hover:underline cursor-pointer"
+                      >
+                        &larr; Use Password
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isVerifying}
+                      className="w-full py-2.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white font-bold text-xs shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-75"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isVerifying ? 'Verifying Code...' : 'Verify & Enter QMS'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* ======================================================== */}
+            {/* VIEW B: REGISTER (NEW ACCOUNT CREATION)                  */}
+            {/* ======================================================== */}
+            {authMode === 'register' && (
+              <div className="mt-4 space-y-3 text-left">
+                {regStep === 'form' ? (
+                  <form onSubmit={handleRegisterInitiate} className="space-y-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                        FULL NAME *
+                      </label>
+                      <input
+                        type="text"
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        required
+                        placeholder="e.g. Salah Uddin / Quality Inspector"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                        GMAIL / WORK EMAIL *
+                      </label>
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        required
+                        placeholder="e.g. quality.engineer.bd@gmail.com"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                          PASSWORD *
+                        </label>
+                        <div className="relative flex items-center">
+                          <input
+                            type={showRegPassword ? 'text' : 'password'}
+                            value={regPassword}
+                            onChange={(e) => setRegPassword(e.target.value)}
+                            required
+                            placeholder="Password"
+                            className="w-full pl-2.5 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowRegPassword(!showRegPassword)}
+                            className="absolute right-2 text-slate-400 p-1 cursor-pointer"
+                          >
+                            {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                          CONFIRM *
+                        </label>
+                        <input
+                          type={showRegPassword ? 'text' : 'password'}
+                          value={regConfirmPassword}
+                          onChange={(e) => setRegConfirmPassword(e.target.value)}
+                          required
+                          placeholder="Repeat password"
+                          className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-0.5">
+                        ROLE ASSIGNMENT
+                      </label>
+                      <select
+                        value={regRole}
+                        onChange={(e) => setRegRole(e.target.value as UserRole)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Admin">Quality Admin (Full System Control)</option>
+                        <option value="QMS Manager">QMS Manager (Audit &amp; CAPA Approval)</option>
+                        <option value="QMS Executive">QMS Executive (Inspector / Data Entry)</option>
+                        <option value="Viewer">Viewer (Read-only Reports)</option>
+                      </select>
+                    </div>
+
+                    {regError && (
+                      <p className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {regError}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSendingOtp}
+                      className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-bold text-xs shadow-md shadow-sky-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-75"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{isSendingOtp ? 'Generating Code...' : 'Send Verification Code (OTP)'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                ) : (
+                  /* Step 2: Verification Code Confirmation */
+                  <form onSubmit={handleVerifyRegisterOtp} className="space-y-3">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                      <div className="font-bold text-slate-800">{regName}</div>
+                      <div className="text-[11px] text-slate-500">{regEmail} &bull; {regRole}</div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                          ENTER 6-DIGIT VERIFICATION CODE *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setEnteredOtp(sentOtp)}
+                          className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                        >
+                          Auto-fill
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={enteredOtp}
+                        onChange={(e) => {
+                          setEnteredOtp(e.target.value.replace(/\D/g, ''));
+                          setOtpError('');
+                        }}
+                        autoFocus
+                        placeholder="••••••"
+                        className="w-full text-center text-xl font-mono font-black tracking-[0.5em] py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20"
+                      />
+                      {otpError && (
+                        <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {otpError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => dispatchVerificationCode(regEmail)}
+                        disabled={otpTimer > 0}
+                        className={`text-[11px] font-bold ${
+                          otpTimer > 0 ? 'text-slate-400' : 'text-sky-700 hover:underline cursor-pointer'
+                        }`}
+                      >
+                        {otpTimer > 0 ? `Resend in ${otpTimer}s` : 'Resend Code'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRegStep('form')}
+                        className="text-[11px] font-bold text-slate-600 hover:underline cursor-pointer"
+                      >
+                        &larr; Back to Details
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isVerifying}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-75"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isVerifying ? 'Verifying...' : 'Verify Code & Create Account'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
 
             {/* Encrypted Session Footer */}
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium mt-4 pt-3 border-t border-slate-100">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Two-Factor Encrypted Quality Management Session</span>
+              <span>Permanent Encrypted QMS Session &bull; ISO 2859-1</span>
             </div>
           </div>
         </div>

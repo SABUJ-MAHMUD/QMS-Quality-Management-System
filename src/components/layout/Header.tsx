@@ -32,6 +32,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
     setFilters,
     currentUserRole,
     setCurrentUserRole,
+    currentUserEmail,
+    currentUserName,
     reports,
     notifications,
     clearNotifications,
@@ -276,24 +278,31 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarCollap
           <div className="relative">
             <button
               onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className="flex items-center gap-2 p-1.5 pl-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-slate-600 hover:bg-sky-50/50 dark:hover:bg-slate-800 transition-all text-left"
+              className="flex items-center gap-2 p-1.5 pl-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-slate-600 hover:bg-sky-50/50 dark:hover:bg-slate-800 transition-all text-left cursor-pointer"
             >
               <div className="hidden sm:block text-right">
-                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">Northern QMS</div>
-                <div className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 mt-0.5">{currentUserRole}</div>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none truncate max-w-[130px]">
+                  {currentUserEmail === 'quality.engineer.bd@gmail.com' ? 'Super Admin' : (currentUserName || 'Northern QMS')}
+                </div>
+                <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">{currentUserRole}</div>
               </div>
-              <div className="w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800 flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center font-bold text-xs">
                 <User className="w-4 h-4" />
               </div>
             </button>
 
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-2 z-50">
-                <div className="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-700 mb-1">
-                  <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
-                    Role-Based Access Control
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-2 z-50">
+                <div className="px-2.5 py-2 border-b border-slate-100 dark:border-slate-700 mb-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
+                    Logged in user
                   </p>
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Switch current session role:</p>
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate mt-0.5">
+                    {currentUserEmail}
+                  </p>
+                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    Role: {currentUserRole}
+                  </p>
                 </div>
                 {roles.map((r) => (
                   <button

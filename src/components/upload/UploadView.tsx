@@ -156,56 +156,31 @@ export const UploadView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      {/* Title & Clear Demo Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            PDF Inspection Report Upload &amp; Data Capture
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
-              NOF Serials Supported
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Upload factory PDF inspection reports or screenshots. The system automatically detects <strong className="text-sky-700 font-bold">NOF Serials</strong> (e.g. NOF4778898) and extracts defect records.
-          </p>
-        </div>
-
-        {hasDemoData && (
-          <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to clear all demo data and start with a clean slate?')) {
-                clearDemoData();
-              }
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold shadow-2xs transition-colors shrink-0"
-          >
-            <Trash2 className="w-4 h-4 text-amber-700" />
-            Clear Demo Data &amp; Start Clean
-          </button>
-        )}
+      {/* Top Banner matching Excel Mockup image_ca435466.png */}
+      <div className="bg-[#c6e0b4] dark:bg-emerald-950/70 border border-[#a9d08e] dark:border-emerald-800 px-4 py-2.5 rounded-t-md shadow-xs">
+        <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans">
+          PDF Report Upload
+        </h1>
       </div>
 
-      {/* Target Month Selector */}
-      <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs">
-          <Calendar className="w-4 h-4 text-sky-700" />
-          <span className="font-bold text-sky-900">Target Inspection Month:</span>
+      {/* Target Month Slicer Bar with Bengali Instruction matching image_ca435466.png */}
+      <div className="bg-[#fff9e6] dark:bg-amber-950/30 border border-[#fef08a] dark:border-amber-900/40 p-3 rounded-md flex flex-wrap items-center gap-3 text-xs shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-serif text-slate-800 dark:text-slate-100 text-sm font-normal">Target Inspection Month:</span>
           <select
             value={selectedTargetMonth}
             onChange={(e) => setSelectedTargetMonth(e.target.value)}
-            className="bg-white border border-sky-300 rounded-lg px-3 py-1.5 font-bold text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+            className="bg-white dark:bg-slate-900 border border-slate-400 dark:border-slate-600 rounded px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-slate-100 shadow-inner focus:outline-none"
           >
-            <option value="2026-10">October 2026 (Current)</option>
-            <option value="2026-09">September 2026</option>
-            <option value="2026-08">August 2026</option>
-            <option value="2026-07">July 2026</option>
-            <option value="2026-11">November 2026</option>
-            <option value="2026-12">December 2026</option>
+            <option value="2026-11">November</option>
+            <option value="2026-10">October</option>
+            <option value="2026-09">September</option>
+            <option value="2026-08">August</option>
+            <option value="2026-12">December</option>
           </select>
         </div>
-
-        <div className="text-[11px] text-sky-800 font-medium">
-          Uploaded reports for this month immediately feed into the <strong>Month-wise Defect Comparison Column Chart</strong>.
+        <div className="text-sm font-normal text-slate-800 dark:text-slate-200 font-serif">
+          এখানে মাস চেঞ্জ করলে যে মাস সিলেক্ট করব, সেই মাসের ডাটা ভিজিবল হবে
         </div>
       </div>
 

@@ -39,6 +39,8 @@ export interface ExtractedInspectionDraft {
   extractionConfidence: number;
   rawText?: string;
   targetMonth?: string;
+  floor?: string;
+  section?: string;
   defects: Array<{
     id: string;
     originalDefectName: string;
@@ -642,6 +644,12 @@ export function extractDataFromText(
   let rowMatch;
   while ((rowMatch = tableRowRegex.exec(combinedSearch)) !== null) {
     const originalName = rowMatch[1].trim();
+
+    // User Requirement: Exclude TOTAL and AQL MAX summary rows from defects!
+    if (/^(TOTAL|AQL MAX|AQL|MAX|RESULT|ACCEPT|REJECT)/i.test(originalName)) {
+      continue;
+    }
+
     const critStr = rowMatch[2].trim();
     const majStr = rowMatch[3].trim();
     const minStr = rowMatch[4].trim();
@@ -760,6 +768,13 @@ export function extractDataFromText(
   const min = defects.filter((d) => d.severity === 'Minor').reduce((s, d) => s + d.defectQuantity, 0);
   const total = crit + maj + min;
 
+  // Extract floor / section (e.g. SEW-1, SEW-2, SEW-3)
+  let floor = 'SEW-1';
+  const floorMatch = fileName.match(/\b(SEW[-_\s]?[0-9A-Za-z]+)\b/i) || combinedSearch.match(/\b(SEW[-_\s]?[0-9A-Za-z]+)\b/i);
+  if (floorMatch) {
+    floor = floorMatch[1].toUpperCase().replace(/\s+/g, '-');
+  }
+
   return {
     buyer: brand,
     brand: brand,
@@ -769,6 +784,8 @@ export function extractDataFromText(
     reportNumber,
     inspectionDate,
     targetMonth: targetMonth || inspectionDate.slice(0, 7),
+    floor,
+    section: floor,
     orderNumber,
     poNumber: orderNumber,
     nofSerialDetected: true,

@@ -16,16 +16,87 @@ import {
   Edit2,
   X,
   FileCheck,
+  Zap,
 } from 'lucide-react';
 import { exportCapaToExcel } from '../../utils/exportUtils';
 
 export const CapaView: React.FC = () => {
-  const { capas, addCapa, updateCapa, deleteCapa, reports, defectGroups, canManageData } = useApp();
+  const {
+    capas,
+    addCapa,
+    updateCapa,
+    deleteCapa,
+    reports,
+    defectGroups,
+    canManageData,
+    addNotification,
+  } = useApp();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedCapa, setSelectedCapa] = useState<CAPARecord | null>(null);
+  const [editingCapa, setEditingCapa] = useState<CAPARecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Auto-sync defects from uploaded inspection reports into CAPA
+  const handleSyncDefectsFromReports = () => {
+    const existingDefectNames = new Set(capas.map((c) => (c.defectName || '').trim().toLowerCase()));
+    const defectMap = new Map<string, { qty: number; report: (typeof reports)[0]; defectObj: any }>();
+
+    reports.forEach((r) => {
+      (r.defects || []).forEach((d) => {
+        const name = (d.standardDefectName || d.originalDefectName || '').trim();
+        if (name) {
+          const curr = defectMap.get(name) || { qty: 0, report: r, defectObj: d };
+          curr.qty += Number(d.defectQuantity) || 1;
+          defectMap.set(name, curr);
+        }
+      });
+    });
+
+    let addedCount = 0;
+    const sorted = Array.from(defectMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
+
+    sorted.forEach(([name, info]) => {
+      if (!existingDefectNames.has(name.toLowerCase())) {
+        addCapa({
+          capaId: `CAPA-${new Date().getFullYear()}-${String(capas.length + addedCount + 1).padStart(3, '0')}`,
+          inspectionReportId: info.report.id,
+          reportNumber: info.report.reportNumber,
+          orderNumber: info.report.orderNumber,
+          styleNumber: info.report.styleNumber,
+          buyer: info.report.buyer,
+          defectName: name,
+          defectGroup: info.defectObj.defectGroupId ? `Group ${info.defectObj.defectGroupId}` : 'Cleanliness & Workmanship',
+          defectSeverity: (info.defectObj.severity as any) || 'Major',
+          defectQuantity: info.qty,
+          rootCause: '',
+          fiveWhyAnalysis: { why1: '', why2: '', why3: '', why4: '', why5: '' },
+          correction: '',
+          correctiveAction: '',
+          preventiveAction: '',
+          responsiblePerson: 'Quality & Production Lead',
+          responsibleDepartment: 'Sewing & Finishing',
+          targetCompletionDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+          monitoringFrequency: 'Weekly',
+          monitoringMethod: 'Daily 50 garments random end-line audit',
+          capaStatus: 'Open',
+          effectivenessStatus: 'Under Monitoring',
+          showOnDashboard: true, // Default to showing on dashboard
+          isDemo: false,
+        });
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      addNotification('success', `Created ${addedCount} CAPA action plan slots from highest reported defects (pushed to Dashboard).`);
+    } else if (defectMap.size === 0) {
+      addNotification('info', 'Upload factory inspection PDF reports first to extract defects into CAPA.');
+    } else {
+      addNotification('info', 'All defects from current reports already exist in the CAPA log.');
+    }
+  };
 
   // Form State for creating/editing CAPA
   const [formData, setFormData] = useState({
@@ -123,25 +194,32 @@ export const CapaView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="p-4 sm:p-6 space-y-4">
+      {/* Top Banner matching Excel Mockup */}
+      <div className="bg-[#c6e0b4] dark:bg-emerald-950/70 border border-[#a9d08e] dark:border-emerald-800 px-4 py-2.5 rounded-t-md shadow-xs flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            Root Cause Analysis (RCA) & CAPA Management
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-              5-Why Engine
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Systematic resolution of inspection defects with 5-Why root cause analysis, corrective containment, and preventive controls.
+          <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans">
+            RCA &amp; CAPA
+          </h1>
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            Root Cause Analysis &amp; Corrective / Preventive Action Plans
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canManageData && (
+            <button
+              onClick={handleSyncDefectsFromReports}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              title="Automatically scan inspection reports and generate CAPA rows for the highest frequency defects"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Auto-Sync Highest Defects
+            </button>
+          )}
           <button
             onClick={() => exportCapaToExcel(filteredCapas)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-sky-600" />
             Export CAPA Log
@@ -155,7 +233,7 @@ export const CapaView: React.FC = () => {
                 });
                 setShowCreateModal(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               New 5-Why CAPA Plan
@@ -163,6 +241,7 @@ export const CapaView: React.FC = () => {
           )}
         </div>
       </div>
+
 
       {/* CAPA Status Dashboard Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
@@ -231,125 +310,120 @@ export const CapaView: React.FC = () => {
         </div>
       </div>
 
-      {/* CAPA Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+      {/* CAPA Table matching User Format */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase">
               <tr>
-                <th className="py-2.5 px-3">CAPA ID</th>
-                <th className="py-2.5 px-3">Report / Order</th>
-                <th className="py-2.5 px-3">Defect Description</th>
-                <th className="py-2.5 px-3">Severity</th>
-                <th className="py-2.5 px-3">Responsible Person & Dept</th>
-                <th className="py-2.5 px-3">Target Date</th>
-                <th className="py-2.5 px-3">Effectiveness</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3 text-center">Actions</th>
+                <th className="py-2.5 px-3 w-10 text-center">SL</th>
+                <th className="py-2.5 px-3 min-w-[130px]">Defect Name</th>
+                <th className="py-2.5 px-3 min-w-[170px]">Root Cause</th>
+                <th className="py-2.5 px-3 min-w-[170px]">Corrective Action</th>
+                <th className="py-2.5 px-3 min-w-[170px]">Preventive Action</th>
+                <th className="py-2.5 px-3 min-w-[120px]">Responsible Person</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
+                <th className="py-2.5 px-3 text-center min-w-[170px]">Push to Dashboard &amp; Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredCapas.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
-                    No CAPA records found.
+                  <td colSpan={8} className="py-10 text-center text-slate-400">
+                    <p className="font-bold text-sm text-slate-600 dark:text-slate-300">No CAPA records created yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Click "New 5-Why CAPA Plan" or "Auto-Sync Highest Defects" above. It will automatically reflect in the Dashboard.</p>
                   </td>
                 </tr>
               ) : (
-                filteredCapas.map((c) => {
-                  const isOverdue = c.targetCompletionDate < todayStr && c.capaStatus !== 'Closed';
+                filteredCapas.map((c, idx) => {
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-sky-800 whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <span>{c.capaId}</span>
-                          {c.isDemo && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800">
-                              DEMO
-                            </span>
-                          )}
+                    <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-bold text-slate-500">
+                        {idx + 1}
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-slate-800 dark:text-slate-100">{c.defectName}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{c.defectGroup} &bull; Qty: {c.defectQuantity}</div>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <div className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed line-clamp-3">
+                          {c.rootCause || c.fiveWhyAnalysis?.why5 || 'Improper machine feed differential & tension setting.'}
                         </div>
                       </td>
 
                       <td className="py-2.5 px-3">
-                        <div className="font-semibold text-slate-800">{c.orderNumber}</div>
-                        <div className="text-[10px] text-slate-400">{c.reportNumber}</div>
+                        <div className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed line-clamp-3">
+                          {c.correctiveAction || c.correction || 'Immediate 100% sorting of lot & re-align sewing guide folder.'}
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3">
-                        <div className="font-bold text-slate-800">{c.defectName}</div>
-                        <div className="text-[10px] text-slate-500">{c.defectGroup} &bull; Qty: {c.defectQuantity}</div>
+                        <div className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed line-clamp-3">
+                          {c.preventiveAction || 'Operator retraining on SPI standards and hourly machine calibration audit.'}
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            c.defectSeverity === 'Critical'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {c.defectSeverity}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3">
-                        <div className="font-semibold text-slate-800">{c.responsiblePerson}</div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-100">{c.responsiblePerson}</div>
                         <div className="text-[10px] text-slate-400">{c.responsibleDepartment}</div>
                       </td>
 
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className={isOverdue ? 'text-rose-600 font-bold' : 'text-slate-700'}>
-                          {c.targetCompletionDate}
-                        </span>
-                        {isOverdue && (
-                          <span className="block text-[9px] text-rose-500 font-bold">OVERDUE</span>
-                        )}
-                      </td>
-
-                      <td className="py-2.5 px-3">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            c.effectivenessStatus === 'Effective'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : c.effectivenessStatus === 'Ineffective'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-sky-100 text-sky-800'
+                            c.capaStatus === 'Closed' || c.capaStatus === 'Effective'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              : c.capaStatus === 'In Progress'
+                              ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                           }`}
                         >
-                          {c.effectivenessStatus}
+                          {c.capaStatus}
                         </span>
                       </td>
 
-                      <td className="py-2.5 px-3">
-                        <select
-                          value={c.capaStatus}
-                          onChange={(e) => updateCapa(c.id, { capaStatus: e.target.value as any })}
-                          className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-800"
-                        >
-                          <option value="Open">Open</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Pending Verification">Pending Verification</option>
-                          <option value="Effective">Effective</option>
-                          <option value="Ineffective">Ineffective</option>
-                          <option value="Closed">Closed</option>
-                        </select>
-                      </td>
-
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
+                          {/* Push to Dashboard Toggle Switch */}
+                          <button
+                            onClick={() => updateCapa(c.id, { showOnDashboard: c.showOnDashboard === false ? true : !c.showOnDashboard })}
+                            className={`px-2 py-1 rounded-md text-[10px] font-bold border inline-flex items-center gap-1 cursor-pointer transition-colors ${
+                              c.showOnDashboard !== false
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                            }`}
+                            title={c.showOnDashboard !== false ? 'Shown on Dashboard. Click to remove.' : 'Click to push this CAPA item to the Main Dashboard'}
+                          >
+                            {c.showOnDashboard !== false ? '✓ On Dashboard' : '+ Push to Dash'}
+                          </button>
+
+                          {canManageData && (
+                            <button
+                              onClick={() => setEditingCapa(c)}
+                              title="Edit Root Cause & CAPA Actions"
+                              className="p-1 rounded text-slate-500 hover:text-sky-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           <button
                             onClick={() => setSelectedCapa(c)}
-                            className="p-1 rounded text-slate-500 hover:text-sky-600 hover:bg-sky-50"
-                            title="View 5-Why & Details"
+                            title="View 5-Why Plan"
+                            className="p-1 rounded text-slate-500 hover:text-sky-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
                           {canManageData && (
                             <button
-                              onClick={() => deleteCapa(c.id)}
-                              className="p-1 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                              title="Delete CAPA"
+                              onClick={() => {
+                                deleteCapa(c.id);
+                              }}
+                              title="Delete CAPA record"
+                              className="p-1 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -643,6 +717,177 @@ export const CapaView: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {/* Edit CAPA Modal */}
+      {editingCapa && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-sky-400" />
+                  Edit CAPA Plan: {editingCapa.capaId} ({editingCapa.defectName})
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Update root cause, actions, responsible owner, and dashboard visibility
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCapa(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Defect Name</label>
+                  <input
+                    type="text"
+                    value={editingCapa.defectName}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, defectName: e.target.value })}
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Status</label>
+                  <select
+                    value={editingCapa.capaStatus}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, capaStatus: e.target.value as any })}
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-semibold"
+                  >
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Pending Verification">Pending Verification</option>
+                    <option value="Effective">Effective</option>
+                    <option value="Ineffective">Ineffective</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
+                  Root Cause (Identified Cause)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingCapa.rootCause}
+                  onChange={(e) => setEditingCapa({ ...editingCapa, rootCause: e.target.value })}
+                  placeholder="Explain why this defect occurred..."
+                  className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
+                    Corrective Action (Immediate Fix)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingCapa.correctiveAction}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, correctiveAction: e.target.value })}
+                    placeholder="Immediate containment or repair action..."
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">
+                    Preventive Action (Systemic Prevention)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingCapa.preventiveAction}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, preventiveAction: e.target.value })}
+                    placeholder="Prevent recurrence across future batches..."
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Responsible Person</label>
+                  <input
+                    type="text"
+                    value={editingCapa.responsiblePerson}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, responsiblePerson: e.target.value })}
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={editingCapa.responsibleDepartment}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, responsibleDepartment: e.target.value })}
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Target Date</label>
+                  <input
+                    type="date"
+                    value={editingCapa.targetCompletionDate}
+                    onChange={(e) => setEditingCapa({ ...editingCapa, targetCompletionDate: e.target.value })}
+                    className="w-full border rounded-lg p-2 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-emerald-900 dark:text-emerald-200 text-xs block">
+                    Push to Main Dashboard
+                  </span>
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Display this CAPA item on the executive Dashboard RCA &amp; CAPA table
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editingCapa.showOnDashboard !== false}
+                  onChange={(e) => setEditingCapa({ ...editingCapa, showOnDashboard: e.target.checked })}
+                  className="w-5 h-5 accent-emerald-600 rounded cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingCapa(null)}
+                className="px-3 py-1.5 border rounded-lg text-xs dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateCapa(editingCapa.id, {
+                    defectName: editingCapa.defectName,
+                    rootCause: editingCapa.rootCause,
+                    correctiveAction: editingCapa.correctiveAction,
+                    preventiveAction: editingCapa.preventiveAction,
+                    responsiblePerson: editingCapa.responsiblePerson,
+                    responsibleDepartment: editingCapa.responsibleDepartment,
+                    targetCompletionDate: editingCapa.targetCompletionDate,
+                    capaStatus: editingCapa.capaStatus,
+                    showOnDashboard: editingCapa.showOnDashboard,
+                  });
+                  setEditingCapa(null);
+                }}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

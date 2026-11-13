@@ -151,6 +151,8 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       inspectorConclusion,
       styleNumber,
       styleName: productDescription,
+      floor: draft.floor || 'SEW-1',
+      section: draft.section || 'SEW-1',
       color,
       productDescription,
       orderQuantity: Number(orderQuantity),
