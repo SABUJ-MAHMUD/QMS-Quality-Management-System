@@ -52,6 +52,7 @@ export interface InspectionReport {
   brand?: string;
   factory: string;
   reportNumber: string;
+  inspectionType?: string; // e.g. "Final", "Inline", "Pre-Final"
   inspectionDate: string; // YYYY-MM-DD
   orderNumber: string;
   poNumber?: string;

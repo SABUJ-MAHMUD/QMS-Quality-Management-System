@@ -61,20 +61,23 @@ export const UploadView: React.FC = () => {
 
   const processFile = async (file: File) => {
     setIsProcessing(true);
-    setProcessingProgress(25);
-    setProcessingStatusText(`Extracting inspection data from ${file.name}...`);
+    setProcessingProgress(15);
+    setProcessingStatusText(`Preparing ${file.name}...`);
 
-    // Allow the progress UI to paint before heavy extraction starts
+    // Allow the progress UI to paint before extraction starts
     await new Promise((r) => setTimeout(r, 0));
 
     try {
-      setProcessingProgress(60);
       const draft = await parseInspectionPdf(
         file,
         defectMaster,
         defectGroups,
         undefined,
-        selectedTargetMonth
+        selectedTargetMonth,
+        (pct, status) => {
+          setProcessingProgress(pct);
+          if (status) setProcessingStatusText(status);
+        }
       );
 
       setProcessingProgress(100);

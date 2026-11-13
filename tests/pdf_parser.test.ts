@@ -114,3 +114,116 @@ TOTAL 0 0 0
   assert.equal(draft.totalDefectQuantity, 0);
   assert.equal(calculateReportOql(draft.totalDefectQuantity, Number(draft.inspectedQuantity)), 0);
 });
+
+test('Exact BESTSELLER Final report NOF4705853: filename never overrides Style Name, Nov 03 2026, Rifat Chowdhury, 200/50, 4000/4000, Po-2/Se-10/La-9/Ne-1', () => {
+  const finalReportPipeLayout = `
+Inspection report, Final: NOF4705853 | BESTSELLER
+22013782: ONSMATT LONGY SS TEE 3-PACK NOOS
+Online report
+Inspector | Rifat Chowdhury | Inspection Date | Nov 03, 2026
+Planned Sample Qty/Inspected | 200/50 | Order Qty/Available | 4000/4000
+Location | 23° 59' 29" N x 90° 15' 25" E | Checklist Name | BS Inspection with AI Checkpoints
+Planned Date | Nov 03, 2026 | Sampling Method | AQL 2.5/2.5 Level II Reduced
+Supplier Name | NORTHERN FASHION LTD.
+Inspector Conclusion | Approved | Final inspection result is accepted as per AQL.
+SUMMARY
+NOF4705853:22013782
+1 Check for previous defects
+2 Standard checklist
+CRITICAL | MAJOR | MINOR
+Po-2 Shaped poorly. | - | 1 | -
+Se-10 Broken stitching. | - | 1 | -
+La-9 Main label incorrectly placed. | - | - | 1
+Ne-1 Incorrect Neckline and half-moon shape. | - | - | 1
+TOTAL | 0 | 2 | 2
+AQL MAX | 0 | 3 | 3
+  `;
+
+  const draft = extractDataFromText(
+    finalReportPipeLayout,
+    'NOF4705853 - 22013782 - Sew-01.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-11'
+  );
+
+  assert.equal(draft.inspectionType, 'Final');
+  assert.equal(draft.orderNumber, 'NOF4705853');
+  assert.equal(draft.styleNumber, '22013782');
+  assert.equal(draft.styleName, 'ONSMATT LONGY SS TEE 3-PACK NOOS');
+  assert.equal(draft.buyer, 'ONLY&SONS');
+  assert.equal(draft.inspector, 'Rifat Chowdhury');
+  assert.equal(draft.inspectionDate, '2026-11-03');
+  assert.equal(draft.inspectedQuantity, 50);
+  assert.equal(draft.orderQuantity, 4000);
+  assert.equal(draft.criticalDefectQuantity, 0);
+  assert.equal(draft.majorDefectQuantity, 2);
+  assert.equal(draft.minorDefectQuantity, 2);
+  assert.equal(draft.totalDefectQuantity, 4);
+  assert.equal(draft.defects.length, 4);
+
+  const po2 = draft.defects.find((d) => d.originalDefectName.startsWith('Po-2'));
+  const se10 = draft.defects.find((d) => d.originalDefectName.startsWith('Se-10'));
+  const la9 = draft.defects.find((d) => d.originalDefectName.startsWith('La-9'));
+  const ne1 = draft.defects.find((d) => d.originalDefectName.startsWith('Ne-1'));
+
+  assert.equal(po2?.defectGroupId, 'dg-po');
+  assert.equal(po2?.severity, 'Major');
+  assert.equal(se10?.defectGroupId, 'dg-se');
+  assert.equal(se10?.standardDefectName, 'Broken stitching / Ruptured seam');
+  assert.equal(se10?.severity, 'Major');
+  assert.equal(la9?.defectGroupId, 'dg-la');
+  assert.equal(la9?.standardDefectName, 'Label placed in wrong position');
+  assert.equal(la9?.severity, 'Minor');
+  assert.equal(ne1?.defectGroupId, 'dg-ne');
+  assert.equal(ne1?.severity, 'Minor');
+});
+
+test('Exact BESTSELLER Inline report NOF4693896: Inline stage, Salah Uddin, 125/50 -> 50, 1690/400 -> 400, wrapped multi-line Se-9', () => {
+  const inlineReportPipeLayout = `
+Inspection report, Inline: NOF4693896 | BESTSELLER
+13255895: NMFBELINA 3P SS TOP PB
+Online report
+Inspector | Salah Uddin | Inspection Date | Nov 03, 2026
+Planned Sample Qty/Inspected | 125/50 | Order Qty/Available | 1690/400
+Location | 23° 59' 29" N x 90° 15' 25" E | Checklist Name | BS inspection Kids Wear with AI Checkpoints
+Planned Date | Nov 03, 2026 | Sampling Method | AQL 2.5/2.5 Level II Reduced
+Supplier Name | NORTHERN FASHION LTD.
+Inspector Conclusion | Approved | Please take care for defective points found during inspection.
+CRITICAL | MAJOR | MINOR
+Cle-5 Oil spots or stains (cannot be removed). | - | 1 | -
+Se-9 Seam twisted, puckered or pleated (other than specified) affecting the
+appearance. | - | 1 | -
+  `;
+
+  const draft = extractDataFromText(
+    inlineReportPipeLayout,
+    'NOF4693896 - 13255895.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-11'
+  );
+
+  assert.equal(draft.inspectionType, 'Inline');
+  assert.equal(draft.orderNumber, 'NOF4693896');
+  assert.equal(draft.styleNumber, '13255895');
+  assert.equal(draft.styleName, 'NMFBELINA 3P SS TOP PB');
+  assert.equal(draft.buyer, 'NAME IT');
+  assert.equal(draft.inspector, 'Salah Uddin');
+  assert.equal(draft.inspectionDate, '2026-11-03');
+  assert.equal(draft.inspectedQuantity, 50);
+  assert.equal(draft.orderQuantity, 400);
+  assert.equal(draft.criticalDefectQuantity, 0);
+  assert.equal(draft.majorDefectQuantity, 2);
+  assert.equal(draft.minorDefectQuantity, 0);
+  assert.equal(draft.totalDefectQuantity, 2);
+  assert.equal(draft.defects.length, 2);
+
+  const cle5 = draft.defects.find((d) => d.originalDefectName.startsWith('Cle-5'));
+  const se9 = draft.defects.find((d) => d.originalDefectName.startsWith('Se-9'));
+  assert.equal(cle5?.defectGroupId, 'dg-cle');
+  assert.equal(cle5?.severity, 'Major');
+  assert.equal(se9?.defectGroupId, 'dg-se');
+  assert.equal(se9?.severity, 'Major');
+});
+

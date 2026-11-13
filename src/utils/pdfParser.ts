@@ -11,6 +11,7 @@ export interface ExtractedInspectionDraft {
   inspector?: string;
   inspectorConclusion?: 'Approved' | 'Rejected' | 'Pending';
   reportNumber: string;
+  inspectionType?: string;
   inspectionDate: string;
   orderNumber: string; // NOF Serial
   poNumber?: string;
@@ -311,22 +312,127 @@ export const FACTORY_PDF_REPORTS = [
 ];
 
 /**
- * Reconstructs visual lines from PDF.js textContent items using Y/X coordinates
- * off the main render loop with lazy-loaded pdfjs-dist & exact local worker.
+ * Shared lazy OCR helper using tesseract.js off-thread worker.
+ * Runs only when a PDF has no selectable text layer (scanned/image PDF)
+ * or when the user uploads a screenshot image (.png / .jpg).
  */
-export async function extractTextFromPdfFile(file: File): Promise<string> {
-  // Method 1: Lazy-loaded PDF.js with matching local worker + strict timeout
+async function recognizeCanvasesWithOcr(
+  canvases: HTMLCanvasElement[],
+  onProgress?: (pct: number, status: string) => void
+): Promise<string> {
+  if (typeof window === 'undefined' || canvases.length === 0) return '';
   try {
+    onProgress?.(45, 'Loading local OCR engine for scanned PDF / image...');
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker('eng', 1, {
+      workerPath: '/tesseract-worker.min.js',
+      errorHandler: (err: any) => console.warn('OCR worker note:', err),
+    });
+
+    let ocrText = '';
+    try {
+      for (let i = 0; i < canvases.length; i++) {
+        onProgress?.(
+          Math.min(90, 50 + Math.round(((i + 0.5) / canvases.length) * 40)),
+          `Reading inspection report via OCR (Page ${i + 1} of ${canvases.length})...`
+        );
+        await yieldToBrowser();
+        const { data } = await worker.recognize(canvases[i]);
+        if (data?.text) {
+          ocrText += `\n--- Page ${i + 1} ---\n${data.text}`;
+        }
+      }
+    } finally {
+      await worker.terminate().catch(() => {});
+    }
+    return ocrText.trim();
+  } catch (err) {
+    console.warn('OCR extraction unavailable or failed:', err);
+    return '';
+  }
+}
+
+async function renderImageFileToCanvas(file: File): Promise<HTMLCanvasElement | null> {
+  if (typeof document === 'undefined') return null;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Image decode error'));
+      el.src = objectUrl;
+    });
+    const minWidth = 1800;
+    const scale = img.naturalWidth > 0 && img.naturalWidth < minWidth ? minWidth / img.naturalWidth : 1;
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.filter = 'grayscale(100%) contrast(165%)';
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas;
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function renderPdfPagesToCanvases(pdfDoc: any, maxPages: number = 3): Promise<HTMLCanvasElement[]> {
+  if (typeof document === 'undefined') return [];
+  const canvases: HTMLCanvasElement[] = [];
+  const pageCount = Math.min(pdfDoc.numPages || 1, maxPages);
+  for (let p = 1; p <= pageCount; p++) {
+    try {
+      await yieldToBrowser();
+      const page = await pdfDoc.getPage(p);
+      const viewport = page.getViewport({ scale: 2.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        // Boost contrast cleanly for small table numbers & dashes
+        ctx.globalCompositeOperation = 'source-over';
+        canvases.push(canvas);
+      }
+      page.cleanup?.();
+    } catch {
+      // skip page render errors
+    }
+  }
+  return canvases;
+}
+
+/**
+ * Reconstructs visual table rows from PDF.js textContent items using Y-proximity & X-gap
+ * cell detection (` | `), and falls back to OCR when a PDF is scanned/image-only.
+ */
+export async function extractTextFromPdfFile(
+  file: File,
+  onProgress?: (pct: number, status: string) => void
+): Promise<string> {
+  // Method 1: Lazy-loaded PDF.js with local .js worker + safe timeout
+  try {
+    onProgress?.(25, `Opening PDF document: ${file.name}...`);
     const pdfjsLib = await import('pdfjs-dist');
     if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(arrayBuffer),
       disableFontFace: true,
-      useSystemFonts: false,
+      useSystemFonts: true,
       stopAtErrors: false,
       verbosity: 0,
     });
@@ -340,17 +446,21 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
           // ignore
         }
         reject(new Error('PDF text extraction timed out'));
-      }, 12000);
+      }, 15000);
     });
 
     const pdfDoc = await Promise.race([loadingTask.promise, timeoutPromise]);
     if (timeoutId) clearTimeout(timeoutId);
+
     let fullText = '';
     const maxPages = Math.min(pdfDoc.numPages, 12);
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-      // Yield between pages so browser UI stays 60fps responsive
       await yieldToBrowser();
+      onProgress?.(
+        35 + Math.round((pageNum / maxPages) * 25),
+        `Extracting PDF layout (Page ${pageNum} of ${maxPages})...`
+      );
 
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
@@ -359,6 +469,7 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
         str: string;
         x: number;
         y: number;
+        width: number;
       }
 
       const items: PositionedItem[] = [];
@@ -371,32 +482,41 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
           str: text,
           x: Number(transform[4]) || 0,
           y: Number(transform[5]) || 0,
+          width: Number(rawItem.width) || text.length * 4.5,
         });
       }
 
-      // Group items into visual rows by Y coordinate (bucketed to O(n) via Map instead of O(n^2) find)
-      const rowBuckets = new Map<number, { y: number; items: PositionedItem[] }>();
-      for (const item of items) {
-        const bucketKey = Math.round(item.y / 3.5);
-        let bucket = rowBuckets.get(bucketKey);
-        if (!bucket) {
-          bucket = { y: item.y, items: [] };
-          rowBuckets.set(bucketKey, bucket);
-        }
-        bucket.items.push(item);
-      }
+      // Sort top-to-bottom (Y descending), left-to-right (X ascending)
+      items.sort((a, b) => (Math.abs(b.y - a.y) > 4.0 ? b.y - a.y : a.x - b.x));
 
-      const rows = Array.from(rowBuckets.values()).sort((a, b) => b.y - a.y);
+      // Group items into visual rows by Y proximity (immune to bucket boundary splits)
+      const rows: Array<{ y: number; items: PositionedItem[] }> = [];
+      for (const item of items) {
+        const lastRow = rows[rows.length - 1];
+        if (lastRow && Math.abs(item.y - lastRow.y) <= 4.0) {
+          lastRow.items.push(item);
+        } else {
+          rows.push({ y: item.y, items: [item] });
+        }
+      }
 
       const pageLines = rows
         .map((row) => {
           row.items.sort((a, b) => a.x - b.x);
-          return row.items
-            .map((it) => it.str.trim())
-            .filter(Boolean)
-            .join(' ')
-            .replace(/\s{2,}/g, ' ')
-            .trim();
+          let lineStr = '';
+          let prevEndX = -Infinity;
+          for (const it of row.items) {
+            const cleanPiece = it.str.replace(/\s+/g, ' ').trim();
+            if (!cleanPiece) continue;
+            if (!lineStr) {
+              lineStr = cleanPiece;
+            } else {
+              const gap = it.x - prevEndX;
+              lineStr += gap > 16 ? ` | ${cleanPiece}` : ` ${cleanPiece}`;
+            }
+            prevEndX = it.x + it.width;
+          }
+          return lineStr.replace(/\s{2,}/g, ' ').trim();
         })
         .filter(Boolean);
 
@@ -408,29 +528,42 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
       }
     }
 
+    const meaningfulChars = fullText.replace(/---\s*Page\s*\d+\s*---/gi, '').replace(/\s+/g, '');
+    if (meaningfulChars.length >= 40) {
+      try {
+        await ((pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.() ?? loadingTask.destroy());
+      } catch {
+        // ignore
+      }
+      return fullText.trim();
+    }
+
+    // Scanned / Image-only PDF (0 selectable text): render pages and run OCR automatically!
+    const canvases = await renderPdfPagesToCanvases(pdfDoc, 3);
     try {
       await ((pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.() ?? loadingTask.destroy());
     } catch {
       // ignore
     }
 
-    if (fullText.trim().length > 20) {
-      return fullText.trim();
+    if (canvases.length > 0) {
+      const ocrText = await recognizeCanvasesWithOcr(canvases, onProgress);
+      if (ocrText.replace(/---\s*Page\s*\d+\s*---/gi, '').trim().length > 20) {
+        return ocrText;
+      }
     }
   } catch (err) {
     console.warn('PDF.js text extraction note:', err);
   }
 
-  // Safe fast fallback: only extract clean ASCII text operators from first 150 KB (never scan megabytes of JPEG streams!)
+  // Safe fast fallback: extract clean ASCII text operators from first 150 KB
   try {
     const slice = file.slice(0, 150 * 1024);
     const buffer = await slice.arrayBuffer();
     const decoded = new TextDecoder('latin1').decode(new Uint8Array(buffer));
     const readableMatches = decoded.match(/\(([A-Za-z0-9\s:.,\-/+%&()]{4,120})\)\s*Tj/g) || [];
     if (readableMatches.length > 0) {
-      return readableMatches
-        .map((tok) => tok.replace(/^\(|\)\s*Tj$/g, ''))
-        .join('\n');
+      return readableMatches.map((tok) => tok.replace(/^\(|\)\s*Tj$/g, '')).join('\n');
     }
     return file.name;
   } catch {
@@ -439,14 +572,15 @@ export async function extractTextFromPdfFile(file: File): Promise<string> {
 }
 
 /**
- * Main parser: processes real PDF or image screenshot of an inspection report
+ * Main parser: processes real PDF or screenshot image of an inspection report
  */
 export async function parseInspectionFile(
   file: File | { name: string; size: number },
   defectMaster: DefectMasterItem[],
   defectGroups: DefectGroup[],
   sampleId?: string,
-  targetMonth?: string
+  targetMonth?: string,
+  onProgress?: (pct: number, status: string) => void
 ): Promise<ExtractedInspectionDraft> {
   // Direct sample match (when user clicks one of the Factory Sample cards)
   if (sampleId) {
@@ -456,24 +590,33 @@ export async function parseInspectionFile(
     }
   }
 
-  // Real uploaded file: always extract actual PDF text first!
   let rawText = '';
+  const lowerName = file.name.toLowerCase();
   const isPdf =
     file instanceof File &&
-    (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+    (file.type === 'application/pdf' || lowerName.endsWith('.pdf'));
+  const isImage =
+    file instanceof File &&
+    (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp)$/i.test(lowerName));
 
   if (isPdf && file instanceof File) {
-    rawText = await extractTextFromPdfFile(file);
+    rawText = await extractTextFromPdfFile(file, onProgress);
+  } else if (isImage && file instanceof File) {
+    onProgress?.(30, `Preparing screenshot image for OCR: ${file.name}...`);
+    const canvas = await renderImageFileToCanvas(file);
+    if (canvas) {
+      rawText = await recognizeCanvasesWithOcr([canvas], onProgress);
+    }
   } else if (file instanceof File && file.type.startsWith('text/')) {
     rawText = await file.text();
   }
 
-  // If real PDF text was extracted meaningfully, parse it dynamically instead of using sample templates
   if (rawText && rawText.replace(/---\s*Page\s*\d+\s*---/gi, '').trim().length > 40) {
+    onProgress?.(95, 'Mapping extracted order quantities, inspector & defect counts...');
     return extractDataFromText(rawText, file.name, defectMaster, defectGroups, targetMonth);
   }
 
-  // Only fall back to known built-in factory templates when filename matches an existing built-in sample and no readable PDF text existed
+  // Fallback to known built-in factory templates ONLY when uploaded file yielded no text
   const matchedReport = FACTORY_PDF_REPORTS.find(
     (r) =>
       file.name.includes(r.orderNumber) ||
@@ -527,6 +670,7 @@ function createDraftFromReportTemplate(
     brand: brand,
     factory: match.factory,
     reportNumber: fileName.replace(/\.(pdf|png|jpg|jpeg)$/i, '').trim(),
+    inspectionType: 'Final',
     inspectionDate: match.date,
     targetMonth: targetMonth || match.targetMonth,
     orderNumber: match.orderNumber,
@@ -553,45 +697,258 @@ function createDraftFromReportTemplate(
   };
 }
 
-function normalizeParsedDate(rawDateStr: string): string | null {
-  const clean = rawDateStr.trim();
-  // YYYY-MM-DD or YYYY/MM/DD or YYYY MM DD
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function formatDateYMD(y: number, m: number, d: number): string | null {
+  if (y < 2000 || y > 2099 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+export function normalizeParsedDate(rawDateStr: string): string | null {
+  const clean = (rawDateStr || '').trim();
+  if (!clean) return null;
+
+  // 1. YYYY-MM-DD or YYYY/MM/DD or YYYY MM DD
   const iso = clean.match(/\b(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})\b/);
   if (iso) {
-    const y = Number(iso[1]);
-    const m = Number(iso[2]);
-    const d = Number(iso[3]);
-    if (y >= 2000 && y <= 2099 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    }
+    return formatDateYMD(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   }
-  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+
+  // 2. Named Month: "Nov 03, 2026", "Nov 03,2026", "November 3 2026"
+  const mdyText = clean.match(
+    /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\b/i
+  );
+  if (mdyText) {
+    const m = MONTH_NAME_MAP[mdyText[1].toLowerCase()];
+    if (m) return formatDateYMD(Number(mdyText[3]), m, Number(mdyText[2]));
+  }
+
+  // 3. Named Month: "03 Nov 2026", "3-Nov-2026"
+  const dmyText = clean.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?[\s\-/]*(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?[\s\-/]*(\d{4})\b/i
+  );
+  if (dmyText) {
+    const m = MONTH_NAME_MAP[dmyText[2].toLowerCase()];
+    if (m) return formatDateYMD(Number(dmyText[3]), m, Number(dmyText[1]));
+  }
+
+  // 4. DD/MM/YYYY or DD-MM-YYYY
   const dmy = clean.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/);
   if (dmy) {
     const p1 = Number(dmy[1]);
     const p2 = Number(dmy[2]);
     const y = Number(dmy[3]);
-    // Assume DD/MM/YYYY if p1 > 12 or standard EU/Asia report convention
     const day = p2 > 12 ? p2 : p1;
     const month = p2 > 12 ? p1 : p2;
-    if (y >= 2000 && y <= 2099 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    }
+    return formatDateYMD(y, month, day);
   }
-  const parsed = new Date(clean);
-  if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2000) {
-    return parsed.toISOString().split('T')[0];
-  }
+
   return null;
 }
 
+function getLocalTodayYMD(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 /**
- * Intelligent field parser handling Northern Fashions & BESTSELLER format.
+ * Extracts the 2nd number (after '/') immediately following a BESTSELLER label
+ * across pipe-separated table cells, spaces, or next lines.
+ */
+function extractSlashSecondValue(lines: string[], bodyText: string, labelPattern: RegExp): number {
+  const pairRegex = /([\d,]{1,7})\s*[\/|\\]\s*([\d,]{1,7})/;
+  const isLabelLine = (s: string) =>
+    /^(?:Inspector|Inspection\s*Date|Location|Checklist|Planned\s*Date|Sampling|Supplier|Planned\s*Sample|Order\s*Qty)/i.test(
+      s.trim()
+    );
+
+  // 1. Line-by-line table cell scan (most accurate for 2-column BESTSELLER tables)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(labelPattern);
+    if (!match || match.index === undefined) continue;
+
+    // Look immediately after the matched label on the same row
+    const afterLabel = line.slice(match.index + match[0].length);
+    const cells = afterLabel.split('|').map((c) => c.trim()).filter(Boolean);
+    if (cells.length > 0) {
+      // Check first non-empty cell immediately right of the label
+      const cellPair = cells[0].match(pairRegex);
+      if (cellPair) {
+        return parseInt(cellPair[2].replace(/,/g, ''), 10) || 0;
+      }
+    }
+    // Same line without '|' delimiter (only look up to next column label)
+    const beforeNextLabel = afterLabel.split(
+      /\b(?:Order\s*Qty|Planned\s*Sample|Inspection\s*Date|Sampling|Location|Checklist|Supplier)\b/i
+    )[0];
+    const inlinePair = beforeNextLabel.match(pairRegex);
+    if (inlinePair) {
+      return parseInt(inlinePair[2].replace(/,/g, ''), 10) || 0;
+    }
+
+    // Check next 1-3 lines in case of vertical/columnar extraction
+    for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+      const nextLine = lines[i + j].trim();
+      if (!nextLine) continue;
+      if (isLabelLine(nextLine) && !pairRegex.test(nextLine)) break;
+      const nextPair = nextLine.match(/^\s*([\d,]{1,7})\s*[\/|\\]\s*([\d,]{1,7})\b/);
+      if (nextPair) {
+        return parseInt(nextPair[2].replace(/,/g, ''), 10) || 0;
+      }
+    }
+  }
+
+  // 2. Bounded text fallback (avoid crossing digits or decimals like 2.5/2.5)
+  const looseRegex = new RegExp(
+    `${labelPattern.source}[^\\d\\r\\n]{0,30}([\\d,]{1,7})\\s*[\\/\\\\|]\\s*([\\d,]{1,7})`,
+    'i'
+  );
+  const looseMatch = bodyText.match(looseRegex);
+  if (looseMatch) {
+    return parseInt(looseMatch[2].replace(/,/g, ''), 10) || 0;
+  }
+
+  return 0;
+}
+
+function extractInspectorName(lines: string[], bodyText: string): string {
+  const stopWordsRegex =
+    /\b(?:Inspection\s*Date|Inspection\s*report|Location|Planned\s*Date|Planned\s*Sample|Order\s*Qty|Supplier|Sampling|Checklist|Conclusion|Approved|Rejected)\b/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/\bInspector\s*Conclusion\b/i.test(line)) continue;
+
+    const m = line.match(/\bInspector(?:\s*Name)?\b/i);
+    if (!m || m.index === undefined) continue;
+
+    const after = line.slice(m.index + m[0].length);
+    const cells = after.split('|').map((c) => c.trim()).filter(Boolean);
+    let candidate = '';
+    if (cells.length > 0 && !stopWordsRegex.test(cells[0])) {
+      candidate = cells[0].replace(/^[:.\-\s]+/, '').trim();
+    } else {
+      candidate = after
+        .split(stopWordsRegex)[0]
+        .replace(/\|.*$/, '')
+        .replace(/^[:.\-\s]+/, '')
+        .trim();
+    }
+
+    if (
+      candidate.length >= 2 &&
+      candidate.length <= 45 &&
+      /[A-Za-z]{2}/.test(candidate) &&
+      !/^(conclusion|report|final|inline|method|approved|rejected|passed|failed|name|date|n\/a)$/i.test(candidate)
+    ) {
+      return candidate;
+    }
+
+    // Check next 1-2 lines if label was on its own line
+    for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+      const nextCand = lines[i + j].split('|')[0].trim();
+      if (!nextCand || stopWordsRegex.test(nextCand) || /\d{4}/.test(nextCand)) continue;
+      if (/^[A-Za-z][A-Za-z\s.\-]{1,40}$/.test(nextCand)) {
+        return nextCand;
+      }
+    }
+  }
+
+  const fallback = bodyText.match(
+    /(?:^|\n)\s*Inspector(?:\s*Name)?\s*[:.\-|]+\s*([A-Za-z][A-Za-z\s.\-]{1,40}?)(?=\s*\||\r|\n|Inspection|Location|Date|Planned|Order|Supplier|Sampling|Checklist|$)/i
+  );
+  if (fallback && fallback[1]) {
+    const cand = fallback[1].trim();
+    if (!/^(conclusion|report|final|inline|approved|rejected)$/i.test(cand)) {
+      return cand;
+    }
+  }
+
+  return '';
+}
+
+function extractInspectionDate(lines: string[], bodyText: string, fileName: string): string {
+  // 1. Check explicit "Inspection Date" row/cell first
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/\bInspection\s*Date\b/i);
+    if (!m || m.index === undefined) continue;
+    const after = line.slice(m.index + m[0].length);
+    const firstCell = after.split('|').map((c) => c.trim()).find(Boolean) || after;
+    const parsed = normalizeParsedDate(firstCell);
+    if (parsed) return parsed;
+
+    // Next line check
+    for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+      const nextParsed = normalizeParsedDate(lines[i + j]);
+      if (nextParsed) return nextParsed;
+    }
+  }
+
+  // 2. Check "Planned Date" in bodyText
+  const plannedMatch = bodyText.match(/\bPlanned\s*Date\s*[:.\-|]*\s*([^\r\n|]+)/i);
+  if (plannedMatch?.[1]) {
+    const parsed = normalizeParsedDate(plannedMatch[1]);
+    if (parsed) return parsed;
+  }
+
+  // 3. Any date pattern inside bodyText
+  const anyDateMatch = bodyText.match(
+    /\b((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})\b/i
+  );
+  if (anyDateMatch?.[1]) {
+    const parsed = normalizeParsedDate(anyDateMatch[1]);
+    if (parsed) return parsed;
+  }
+
+  // 4. Filename date fallback (e.g. 2026 11 09)
+  const fileDateMatch = fileName.match(/(\d{4})[\s\-_](\d{2})[\s\-_](\d{2})/);
+  if (fileDateMatch) {
+    const parsed = formatDateYMD(
+      Number(fileDateMatch[1]),
+      Number(fileDateMatch[2]),
+      Number(fileDateMatch[3])
+    );
+    if (parsed) return parsed;
+  }
+
+  return getLocalTodayYMD();
+}
+
+/**
+ * Intelligent field parser handling Northern Fashions & BESTSELLER Inline / Final format.
  * Rules strictly enforced:
- * - Order Qty / Available: ALWAYS extracts the 2nd number (Available Qty).
- * - Planned Sample Qty / Inspected: ALWAYS extracts the 2nd number (Inspected Qty).
- * - Captures all NOF serials, Factory, Buyer/Brand, Report No, Style No & Style Name.
- * - Captures Critical / Major / Minor defect columns strictly without cross-alteration.
+ * - Parses document body (`rawText`) BEFORE falling back to `fileName`.
+ * - Detects Inspection Type (`Inline` vs `Final` vs `Pre-Final`).
+ * - Order Qty / Available: ALWAYS extracts the 2nd number (after '/').
+ * - Planned Sample Qty / Inspected: ALWAYS extracts the 2nd number (after '/').
+ * - Captures Inspector Name, Inspection Date, Style No/Name, Brand, NOF Serials & Critical/Major/Minor defects.
  */
 export function extractDataFromText(
   rawText: string,
@@ -601,16 +958,38 @@ export function extractDataFromText(
   targetMonth?: string
 ): ExtractedInspectionDraft {
   // Bound text length so even huge OCR dumps execute in < 5ms without UI stalls
-  const safeText = (rawText || '').slice(0, 150000);
-  const combinedSearch = `${fileName}\n${safeText}`;
-  const lines = combinedSearch
+  const bodyText = (rawText || '').slice(0, 150000);
+  const combinedSearch = `${bodyText}\n${fileName}`;
+  const lines = bodyText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && l.length <= 320)
     .slice(0, 1500);
 
-  // 1. Order Number (All NOF Serials)
-  const rawNofMatches = combinedSearch.match(/\bNOF\s*\d{5,10}\b/gi) || [];
+  // 0. Inspection Type (Inline / Final / Pre-Final)
+  let inspectionType = 'Final';
+  const typeMatch =
+    combinedSearch.match(/Inspection\s*report,?\s*(Inline|Final|Pre[-\s]?Final|Initial|Mid[-\s]?Line)\b/i) ||
+    combinedSearch.match(/\b(Inline|Final|Pre[-\s]?Final)\s+Inspection\b/i);
+  if (typeMatch?.[1]) {
+    const rawType = typeMatch[1].toLowerCase().replace(/\s+/g, '-');
+    inspectionType =
+      rawType === 'inline'
+        ? 'Inline'
+        : rawType === 'pre-final'
+        ? 'Pre-Final'
+        : rawType === 'initial'
+        ? 'Initial'
+        : rawType === 'mid-line'
+        ? 'Mid-Line'
+        : 'Final';
+  }
+
+  // 1. Order Number (All NOF Serials - prefer bodyText, fallback to fileName)
+  const rawNofMatches =
+    (bodyText.match(/\bNOF\s*\d{5,10}\b/gi)?.length
+      ? bodyText.match(/\bNOF\s*\d{5,10}\b/gi)
+      : combinedSearch.match(/\bNOF\s*\d{5,10}\b/gi)) || [];
   const nofMatches = Array.from(
     new Set(rawNofMatches.map((s) => s.replace(/\s+/g, '').toUpperCase()))
   );
@@ -621,13 +1000,15 @@ export function extractDataFromText(
     orderNumber = nofMatches.join(' + ');
     nofSerialDetected = true;
   } else {
-    const finalMatch =
-      combinedSearch.match(/Inspection\s*report,?\s*Final\s*[:.\-]?\s*([^\r\n]+)/i) ||
-      combinedSearch.match(/Order\s*(?:Number|No\.?)\s*(?:\([^)]*\))?\s*[:.\-]?\s*([^\r\n]+)/i) ||
+    const reportHeaderMatch =
+      combinedSearch.match(
+        /Inspection\s*report,?\s*(?:Inline|Final|Pre[-\s]?Final)?\s*[:.\-]?\s*([^\r\n|]+)/i
+      ) ||
+      combinedSearch.match(/Order\s*(?:Number|No\.?)\s*(?:\([^)]*\))?\s*[:.\-]?\s*([^\r\n|]+)/i) ||
       combinedSearch.match(/PO\s*(?:Number|No\.?)\s*[:.\-]?\s*([A-Za-z0-9+\-_/ ]{3,40})/i);
-    if (finalMatch && finalMatch[1]) {
-      const candidate = finalMatch[1]
-        .replace(/\b(Style|Supplier|Factory|Order\s*Qty|Planned|Inspection).*$/i, '')
+    if (reportHeaderMatch && reportHeaderMatch[1]) {
+      const candidate = reportHeaderMatch[1]
+        .replace(/\b(BESTSELLER|Style|Supplier|Factory|Order\s*Qty|Planned|Inspection).*$/i, '')
         .trim();
       if (candidate && !/^(N\/A|none|-)$/i.test(candidate)) {
         orderNumber = candidate;
@@ -636,39 +1017,50 @@ export function extractDataFromText(
     }
   }
 
-  // 2. Style Number & Style Name
+  // 2. Style Number & Style Name (STRICTLY search bodyText BEFORE fileName so fileName never overrides Style Name!)
   let styleNumber = '';
   let styleName = '';
 
-  // Match BESTSELLER 13/15/22 style codes or explicit "Style No:" lines
-  const labeledStyleMatch = combinedSearch.match(
-    /\bStyle\s*(?:Number|No\.?)?\s*[:.\-]?\s*(\d{6,10})\b(?:\s*[:.\-]?\s*([^\r\n]*))?/i
+  const bestsellerStyleTitled = bodyText.match(
+    /\b(13\d{6}|15\d{6}|22\d{6})\s*:\s*([A-Za-z][^\r\n|]{2,})/
   );
-  const bestsellerStyleMatch = combinedSearch.match(
-    /\b(13\d{6}|15\d{6}|22\d{6})\b(?:\s*[:.\-]?\s*([^\r\n]*))?/
+  const labeledStyleBody = bodyText.match(
+    /\bStyle\s*(?:Number|No\.?)?\s*[:.\-|]*\s*(\d{6,10})\b(?:\s*[:.\-]?\s*([^\r\n|]*))?/i
+  );
+  const bestsellerStyleBody = bodyText.match(
+    /\b(13\d{6}|15\d{6}|22\d{6})\b(?:\s*[:.\-]?\s*([^\r\n|]*))?/
   );
 
-  if (labeledStyleMatch) {
-    styleNumber = labeledStyleMatch[1].trim();
-    styleName = (labeledStyleMatch[2] || '').trim();
-  } else if (bestsellerStyleMatch) {
-    styleNumber = bestsellerStyleMatch[1].trim();
-    styleName = (bestsellerStyleMatch[2] || '').trim();
+  if (bestsellerStyleTitled) {
+    styleNumber = bestsellerStyleTitled[1].trim();
+    styleName = (bestsellerStyleTitled[2] || '').trim();
+  } else if (labeledStyleBody) {
+    styleNumber = labeledStyleBody[1].trim();
+    styleName = (labeledStyleBody[2] || '').trim();
+  } else if (bestsellerStyleBody) {
+    styleNumber = bestsellerStyleBody[1].trim();
+    styleName = (bestsellerStyleBody[2] || '').trim();
+  } else {
+    const fileStyleMatch = fileName.match(/\b(13\d{6}|15\d{6}|22\d{6})\b/);
+    if (fileStyleMatch) {
+      styleNumber = fileStyleMatch[1];
+    }
   }
 
-  // Also check explicit "Style Name:" or "Description:" line if styleName is empty
-  if (!styleName || /^(Style|Description|Color)/i.test(styleName)) {
-    const descMatch = combinedSearch.match(
-      /(?:Style\s*Name|Product\s*Description|Description)\s*[:.\-]?\s*([^\r\n]+)/i
+  if (!styleName || /^(Style|Description|Color|Online\s*report)/i.test(styleName)) {
+    const descMatch = bodyText.match(
+      /(?:Style\s*Name|Product\s*Description|Description)\s*[:.\-|]*\s*([^\r\n|]+)/i
     );
     if (descMatch && descMatch[1]) {
       styleName = descMatch[1].trim();
     }
   }
-  // Strip trailing next-column labels if PDF placed two columns on one line
   if (styleName) {
     styleName = styleName
-      .replace(/\s+(?:Supplier\s*Name|Factory|Inspection\s*Date|Order\s*Qty|Planned\s*Sample|Inspector|Sampling\s*Method|Color)\s*[:.\-]?.*$/i, '')
+      .replace(
+        /\s+(?:Online\s*report|BESTSELLER|Supplier\s*Name|Factory|Inspection\s*Date|Order\s*Qty|Planned\s*Sample|Inspector|Sampling\s*Method|Color)\s*[:.\-|]?.*$/i,
+        ''
+      )
       .replace(/^[:.\-\s]+/, '')
       .trim();
   }
@@ -678,21 +1070,21 @@ export function extractDataFromText(
 
   // 3. Factory Name
   let factory = 'NORTHERN FASHION LTD.';
-  const factoryMatch = combinedSearch.match(
-    /(?:Supplier\s*Name|Factory\s*Name|Supplier|Factory)\s*[:.\-]?\s*([^\r\n]+)/i
+  const factoryMatch = bodyText.match(
+    /(?:Supplier\s*Name|Factory\s*Name|Supplier|Factory)\s*[:.\-|]*\s*([^\r\n|]+)/i
   );
   if (factoryMatch && factoryMatch[1]) {
     const cleanedFactory = factoryMatch[1]
       .replace(/\s+(?:Buyer|Brand|Inspector|Style|Date|Order\s*Qty|Planned|Location|Sampling).*$/i, '')
       .trim();
-    if (cleanedFactory.length >= 3 && !/^(Final|Inspection|Report)$/i.test(cleanedFactory)) {
+    if (cleanedFactory.length >= 3 && !/^(Final|Inline|Inspection|Report)$/i.test(cleanedFactory)) {
       factory = cleanedFactory;
     }
   }
 
-  // 4. Buyer / Brand (Style prefix 13->NAME IT, 15->ONLY, 22->ONLY&SONS + explicit Brand/Buyer field)
+  // 4. Buyer / Brand (Style prefix 13->NAME IT, 15->ONLY, 22->ONLY&SONS)
   let explicitBuyer = '';
-  const buyerMatch = combinedSearch.match(/\b(?:Brand|Buyer)\s*[:.\-]?\s*([A-Za-z0-9&\s.\-]{2,35})/i);
+  const buyerMatch = bodyText.match(/\b(?:Brand|Buyer)\s*[:.\-|]*\s*([A-Za-z0-9&\s.\-]{2,35})/i);
   if (buyerMatch && buyerMatch[1]) {
     const cand = buyerMatch[1]
       .replace(/\s+(?:Supplier|Factory|Style|Order|Date|Inspector|Report).*$/i, '')
@@ -705,8 +1097,8 @@ export function extractDataFromText(
 
   // 5. Report Number
   const cleanFileBase = fileName.replace(/\.(pdf|png|jpg|jpeg|txt)$/i, '').trim();
-  const parsedReportMatch = combinedSearch.match(
-    /\bReport\s*(?:Number|No\.?|ID|#)\s*[:.\-]?\s*([A-Za-z0-9\-_/]{2,50})/i
+  const parsedReportMatch = bodyText.match(
+    /\bReport\s*(?:Number|No\.?|ID|#)\s*[:.\-|]*\s*([A-Za-z0-9\-_/]{2,50})/i
   );
   const isGenericFile =
     !cleanFileBase ||
@@ -718,108 +1110,71 @@ export function extractDataFromText(
     styleNumber ||
     'Report';
 
-  // 6. Inspected Sample Quantity:
-  // STRICT RULE: Planned Sample Qty/Inspected -> A / B -> ALWAYS pick 2nd number (B)!
-  let inspectedQuantity = 0;
-  const sampleSlashMatch =
-    combinedSearch.match(
-      /Planned\s*Sample\s*(?:Qty|Quantity)?\s*[\/|]\s*Inspected\s*[:.\-]?\s*([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
-    ) ||
-    combinedSearch.match(
-      /Sample\s*(?:Qty|Quantity)?\s*[\/|]\s*Inspected\s*[:.\-]?\s*([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
-    ) ||
-    combinedSearch.match(
-      /Inspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)?\s*[:.\-]?\s*([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
+  // 6. Inspected Sample Quantity (Planned Sample Qty/Inspected -> 2nd number after '/')
+  let inspectedQuantity = extractSlashSecondValue(
+    lines,
+    bodyText,
+    /(?:Planned\s*Sample|Sample)\s*(?:Qty|Quantity)?\s*[\/|]\s*Inspected/i
+  );
+  if (!inspectedQuantity) {
+    const altSlash = bodyText.match(
+      /Inspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)?\s*[:.\-|]*\s*([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
     );
-
-  if (sampleSlashMatch) {
-    inspectedQuantity = parseInt(sampleSlashMatch[2].replace(/,/g, ''), 10) || 0;
-  } else {
-    const singleInspectedMatch = combinedSearch.match(
-      /\bInspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)\s*[:.\-]?\s*([\d,]+)/i
-    );
-    if (singleInspectedMatch) {
-      inspectedQuantity = parseInt(singleInspectedMatch[1].replace(/,/g, ''), 10) || 0;
+    if (altSlash) {
+      inspectedQuantity = parseInt(altSlash[2].replace(/,/g, ''), 10) || 0;
+    } else {
+      const singleInspected = bodyText.match(
+        /\bInspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)\s*[:.\-|]*\s*([\d,]+)/i
+      );
+      if (singleInspected) {
+        inspectedQuantity = parseInt(singleInspected[1].replace(/,/g, ''), 10) || 0;
+      }
     }
   }
 
-  // 7. Order Quantity / Available:
-  // STRICT RULE: Order Qty/Available -> A / B -> ALWAYS pick 2nd number (B)!
-  let orderQuantity = 0;
-  const orderQtySlashMatch =
-    combinedSearch.match(
-      /Order\s*(?:Qty|Quantity)\s*[\/|]\s*Available\s*[:.\-]?\s*([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
-    ) ||
-    combinedSearch.match(
+  // 7. Order Quantity / Available (Order Qty/Available -> 2nd number after '/')
+  let orderQuantity = extractSlashSecondValue(
+    lines,
+    bodyText,
+    /Order\s*(?:Qty|Quantity)\s*[\/|]\s*Available/i
+  );
+  if (!orderQuantity) {
+    const altOrderSlash = bodyText.match(
       /Order\s*(?:Qty|Quantity)[^\r\n\d]{0,20}([\d,]+)\s*[\/|\\]\s*([\d,]+)/i
     );
-
-  if (orderQtySlashMatch) {
-    orderQuantity = parseInt((orderQtySlashMatch[2] || orderQtySlashMatch[1]).replace(/,/g, ''), 10) || 0;
-  } else {
-    const singleOrderQty =
-      combinedSearch.match(/Available\s*(?:Qty|Quantity)\s*[:.\-]?\s*([\d,]+)/i) ||
-      combinedSearch.match(/Order\s*(?:Quantity|Qty)\s*(?:\(Pcs\))?\s*[:.\-]?\s*([\d,]+)/i) ||
-      combinedSearch.match(/Total\s*Order\s*Qty\s*[:.\-]?\s*([\d,]+)/i);
-    if (singleOrderQty) {
-      orderQuantity = parseInt(singleOrderQty[1].replace(/,/g, ''), 10) || 0;
+    if (altOrderSlash) {
+      orderQuantity = parseInt((altOrderSlash[2] || altOrderSlash[1]).replace(/,/g, ''), 10) || 0;
+    } else {
+      const singleOrderQty =
+        bodyText.match(/Available\s*(?:Qty|Quantity)\s*[:.\-|]*\s*([\d,]+)/i) ||
+        bodyText.match(/Order\s*(?:Quantity|Qty)\s*(?:\(Pcs\))?\s*[:.\-|]*\s*([\d,]+)/i) ||
+        bodyText.match(/Total\s*Order\s*Qty\s*[:.\-|]*\s*([\d,]+)/i);
+      if (singleOrderQty) {
+        orderQuantity = parseInt(singleOrderQty[1].replace(/,/g, ''), 10) || 0;
+      }
     }
   }
 
   // 8. Inspector Name & Conclusion
-  let inspector = '';
-  const inspectorMatch = combinedSearch.match(
-    /Inspector(?:\s*Name)?\s*[:.\-]?\s*([A-Za-z][A-Za-z\s.]{1,40}?)(?=\r|\n|Inspection|Location|Date|Planned|Order|Supplier|Sampling|Checklist|$)/i
-  );
-  if (inspectorMatch && inspectorMatch[1].trim().length >= 2) {
-    const candidate = inspectorMatch[1].trim();
-    if (!/^(conclusion|report|final|method|approved|rejected|passed|failed)$/i.test(candidate)) {
-      inspector = candidate;
-    }
-  }
+  const inspector = extractInspectorName(lines, bodyText);
 
   let inspectionResult: 'PASSED' | 'FAILED' = 'PASSED';
   let inspectorConclusion: 'Approved' | 'Rejected' = 'Approved';
   if (
-    /Inspector\s*Conclusion[^\r\n]*(Reject|Rejected|Fail|Failed)/i.test(combinedSearch) ||
-    /\bResult\s*[:.\-]?\s*(FAIL|FAILED|REJECTED)\b/i.test(combinedSearch)
+    /Inspector\s*Conclusion[^\r\n]*(Reject|Rejected|Fail|Failed)/i.test(bodyText) ||
+    /\bResult\s*[:.\-|]*\s*(FAIL|FAILED|REJECTED)\b/i.test(bodyText)
   ) {
     inspectionResult = 'FAILED';
     inspectorConclusion = 'Rejected';
   }
 
   // 9. Inspection Date
-  let inspectionDate = '';
-  const fileDateMatch = fileName.match(/(\d{4})[\s\-_](\d{2})[\s\-_](\d{2})/);
-  if (fileDateMatch) {
-    inspectionDate = `${fileDateMatch[1]}-${fileDateMatch[2]}-${fileDateMatch[3]}`;
-  }
-  if (!inspectionDate) {
-    const textDateMatch = combinedSearch.match(
-      /Inspection\s*Date\s*[:.\-]?\s*([0-9A-Za-z,\.\-\/\s]{6,25})/i
-    );
-    if (textDateMatch) {
-      const normalized = normalizeParsedDate(textDateMatch[1]);
-      if (normalized) inspectionDate = normalized;
-    }
-  }
-  if (!inspectionDate) {
-    const anyDateLine = combinedSearch.match(
-      /\b(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})\b/
-    );
-    if (anyDateLine) {
-      const normalized = normalizeParsedDate(anyDateLine[1]);
-      if (normalized) inspectionDate = normalized;
-    }
-  }
-  if (!inspectionDate) {
-    inspectionDate = new Date().toISOString().split('T')[0];
-  }
+  const inspectionDate = extractInspectionDate(lines, bodyText, fileName);
 
   // 10. Sampling Method
   let inspectionLevel = 'AQL 2.5/2.5 Level II Reduced';
-  const samplingMatch = combinedSearch.match(
-    /(?:Sampling\s*Method|Inspection\s*Level|AQL\s*Level)\s*[:.\-]?\s*([^\r\n]+)/i
+  const samplingMatch = bodyText.match(
+    /(?:Sampling\s*Method|Inspection\s*Level|AQL\s*Level)\s*[:.\-|]*\s*([^\r\n|]+)/i
   );
   if (samplingMatch && samplingMatch[1].trim().length > 2) {
     inspectionLevel = samplingMatch[1].trim();
@@ -830,39 +1185,42 @@ export function extractDataFromText(
   const consumedLineIndices = new Set<number>();
 
   const isMetadataOrSummaryLine = (desc: string) =>
-    /^(TOTAL|SUB[-\s]?TOTAL|AQL\s*MAX|AQL|MAX|ACCEPT|REJECT|MINOR|MAJOR|CRITICAL|DEFECT\s*DESCRIPTION|DESCRIPTION|SAMPLING|ORDER\s*QTY|PLANNED\s*SAMPLE|INSPECTED|STYLE|INSPECTION\s*DATE|NOF\d|PAGE\s+\d|RESULT|CARTON|LOCATION|SUPPLIER|FACTORY|BUYER|BRAND)/i.test(
+    /^(TOTAL|SUB[-\s]?TOTAL|AQL\s*MAX|AQL|MAX|ACCEPT|REJECT|MINOR|MAJOR|CRITICAL|DEFECT\s*DESCRIPTION|DESCRIPTION|SAMPLING|ORDER\s*QTY|PLANNED\s*SAMPLE|PLANNED\s*DATE|INSPECTED|STYLE|INSPECTION\s*DATE|INSPECTION\s*REPORT|INSPECTOR|CHECKLIST|NOF\d|PAGE\s+\d|RESULT|CARTON|LOCATION|SUPPLIER|FACTORY|BUYER|BRAND|SUMMARY|CHECK\s*FOR|STANDARD\s*CHECKLIST|CHECKPOINT)/i.test(
       desc.trim()
     );
 
-  const hasDefectCodePrefix = (desc: string) =>
-    /^([A-Za-z]{2,4}-?\d{1,3})\b/.test(desc.trim());
+  const hasDefectCodePrefix = (desc: string) => /^([A-Za-z]{2,4}-?\d{1,3})\b/.test(desc.trim());
 
-  // 3-column trailing counts regex: allows digits & symbols inside description, requires 3 trailing (num | -) columns
+  // 3-column trailing counts regex: supports space OR ' | ' delimiters between Critical / Major / Minor cells
   const trailing3ColRegex =
-    /^(.+?)\s+(\d{1,3}|[-–—])\s+(\d{1,3}|[-–—])\s+(\d{1,3}|[-–—])\s*$/;
+    /^(.+?)(?:\s*\|\s*|\s+)(\d{1,3}|[-–—])(?:\s*\|\s*|\s+)(\d{1,3}|[-–—])(?:\s*\|\s*|\s+)(\d{1,3}|[-–—])\s*$/;
 
   for (let i = 0; i < lines.length; i++) {
     if (consumedLineIndices.has(i)) continue;
     let candidateLine = lines[i];
 
-    // If line starts with a defect code but wraps description/columns onto the next line, try joining with next line
-    if (!trailing3ColRegex.test(candidateLine) && hasDefectCodePrefix(candidateLine) && i + 1 < lines.length) {
-      const merged = `${candidateLine} ${lines[i + 1]}`;
-      if (trailing3ColRegex.test(merged)) {
-        candidateLine = merged;
-        consumedLineIndices.add(i + 1);
+    // If line starts with a defect code (e.g. Se-9, Po-2, Cle-5) but wrapped onto 1-3 lines, merge cleanly
+    if (!trailing3ColRegex.test(candidateLine) && hasDefectCodePrefix(candidateLine)) {
+      let merged = candidateLine;
+      for (let lookahead = 1; lookahead <= 3 && i + lookahead < lines.length; lookahead++) {
+        const nextSeg = lines[i + lookahead];
+        if (hasDefectCodePrefix(nextSeg) || isMetadataOrSummaryLine(nextSeg)) break;
+        merged = `${merged} ${nextSeg}`;
+        if (trailing3ColRegex.test(merged)) {
+          candidateLine = merged;
+          for (let k = 1; k <= lookahead; k++) consumedLineIndices.add(i + k);
+          break;
+        }
       }
     }
 
     const rowMatch = candidateLine.match(trailing3ColRegex);
     if (rowMatch) {
-      const originalName = rowMatch[1].trim();
+      const originalName = rowMatch[1].replace(/\s*\|\s*$/, '').trim();
       if (isMetadataOrSummaryLine(originalName)) continue;
 
-      // Require either a defect code prefix OR substantial alphabetic description (avoid date rows like "2026 11 09")
       const letterCount = (originalName.match(/[A-Za-z]/g) || []).length;
       if (!hasDefectCodePrefix(originalName) && letterCount < 4) continue;
-      // Ignore lines that look like numeric measurement charts without code or defect words
       if (/^\d{4}\b/.test(originalName) && !hasDefectCodePrefix(originalName)) continue;
 
       const parseCol = (tok: string) => {
@@ -881,7 +1239,6 @@ export function extractDataFromText(
       consumedLineIndices.add(i);
       const classification = classifyRawDefect(originalName, defectMaster, defectGroups);
 
-      // Strictly preserve each column's exact severity and quantity!
       if (critVal > 0) {
         parsedDefects.push({
           id: `def-${Date.now()}-${parsedDefects.length + 1}`,
@@ -918,7 +1275,7 @@ export function extractDataFromText(
     }
   }
 
-  // Pass 2: Explicit severity lines e.g. "CL5 Oil spots...: 1 Major, 2 Minor" or "Cle-3 Untrimmed thread: 1 Minor"
+  // Pass 2: Explicit severity lines e.g. "CL5 Oil spots...: 1 Major, 2 Minor"
   const explicitSeverityLineRegex =
     /^(?:[-*•]\s*)?(.+?)\s*[:\-–]\s*((?:\d{1,3}\s+(?:Critical|Major|Minor)(?:\s*[,;/]\s*)?)+)\s*$/i;
   const severityPairRegex = /(\d{1,3})\s+(Critical|Major|Minor)\b/gi;
@@ -958,7 +1315,7 @@ export function extractDataFromText(
   let defects = parsedDefects;
   if (
     defects.length === 0 &&
-    (fileName.includes('4773200') || fileName.includes('22041282') || rawText.includes('22041282'))
+    (fileName.includes('4773200') || fileName.includes('22041282') || bodyText.includes('22041282'))
   ) {
     defects = FACTORY_PDF_REPORTS[0].sampleDefects.map((d, idx) => ({
       id: `def-${Date.now()}-${idx + 1}`,
@@ -989,9 +1346,10 @@ export function extractDataFromText(
     buyer: brand,
     brand: brand,
     factory,
-    inspector: inspector || 'QMS Inspector',
+    inspector: inspector || '',
     inspectorConclusion,
     reportNumber,
+    inspectionType,
     inspectionDate,
     targetMonth: targetMonth || inspectionDate.slice(0, 7),
     floor,

@@ -37,16 +37,17 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   const [buyer, setBuyer] = useState(initialBrand);
   const [factory, setFactory] = useState(draft.factory || 'NORTHERN FASHION LTD.');
   const [reportNumber, setReportNumber] = useState(draft.reportNumber);
+  const [inspectionType, setInspectionType] = useState(draft.inspectionType || 'Final');
   const [inspectionDate, setInspectionDate] = useState(draft.inspectionDate);
   const [orderNumber, setOrderNumber] = useState(draft.orderNumber);
   const [styleNumber, setStyleNumber] = useState(draft.styleNumber);
   const [color, setColor] = useState(draft.color || 'Solid / Melange');
   const [productDescription, setProductDescription] = useState(draft.styleName || draft.productDescription);
   const [orderQuantity, setOrderQuantity] = useState<number>(Number(draft.orderQuantity) || 0);
-  const [inspectedQuantity, setInspectedQuantity] = useState<number>(Number(draft.inspectedQuantity) || 50);
+  const [inspectedQuantity, setInspectedQuantity] = useState<number>(Number(draft.inspectedQuantity) || 0);
   const [inspectionLevel, setInspectionLevel] = useState(draft.inspectionLevel || 'AQL 2.5/2.5 Level II Reduced');
 
-  const [inspector, setInspector] = useState(draft.inspector || 'Salah Uddin');
+  const [inspector, setInspector] = useState(draft.inspector || '');
   const [poNumber, setPoNumber] = useState(draft.poNumber || draft.orderNumber);
 
   // User Requirement 5: Inspector Conclusion option with Approved (Blue/Green) / Rejected (Red)
@@ -147,6 +148,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       brand: buyer,
       factory,
       reportNumber,
+      inspectionType,
       inspectionDate,
       orderNumber,
       poNumber: poNumber || orderNumber,
@@ -213,6 +215,9 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                     <Hash className="w-3 h-3" /> NOF Serial Verified
                   </span>
                 )}
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
+                  {inspectionType} Inspection
+                </span>
               </div>
               <p className="text-xs text-sky-200 mt-0.5">
                 File: <span className="font-semibold text-white">{draft.pdfFileName}</span> &bull; Verify all metrics before committing to the QMS database.
@@ -434,7 +439,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 </div>
               </div>
 
-              <div className="col-span-2">
+              <div>
                 <label className="block text-slate-500 font-medium mb-1">Style Name / Product Description</label>
                 <input
                   type="text"
@@ -442,6 +447,21 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                   onChange={(e) => setProductDescription(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-sky-500 font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 font-medium mb-1">Inspection Type (Stage)</label>
+                <select
+                  value={inspectionType}
+                  onChange={(e) => setInspectionType(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="Final">Final</option>
+                  <option value="Inline">Inline</option>
+                  <option value="Pre-Final">Pre-Final</option>
+                  <option value="Initial">Initial</option>
+                  <option value="Mid-Line">Mid-Line</option>
+                </select>
               </div>
 
               <div className="col-span-2">

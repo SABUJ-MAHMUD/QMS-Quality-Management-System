@@ -454,40 +454,149 @@ export function classifyRawDefect(
   const clean = rawText.trim();
   const lower = clean.toLowerCase();
 
-  // Check if leading prefix is ambiguous (like NO1 or SL-1 where description text should take precedence if descriptive)
-  const leadingCodeMatch = clean.match(/^([A-Za-z]{2,3}-?\d{1,2})\b/);
+  // Check if leading prefix exists (e.g., Se-10, La-9, Po-2, Cle-5, CL5, NO1)
+  const leadingCodeMatch = clean.match(/^([A-Za-z]{2,4}-?\d{1,3})\b/);
   const leadingRawCode = leadingCodeMatch ? leadingCodeMatch[1].toUpperCase() : '';
-  const isAmbiguousPrefix = /^(NO|SL)-?\d/i.test(leadingRawCode);
+  const normalizedCode = leadingRawCode ? normalizeCompactDefectCode(leadingRawCode) : null;
+  const codePrefix = normalizedCode ? normalizedCode.split('-')[0] : '';
+  const prefixCategory = codePrefix
+    ? MASTER_DEFECT_23_CATEGORIES.find((c) => c.code.toUpperCase() === codePrefix)
+    : undefined;
+  const descriptionPart = leadingCodeMatch
+    ? clean.slice(leadingCodeMatch[0].length).replace(/^[:.\-\s]+/, '').toLowerCase()
+    : lower;
 
-  // 1. Direct canonical / compact code prefix match (skip immediate return if ambiguous code has rich description)
-  if (leadingCodeMatch && !isAmbiguousPrefix) {
-    const normalizedCode = normalizeCompactDefectCode(leadingRawCode);
-    if (normalizedCode) {
-      const prefix = normalizedCode.split('-')[0];
-      const cat = MASTER_DEFECT_23_CATEGORIES.find((c) => c.code.toUpperCase() === prefix);
-      if (cat) {
-        const sub = cat.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
-        if (sub) {
+  // 1. If descriptive text is present, match exact sub-defect name or semantic keyword first
+  // (Handles BESTSELLER codes whose numbering differs from catalog, e.g., "Se-10 Broken stitching", "La-9 Main label incorrectly placed")
+  if (descriptionPart.length >= 4) {
+    // 1a. Exact sub-defect name match within prefix category first, then across all categories
+    const searchCats = prefixCategory
+      ? [prefixCategory, ...MASTER_DEFECT_23_CATEGORIES.filter((c) => c !== prefixCategory)]
+      : MASTER_DEFECT_23_CATEGORIES;
+
+    for (const cat of searchCats) {
+      for (const sub of cat.subDefects) {
+        if (descriptionPart.includes(sub.name.toLowerCase())) {
           return {
             standardDefectName: sub.name,
             defectGroupId: `dg-${cat.code.toLowerCase()}`,
             severity: sub.defaultSeverity,
             matchType: 'Auto-Matched',
-            confidence: 99,
+            confidence: 97,
           };
         }
+      }
+    }
+
+    // 1b. Semantic description matching
+    if (lower.includes('oil spot') || lower.includes('oil stain') || (lower.includes('oil') && lower.includes('stain'))) {
+      return { standardDefectName: 'Oil spots or stains (cannot be removed)', defectGroupId: 'dg-cle', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+    }
+    if (lower.includes('untrimmed') || lower.includes('uncut thread') || lower.includes('loose thread')) {
+      return { standardDefectName: 'Untrimmed thread ends reversed / Visible thread', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 94 };
+    }
+    if (lower.includes('dirt') || lower.includes('stain') || lower.includes('soil') || lower.includes('spot') || lower.includes('chalk') || lower.includes('glue') || lower.includes('clean')) {
+      return { standardDefectName: 'Spot, stain and soil marks', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (lower.includes('collar point')) {
+      return { standardDefectName: 'Collar points not uniform and balanced (other than specified)', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 94 };
+    }
+    if (lower.includes('neckline') || lower.includes('half-moon') || lower.includes('collar') || lower.includes('cuff')) {
+      return { standardDefectName: 'Incorrect Neckline and half-moon shape', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (lower.includes('shine') || lower.includes('press mark') || lower.includes('iron')) {
+      return { standardDefectName: 'Shine mark on fabric from iron/heat', defectGroupId: 'dg-pr', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (lower.includes('foreign yarn') || lower.includes('fly yarn')) {
+      return { standardDefectName: 'Foreign Yarns / Fly yarn', defectGroupId: 'dg-fa', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (lower.includes('hole') || lower.includes('needle cut')) {
+      return { standardDefectName: 'Hole / Needle cut / Yarn cut', defectGroupId: 'dg-fa', severity: 'Critical', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (lower.includes('broken stitch')) {
+      return { standardDefectName: 'Broken stitching / Ruptured seam', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+    }
+    if (lower.includes('open seam')) {
+      return { standardDefectName: 'Open seam / Hole in seam', defectGroupId: 'dg-se', severity: 'Critical', matchType: 'Auto-Matched', confidence: 94 };
+    }
+    if (lower.includes('skip stitch')) {
+      return { standardDefectName: 'Skip stitch / Dropped stitch', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
+    }
+    if (lower.includes('twisted seam') || lower.includes('seam twisted')) {
+      return { standardDefectName: 'Twisted seam / Seam torque', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
+    }
+    if (lower.includes('seam') || lower.includes('pucker') || lower.includes('stitch')) {
+      return { standardDefectName: 'Seam puckering / Gathered seam', defectGroupId: 'dg-se', severity: 'Minor', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('label') && (lower.includes('place') || lower.includes('position') || lower.includes('incorrect'))) {
+      return { standardDefectName: 'Label placed in wrong position', defectGroupId: 'dg-la', severity: 'Minor', matchType: 'Auto-Matched', confidence: 93 };
+    }
+    if (lower.includes('label') || lower.includes('hangtag')) {
+      return { standardDefectName: 'Missing main brand label', defectGroupId: 'dg-la', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('shaped poorly') || (prefixCategory?.code === 'Po' && lower.includes('shape'))) {
+      return { standardDefectName: 'Shaped poorly', defectGroupId: 'dg-po', severity: 'Minor', matchType: 'Auto-Matched', confidence: 94 };
+    }
+    if (lower.includes('pocket') || lower.includes('flap')) {
+      return { standardDefectName: 'Sewn crooked', defectGroupId: 'dg-po', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('shade') || lower.includes('shading')) {
+      return { standardDefectName: 'Panel to panel shade difference', defectGroupId: 'dg-sh', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('embroidery')) {
+      return { standardDefectName: 'Embroidery missing stitches / gaps', defectGroupId: 'dg-em', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('print')) {
+      return { standardDefectName: 'Print cracking / Poor ink curing', defectGroupId: 'dg-pn', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('button') || lower.includes('zipper') || lower.includes('snap')) {
+      return { standardDefectName: 'Button missing / Broken button', defectGroupId: 'dg-clo', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('placket')) {
+      return { standardDefectName: 'Unbalanced and crooked placket top stitch', defectGroupId: 'dg-pl', severity: 'Minor', matchType: 'Auto-Matched', confidence: 88 };
+    }
+    if (lower.includes('hem')) {
+      return { standardDefectName: 'Wrong shape / Asymmetrical hem', defectGroupId: 'dg-he', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+    }
+
+    for (const dm of defectMaster) {
+      if (
+        lower.includes(dm.standardDefectName.toLowerCase()) ||
+        dm.keywords?.some((kw) => kw.length > 2 && lower.includes(kw.toLowerCase()))
+      ) {
         return {
-          standardDefectName: cat.subDefects[0]?.name || clean.replace(/^[A-Za-z]{2,3}-?\d{1,2}\s*/, ''),
-          defectGroupId: `dg-${cat.code.toLowerCase()}`,
-          severity: cat.subDefects[0]?.defaultSeverity || 'Major',
+          standardDefectName: dm.standardDefectName,
+          defectGroupId: dm.defectGroupId,
+          severity: dm.severity,
           matchType: 'Auto-Matched',
-          confidence: 92,
+          confidence: 90,
         };
       }
     }
   }
 
-  // 2. Exact or substring match in custom defectMaster or MASTER_DEFECT_23_CATEGORIES
+  // 2. Direct canonical / compact code prefix lookup fallback
+  if (normalizedCode && prefixCategory) {
+    const sub = prefixCategory.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
+    if (sub) {
+      return {
+        standardDefectName: sub.name,
+        defectGroupId: `dg-${prefixCategory.code.toLowerCase()}`,
+        severity: sub.defaultSeverity,
+        matchType: 'Auto-Matched',
+        confidence: 96,
+      };
+    }
+    return {
+      standardDefectName: prefixCategory.subDefects[0]?.name || clean.replace(/^[A-Za-z]{2,4}-?\d{1,3}\s*/, ''),
+      defectGroupId: `dg-${prefixCategory.code.toLowerCase()}`,
+      severity: prefixCategory.subDefects[0]?.defaultSeverity || 'Major',
+      matchType: 'Auto-Matched',
+      confidence: 88,
+    };
+  }
+
+  // 3. Sub-code substring match fallback
   for (const cat of MASTER_DEFECT_23_CATEGORIES) {
     for (const sub of cat.subDefects) {
       if (lower.includes(sub.code.toLowerCase()) || lower.includes(sub.name.toLowerCase())) {
@@ -496,103 +605,8 @@ export function classifyRawDefect(
           defectGroupId: `dg-${cat.code.toLowerCase()}`,
           severity: sub.defaultSeverity,
           matchType: 'Auto-Matched',
-          confidence: 95,
+          confidence: 92,
         };
-      }
-    }
-  }
-
-  for (const dm of defectMaster) {
-    if (
-      lower.includes(dm.standardDefectName.toLowerCase()) ||
-      dm.keywords?.some((kw) => kw.length > 2 && lower.includes(kw.toLowerCase()))
-    ) {
-      return {
-        standardDefectName: dm.standardDefectName,
-        defectGroupId: dm.defectGroupId,
-        severity: dm.severity,
-        matchType: 'Auto-Matched',
-        confidence: 92,
-      };
-    }
-  }
-
-  // 3. Semantic description matching against exact 23 Master Defect Category sub-defect names
-  if (lower.includes('oil spot') || lower.includes('oil stain') || (lower.includes('oil') && lower.includes('stain'))) {
-    return { standardDefectName: 'Oil spots or stains (cannot be removed)', defectGroupId: 'dg-cle', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
-  }
-  if (lower.includes('untrimmed') || lower.includes('uncut thread') || lower.includes('loose thread')) {
-    return { standardDefectName: 'Untrimmed thread ends reversed / Visible thread', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
-  }
-  if (lower.includes('dirt') || lower.includes('stain') || lower.includes('soil') || lower.includes('spot') || lower.includes('chalk') || lower.includes('glue') || lower.includes('clean')) {
-    return { standardDefectName: 'Spot, stain and soil marks', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('collar') || lower.includes('neck') || lower.includes('half-moon') || lower.includes('cuff')) {
-    if (lower.includes('collar point')) {
-      return { standardDefectName: 'Collar points not uniform and balanced (other than specified)', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
-    }
-    return { standardDefectName: 'Incorrect Neckline and half-moon shape', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('shine') || lower.includes('press mark') || lower.includes('iron')) {
-    return { standardDefectName: 'Shine mark on fabric from iron/heat', defectGroupId: 'dg-pr', severity: 'Major', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('foreign yarn') || lower.includes('fly yarn')) {
-    return { standardDefectName: 'Foreign Yarns / Fly yarn', defectGroupId: 'dg-fa', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
-  }
-  if (lower.includes('hole') || lower.includes('needle cut')) {
-    return { standardDefectName: 'Hole / Needle cut / Yarn cut', defectGroupId: 'dg-fa', severity: 'Critical', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('broken stitch')) {
-    return { standardDefectName: 'Broken stitching / Ruptured seam', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('open seam')) {
-    return { standardDefectName: 'Open seam / Hole in seam', defectGroupId: 'dg-se', severity: 'Critical', matchType: 'Auto-Matched', confidence: 90 };
-  }
-  if (lower.includes('skip stitch') || lower.includes('stitch') || lower.includes('seam') || lower.includes('pucker')) {
-    return { standardDefectName: 'Skip stitch / Dropped stitch', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 86 };
-  }
-  if (lower.includes('shade') || lower.includes('shading')) {
-    return { standardDefectName: 'Panel to panel shade difference', defectGroupId: 'dg-sh', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
-  }
-  if (lower.includes('embroidery')) {
-    return { standardDefectName: 'Embroidery missing stitches / gaps', defectGroupId: 'dg-em', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
-  }
-  if (lower.includes('print')) {
-    return { standardDefectName: 'Print cracking / Poor ink curing', defectGroupId: 'dg-pn', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
-  }
-  if (lower.includes('label') || lower.includes('hangtag')) {
-    return { standardDefectName: 'Missing main brand label', defectGroupId: 'dg-la', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
-  }
-  if (lower.includes('button') || lower.includes('zipper') || lower.includes('snap')) {
-    return { standardDefectName: 'Button missing / Broken button', defectGroupId: 'dg-clo', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
-  }
-  if (lower.includes('pocket') || lower.includes('flap')) {
-    return { standardDefectName: 'Sewn crooked', defectGroupId: 'dg-po', severity: 'Major', matchType: 'Auto-Matched', confidence: 86 };
-  }
-  if (lower.includes('placket')) {
-    return { standardDefectName: 'Unbalanced and crooked placket top stitch', defectGroupId: 'dg-pl', severity: 'Minor', matchType: 'Auto-Matched', confidence: 86 };
-  }
-  if (lower.includes('hem')) {
-    return { standardDefectName: 'Wrong shape / Asymmetrical hem', defectGroupId: 'dg-he', severity: 'Major', matchType: 'Auto-Matched', confidence: 86 };
-  }
-
-  // 4. Ambiguous leading code fallback (NO1 -> Ne-1, SL-1 -> Cle-1) when description didn't match a specific keyword
-  if (leadingCodeMatch && isAmbiguousPrefix) {
-    const normalizedCode = normalizeCompactDefectCode(leadingRawCode);
-    if (normalizedCode) {
-      const prefix = normalizedCode.split('-')[0];
-      const cat = MASTER_DEFECT_23_CATEGORIES.find((c) => c.code.toUpperCase() === prefix);
-      if (cat) {
-        const sub = cat.subDefects.find((s) => s.code.toUpperCase() === normalizedCode) || cat.subDefects[0];
-        if (sub) {
-          return {
-            standardDefectName: sub.name,
-            defectGroupId: `dg-${cat.code.toLowerCase()}`,
-            severity: sub.defaultSeverity,
-            matchType: 'Auto-Matched',
-            confidence: 88,
-          };
-        }
       }
     }
   }
