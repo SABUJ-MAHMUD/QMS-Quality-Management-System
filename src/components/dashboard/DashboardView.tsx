@@ -16,7 +16,6 @@ import {
   FileSpreadsheet,
   Download,
 } from 'lucide-react';
-import { exportDashboardToPptx } from '../../utils/exportUtils';
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,7 +31,13 @@ import {
   LabelList,
 } from 'recharts';
 import { SpeedometerGauge } from '../common/SpeedometerGauge';
-import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../../data/defectMasterData';
+import { DefectAxisTick } from '../common/DefectAxisTick';
+import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
+import { filterReports } from '../../utils/oqlCalculator';
+import {
+  computeTopSingleDefects,
+  computeMonthToMonthTopDefects,
+} from '../../utils/dashboardAnalytics';
 
 interface InlineCapaRow {
   serial: number;
@@ -56,6 +61,8 @@ export const DashboardView: React.FC = () => {
     resetFilters,
     defectGroups,
     filteredReports,
+    kpiMetrics,
+    settings,
   } = useApp();
 
   // Dynamic Months list from uploaded reports
@@ -93,7 +100,12 @@ export const DashboardView: React.FC = () => {
     return Array.from(set).sort();
   }, [reports]);
 
+  const hasBuyerFilter = Array.isArray(filters.buyer)
+    ? filters.buyer.length > 0 && !filters.buyer.includes('ALL')
+    : filters.buyer !== 'ALL';
+
   const hasActiveFilters =
+    hasBuyerFilter ||
     filters.month !== 'ALL' ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
@@ -146,37 +158,11 @@ export const DashboardView: React.FC = () => {
     return calculatedOql > 0 ? calculatedOql : 0;
   }, [reports, calculatedOql]);
 
-  // Middle Left: Highest Defects Category column chart data
-  const highestDefectsData = useMemo(() => {
-    const map = new Map<string, number>();
-
-    filteredReports.forEach((r) => {
-      if (r.defects && r.defects.length > 0) {
-        r.defects.forEach((d) => {
-          const resolved = resolveDefectAccurate(d);
-          const name = resolved.standardDefectName || d.originalDefectName;
-          map.set(name, (map.get(name) || 0) + (d.defectQuantity || 1));
-        });
-      }
-    });
-
-    // If zero reports uploaded, return empty array
-    if (map.size === 0) {
-      return [];
-    }
-
-    const totalDefectSum = Array.from(map.values()).reduce((a, b) => a + b, 0);
-    const sorted = Array.from(map.entries())
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: totalDefectSum > 0 ? Math.round((count / totalDefectSum) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
-
-    return sorted;
-  }, [filteredReports]);
+  // Middle Left: Highest Single Defects column chart data (max 5, single defects with official PDF code & %)
+  const highestDefectsData = useMemo(
+    () => computeTopSingleDefects(filteredReports, 5),
+    [filteredReports]
+  );
 
   // Middle Right: Month wise OQL Performance (OBH Only)
   // 100% Dynamic calculation from actual uploaded monthly reports!
@@ -211,50 +197,22 @@ export const DashboardView: React.FC = () => {
       }));
   }, [reports]);
 
-  // Bottom Left: Month-to-Month TOP Single Defects Comparison
-  // 100% Dynamic comparison based on uploaded reports for consecutive months
-  const monthComparisonData = useMemo(() => {
-    const sortedMonths = [...availableMonths];
-    if (sortedMonths.length === 0) return [];
+  // Bottom Left: Month-to-Month TOP Single Defects Comparison (e.g. Nov 2026 vs Oct 2026)
+  // Respects non-month filters (Buyer, Style, Order, Group, Severity, Result) while comparing across consecutive calendar months
+  const nonMonthFilteredReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { ...filters, month: 'ALL', dateFrom: '', dateTo: '' },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters, settings.financialYearStartMonth]
+  );
 
-    const currMonthKey = filters.month !== 'ALL' ? filters.month : sortedMonths[0];
-    const currIdx = sortedMonths.indexOf(currMonthKey);
-    const prevMonthKey = sortedMonths[currIdx + 1] || sortedMonths[1] || '';
-
-    const getMonthSingleDefects = (monthKey: string) => {
-      const map = new Map<string, number>();
-      if (!monthKey) return map;
-      reports
-        .filter((r) => (r.targetMonth === monthKey) || (r.inspectionDate && r.inspectionDate.startsWith(monthKey)))
-        .forEach((r) => {
-          r.defects?.forEach((d) => {
-            const resolved = resolveDefectAccurate(d);
-            const name = resolved.standardDefectName || d.originalDefectName;
-            map.set(name, (map.get(name) || 0) + (Number(d.defectQuantity) || 1));
-          });
-        });
-      return map;
-    };
-
-    const currMap = getMonthSingleDefects(currMonthKey);
-    const prevMap = getMonthSingleDefects(prevMonthKey);
-
-    const allDefectKeys = Array.from(new Set([...Array.from(currMap.keys()), ...Array.from(prevMap.keys())]));
-    if (allDefectKeys.length === 0) {
-      return [];
-    }
-
-    return allDefectKeys
-      .map((defect) => ({
-        defect,
-        current: currMap.get(defect) || 0,
-        previous: prevMap.get(defect) || 0,
-        total: (currMap.get(defect) || 0) + (prevMap.get(defect) || 0),
-      }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
-      .map(({ defect, current, previous }) => ({ defect, current, previous }));
-  }, [reports, availableMonths, filters.month]);
+  const monthComparison = useMemo(
+    () => computeMonthToMonthTopDefects(nonMonthFilteredReports, filters.month, new Date(), 5),
+    [nonMonthFilteredReports, filters.month]
+  );
 
   // Bottom Right: Root Cause Analysis & CAPA Summary Table
   // User Requirement: Strictly shows ONLY records pushed to Dashboard (showOnDashboard === true).
@@ -392,6 +350,7 @@ export const DashboardView: React.FC = () => {
           {/* Export PPT Presentation Button */}
           <button
             onClick={async () => {
+              const { exportDashboardToPptx } = await import('../../utils/exportUtils');
               await exportDashboardToPptx(
                 filteredReports,
                 capas,
@@ -419,8 +378,8 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* TOP ROW: 8 KPI Cards matching Excel Mockup */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+      {/* TOP ROW: 9 KPI Cards including OQL & PASS RATE Speedometer Gauges */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5">
         {/* 1. INSPECTION REPORTS */}
         <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
@@ -489,6 +448,27 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
+        {/* 6. PASS RATE Speedometer Gauge Card */}
+        <div
+          data-testid="kpi-pass-rate-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2 flex flex-col justify-between items-center text-center shadow-xs"
+        >
+          <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
+            PASS RATE
+          </div>
+          <div className="w-full flex items-center justify-center my-[-2px]">
+            <SpeedometerGauge
+              mode="passRate"
+              value={kpiMetrics.passRate}
+              target={95}
+              max={100}
+              size="sm"
+              decimals={1}
+              subLabel={`${kpiMetrics.passedReportsCount}/${totalReports} Passed`}
+            />
+          </div>
+        </div>
+
         {/* 6. CRITICAL */}
         <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
@@ -531,16 +511,16 @@ export const DashboardView: React.FC = () => {
 
       {/* MIDDLE ROW: Highest Defects Column Chart | Last Week OQL Gauge | Month Wise OQL Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-        {/* Left (5 cols): HIGHEST DEFECTS CATEGORY */}
+        {/* Left (5 cols): HIGHEST DEFECTS CATEGORY (Top 5 Single Defects with Code, Name, Qty & %) */}
         <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
           <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider">
             HIGHEST DEFECTS CATEGORY
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mb-1 font-semibold">
-              Defect breakdown with item quantity &amp; percentage contribution
+              Top 5 Single Defects &mdash; Defect Quantity &amp; Percentage Share
             </p>
-            <div className="h-72 w-full">
+            <div className="h-64 w-full">
               {highestDefectsData.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center p-6 text-center">
                   <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
@@ -550,44 +530,69 @@ export const DashboardView: React.FC = () => {
                     No Defects Recorded in Current Slice
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload factory PDF inspection reports to automatically populate live defect rankings.
+                    Upload factory PDF inspection reports to automatically populate live single-defect rankings.
                   </p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={highestDefectsData} margin={{ top: 25, right: 10, left: -10, bottom: 45 }}>
+                  <BarChart data={highestDefectsData} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                     <XAxis
-                      dataKey="name"
+                      dataKey="codeAndName"
                       interval={0}
-                      angle={-30}
-                      textAnchor="end"
-                      tick={{ fontSize: 9.5, fontWeight: 'bold', fill: '#334155' }}
-                      height={70}
+                      tick={<DefectAxisTick maxCharsPerLine={15} maxNameLines={2} />}
+                      height={58}
                     />
-                    <YAxis tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
                     <Tooltip
-                      formatter={(val: any, name: any) => [
-                        name === 'count' ? `${val} defects` : `${val}%`,
-                        name === 'count' ? 'Quantity' : 'Share',
+                      formatter={(val: any, _name: any, item: any) => [
+                        `${val} defects (${item?.payload?.percentage ?? 0}%)`,
+                        item?.payload?.codeAndName || 'Single Defect',
                       ]}
                     />
-                    <Bar dataKey="count" fill="#0284c7" radius={[4, 4, 0, 0]}>
-                      {highestDefectsData.map((entry, index) => {
-                        const barColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+                    <Bar dataKey="count" isAnimationActive={false} fill="#0284c7" radius={[4, 4, 0, 0]}>
+                      {highestDefectsData.map((_, index) => {
+                        const barColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
                         return <Cell key={`cell-${index}`} fill={barColors[index % barColors.length]} />;
                       })}
                       <LabelList
-                        dataKey="percentage"
+                        dataKey="barLabel"
                         position="top"
-                        formatter={(val: any) => (Number(val) > 0 ? `${val}%` : '')}
-                        style={{ fontSize: 11, fontWeight: 'bold', fill: '#0f172a' }}
+                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
                       />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
+            {highestDefectsData.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                {highestDefectsData.map((item, idx) => {
+                  const badgeColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
+                  return (
+                    <div
+                      key={`${item.code}-${idx}`}
+                      className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
+                    >
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <span
+                          className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black text-white shrink-0"
+                          style={{ backgroundColor: badgeColors[idx % badgeColors.length] }}
+                        >
+                          {item.code}
+                        </span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
+                          {item.name}
+                        </span>
+                      </div>
+                      <span className="font-black text-slate-900 dark:text-white shrink-0">
+                        {item.barLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -650,6 +655,7 @@ export const DashboardView: React.FC = () => {
                     <Line
                       type="monotone"
                       dataKey="oql"
+                      isAnimationActive={false}
                       stroke="#dc2626"
                       strokeWidth={3}
                       dot={{ r: 5, fill: '#0284c7', stroke: '#dc2626', strokeWidth: 2 }}
@@ -679,60 +685,103 @@ export const DashboardView: React.FC = () => {
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <p className="text-[11px] font-bold text-center text-red-600 dark:text-red-400 mb-1">
-              Comparison of Highest Single Defects (Quantity Affected)
+              {monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel} &mdash; Single Defect Qty &amp; % Share
             </p>
-            <div className="h-72 w-full">
-              {monthComparisonData.length === 0 ? (
+            <div className="h-64 w-full">
+              {monthComparison.items.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center p-6 text-center">
                   <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 mb-2">
                     <Layers className="w-6 h-6" />
                   </div>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Defect Comparison Available
+                    No Defect Comparison Available ({monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel})
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload inspection reports for consecutive months (e.g. October &amp; November) to generate dynamic defect comparisons.
+                    Upload inspection reports for consecutive months ({monthComparison.prevMonthLabel} &amp; {monthComparison.currMonthLabel}) to generate single-defect comparisons.
                   </p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthComparisonData} margin={{ top: 20, right: 10, left: -10, bottom: 40 }}>
+                  <BarChart data={monthComparison.items} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                     <XAxis
-                      dataKey="defect"
+                      dataKey="codeAndName"
                       interval={0}
-                      angle={-25}
-                      textAnchor="end"
-                      tick={{ fontSize: 9.5, fontWeight: 'bold' }}
-                      height={60}
+                      tick={<DefectAxisTick maxCharsPerLine={14} maxNameLines={2} />}
+                      height={58}
                     />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
+                    <Tooltip
+                      formatter={(val: any, name: any, item: any) => {
+                        const isCurr = String(name).includes(monthComparison.currMonthLabel);
+                        const pct = isCurr ? item?.payload?.currentPct : item?.payload?.previousPct;
+                        return [`${val} defects (${pct ?? 0}%)`, name];
+                      }}
+                    />
                     <Legend
                       verticalAlign="bottom"
                       iconSize={10}
                       wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }}
                     />
                     {/* Current Month: Pink / Magenta */}
-                    <Bar dataKey="current" name="Current Month" fill="#ec4899" radius={[3, 3, 0, 0]}>
+                    <Bar
+                      dataKey="current"
+                      name={`${monthComparison.currMonthLabel} (Current)`}
+                      isAnimationActive={false}
+                      fill="#ec4899"
+                      radius={[3, 3, 0, 0]}
+                    >
                       <LabelList
-                        dataKey="current"
+                        dataKey="currentLabel"
                         position="top"
-                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#be185d' }}
+                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#be185d' }}
                       />
                     </Bar>
                     {/* Previous Month: Yellow / Gold */}
-                    <Bar dataKey="previous" name="Previous Month" fill="#eab308" radius={[3, 3, 0, 0]}>
+                    <Bar
+                      dataKey="previous"
+                      name={`${monthComparison.prevMonthLabel} (Previous)`}
+                      isAnimationActive={false}
+                      fill="#eab308"
+                      radius={[3, 3, 0, 0]}
+                    >
                       <LabelList
-                        dataKey="previous"
+                        dataKey="previousLabel"
                         position="top"
-                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#854d0e' }}
+                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#854d0e' }}
                       />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
+            {monthComparison.items.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                {monthComparison.items.map((item) => (
+                  <div
+                    key={item.code}
+                    className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
+                  >
+                    <div className="flex items-start gap-1.5 min-w-0">
+                      <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black bg-indigo-600 text-white shrink-0">
+                        {item.code}
+                      </span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
+                        {item.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 font-bold">
+                      <span className="text-pink-600 dark:text-pink-400">
+                        {monthComparison.currMonthLabel.split(' ')[0]}: {item.current} ({item.currentPct}%)
+                      </span>
+                      <span className="text-amber-700 dark:text-amber-400">
+                        {monthComparison.prevMonthLabel.split(' ')[0]}: {item.previous} ({item.previousPct}%)
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

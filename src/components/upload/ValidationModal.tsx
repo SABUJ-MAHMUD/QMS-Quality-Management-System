@@ -30,7 +30,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   onClose,
   onApproveSuccess,
 }) => {
-  const { defectGroups, defectMaster, addInspectionReport, reports, settings } = useApp();
+  const { defectGroups, defectMaster, addInspectionReport, updateInspectionReport, reports, settings } = useApp();
 
   // Editable form states initialized from extracted draft
   const initialBrand = resolveBrandFromStyle(draft.styleNumber, draft.buyer || 'ONLY&SONS');
@@ -97,6 +97,9 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   // Validation warnings calculation
   const warnings: string[] = [];
 
+  if (draft.extractionWarning) {
+    warnings.push(draft.extractionWarning);
+  }
   if (!orderQuantity || orderQuantity <= 0) {
     warnings.push('Order quantity is zero or missing.');
   }
@@ -109,7 +112,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   if (defects.some((d) => !d.defectQuantity || d.defectQuantity <= 0)) {
     warnings.push('One or more defect rows have zero quantity.');
   }
-  if (reports.some((r) => r.reportNumber.toLowerCase() === reportNumber.toLowerCase())) {
+  if (reports.some((r) => r.id !== draft.existingReportId && r.reportNumber.toLowerCase() === reportNumber.toLowerCase())) {
     warnings.push(`Report number (${reportNumber}) already exists in the database.`);
   }
   if (!orderNumber || !orderNumber.toUpperCase().includes('NOF')) {
@@ -129,7 +132,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
     const newRow = {
       id: `draft-def-${Date.now()}`,
       originalDefectName: 'Manual Defect Item',
-      standardDefectName: defectMaster[0]?.standardDefectName || 'Hole / Needle cut / Yarn cut',
+      standardDefectName: defectMaster[0]?.standardDefectName || 'Different weight / handle of fabric than approved sample',
       defectGroupId: defectMaster[0]?.defectGroupId || 'dg-fa',
       severity: 'Major' as DefectSeverity,
       defectQuantity: 1,
@@ -143,13 +146,28 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   };
 
   const handleSaveAndApprove = (isDraft: boolean = false) => {
-    addInspectionReport({
+    const mappedDefects = defects.map((d) => ({
+      id: d.id,
+      inspectionReportId: draft.existingReportId || '',
+      originalDefectName: d.originalDefectName,
+      standardDefectName: d.standardDefectName,
+      defectGroupId: d.defectGroupId,
+      severity: d.severity,
+      defectQuantity: Number(d.defectQuantity),
+      defectPercentage: totalDefects > 0 ? Number(((Number(d.defectQuantity) / totalDefects) * 100).toFixed(1)) : 0,
+      classificationStatus: 'User-Verified' as const,
+      remarks: d.remarks || '',
+      createdAt: new Date().toISOString(),
+    }));
+
+    const payload = {
       buyer,
       brand: buyer,
       factory,
       reportNumber,
       inspectionType,
       inspectionDate,
+      targetMonth: inspectionDate ? inspectionDate.slice(0, 7) : draft.targetMonth,
       orderNumber,
       poNumber: poNumber || orderNumber,
       inspector,
@@ -171,24 +189,18 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       inspectionResult,
       inspectionLevel,
       pdfFileName: draft.pdfFileName,
-      extractionStatus: 'Extracted',
-      validationStatus: isDraft ? 'Draft' : 'Approved',
+      extractionStatus: 'Extracted' as const,
+      validationStatus: (isDraft ? 'Draft' : 'Approved') as 'Draft' | 'Approved',
       extractionConfidence: draft.extractionConfidence,
       isDemo: false, // Real user uploaded report!
-      defects: defects.map((d) => ({
-        id: d.id,
-        inspectionReportId: '',
-        originalDefectName: d.originalDefectName,
-        standardDefectName: d.standardDefectName,
-        defectGroupId: d.defectGroupId,
-        severity: d.severity,
-        defectQuantity: Number(d.defectQuantity),
-        defectPercentage: totalDefects > 0 ? Number(((Number(d.defectQuantity) / totalDefects) * 100).toFixed(1)) : 0,
-        classificationStatus: 'User-Verified',
-        remarks: d.remarks || '',
-        createdAt: new Date().toISOString(),
-      })),
-    });
+      defects: mappedDefects,
+    };
+
+    if (draft.existingReportId) {
+      updateInspectionReport(draft.existingReportId, payload);
+    } else {
+      addInspectionReport(payload);
+    }
 
     onApproveSuccess();
   };

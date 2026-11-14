@@ -13,16 +13,33 @@ import {
   X,
   Zap,
   ArrowUpDown,
+  Sparkles,
 } from 'lucide-react';
-import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../../data/defectMasterData';
-import { exportCapaToExcel } from '../../utils/exportUtils';
+import {
+  MASTER_DEFECT_23_CATEGORIES,
+  getCanonicalDefectInfo,
+} from '../../data/defectMasterData';
+import { buildDefaultCapaGuidance } from '../../utils/dashboardAnalytics';
 
-const resolveDefectGroupLabel = (defectGroupId?: string): string => {
-  if (!defectGroupId) return 'Cleanliness & Workmanship';
-  const found = MASTER_DEFECT_23_CATEGORIES.find(
-    (c) => `dg-${c.code.toLowerCase()}` === defectGroupId.toLowerCase()
+const normalizeDefectTitleKey = (name: string): string => {
+  return name
+    .replace(/^\[?[A-Za-z]{2,4}-?\d{1,3}\]?\s*[:\-]?\s*/, '')
+    .trim()
+    .toLowerCase();
+};
+
+const formatDisplayCategory = (groupValue?: string, defectName?: string): string => {
+  const val = (groupValue || '').trim();
+  const byExact = MASTER_DEFECT_23_CATEGORIES.find(
+    (c) => c.name.toLowerCase() === val.toLowerCase() || `dg-${c.code.toLowerCase()}` === val.toLowerCase()
   );
-  return found ? found.name : defectGroupId;
+  if (byExact) return `[${byExact.code}] ${byExact.name}`;
+  if (val.toLowerCase() === 'dg-2') return '[Cle] Cleanliness';
+  if (defectName) {
+    const info = getCanonicalDefectInfo({ originalDefectName: defectName, standardDefectName: defectName, defectGroupId: val });
+    if (info.categoryName) return `[${info.categoryCode}] ${info.categoryName}`;
+  }
+  return val || 'General';
 };
 
 export const CapaView: React.FC = () => {
@@ -34,43 +51,46 @@ export const CapaView: React.FC = () => {
     reports,
     canManageData,
     addNotification,
+    pendingCapaDefect,
+    setPendingCapaDefect,
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [dashFilter, setDashFilter] = useState<'ALL' | 'DASHBOARD' | 'CAPA_ONLY'>('ALL');
   const [sortBy, setSortBy] = useState<'qty_desc' | 'qty_asc' | 'newest'>('qty_desc');
   const [selectedCapa, setSelectedCapa] = useState<CAPARecord | null>(null);
   const [editingCapa, setEditingCapa] = useState<CAPARecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Live consolidated defect summary across ALL uploaded reports (10 / 50 / 100+ reports)
+  // Live consolidated defect summary across ALL uploaded reports using official 23 categories & 194 PDF codes
   const aggregatedReportDefects = useMemo(() => {
     const map = new Map<
       string,
       {
+        code: string;
+        pureName: string;
         displayName: string;
+        categoryCode: string;
+        categoryName: string;
+        defectGroupId: string;
+        severity: string;
         qty: number;
         reportIds: Set<string>;
         orderNumbers: Set<string>;
         latestReport: (typeof reports)[0];
-        defectObj: any;
       }
     >();
 
     reports.forEach((r) => {
       (r.defects || []).forEach((d) => {
-        const resolved = resolveDefectAccurate(d);
-        const rawLabel = (resolved.standardDefectName || d.originalDefectName || '').trim();
-        if (!rawLabel) return;
-        const key = rawLabel.toLowerCase();
+        const qty = Number(d.defectQuantity) || 0;
+        if (qty <= 0) return;
+        const info = getCanonicalDefectInfo(d);
+        const key = `${info.code.toLowerCase()}::${info.name.toLowerCase()}`;
+        const displayName = info.code && info.code !== 'Gen' ? `${info.code}: ${info.name}` : info.name;
         const existing = map.get(key);
-        const qty = Number(d.defectQuantity) || 1;
-        const repairedDefect = {
-          ...d,
-          standardDefectName: resolved.standardDefectName,
-          defectGroupId: resolved.defectGroupId,
-        };
         if (existing) {
           existing.qty += qty;
           existing.reportIds.add(r.id);
@@ -79,12 +99,17 @@ export const CapaView: React.FC = () => {
           const orderSet = new Set<string>();
           if (r.orderNumber) orderSet.add(r.orderNumber);
           map.set(key, {
-            displayName: rawLabel,
+            code: info.code,
+            pureName: info.name,
+            displayName,
+            categoryCode: info.categoryCode,
+            categoryName: info.categoryName,
+            defectGroupId: info.defectGroupId,
+            severity: d.severity || 'Major',
             qty,
             reportIds: new Set([r.id]),
             orderNumbers: orderSet,
             latestReport: r,
-            defectObj: repairedDefect,
           });
         }
       });
@@ -93,28 +118,47 @@ export const CapaView: React.FC = () => {
     return map;
   }, [reports]);
 
-  // Consolidate & sync ALL defects across 10/50/100+ uploaded reports into CAPA
+  // Quick O(1) lookup from sub-defect code -> aggregated live report quantity
+  const reportQtyBySubCode = useMemo(() => {
+    const m = new Map<string, { qty: number; orderSummary: string; reportSummary: string; styleNumber: string; buyer: string }>();
+    aggregatedReportDefects.forEach((info) => {
+      const orderArr = Array.from(info.orderNumbers);
+      const orderSummary =
+        orderArr.length > 1 ? `${orderArr[0]} (+${orderArr.length - 1} orders)` : orderArr[0] || info.latestReport.orderNumber;
+      const reportSummary =
+        info.reportIds.size > 1 ? `${info.reportIds.size} Reports Combined` : info.latestReport.reportNumber;
+      m.set(info.code.toUpperCase(), {
+        qty: info.qty,
+        orderSummary,
+        reportSummary,
+        styleNumber: info.latestReport.styleNumber,
+        buyer: info.latestReport.buyer,
+      });
+    });
+    return m;
+  }, [aggregatedReportDefects]);
+
+  // Consolidate & sync ALL defects across uploaded reports into CAPA with canonical 23-group & 194-code metadata
   const handleSyncDefectsFromReports = () => {
     if (aggregatedReportDefects.size === 0) {
       addNotification('info', 'Upload factory inspection PDF reports first to extract defects into CAPA.');
       return;
     }
 
-    // Group existing CAPAs by normalized defectName to avoid duplicates and sum properly
-    const existingByName = new Map<string, CAPARecord[]>();
+    const existingByTitle = new Map<string, CAPARecord[]>();
     capas.forEach((c) => {
-      const key = (c.defectName || '').trim().toLowerCase();
-      if (!key) return;
-      const list = existingByName.get(key) || [];
+      const normKey = normalizeDefectTitleKey(c.defectName || '');
+      if (!normKey) return;
+      const list = existingByTitle.get(normKey) || [];
       list.push(c);
-      existingByName.set(key, list);
+      existingByTitle.set(normKey, list);
     });
 
     let addedCount = 0;
     let updatedCount = 0;
-    const sorted = Array.from(aggregatedReportDefects.entries()).sort((a, b) => b[1].qty - a[1].qty);
+    const sorted = Array.from(aggregatedReportDefects.values()).sort((a, b) => b.qty - a.qty);
 
-    sorted.forEach(([key, info]) => {
+    sorted.forEach((info) => {
       const orderArr = Array.from(info.orderNumbers);
       const orderSummary =
         orderArr.length > 1
@@ -125,27 +169,31 @@ export const CapaView: React.FC = () => {
           ? `${info.reportIds.size} Reports Combined`
           : info.latestReport.reportNumber;
 
-      const existingList = existingByName.get(key);
+      const normKey = info.pureName.trim().toLowerCase();
+      const existingList = existingByTitle.get(normKey);
       if (existingList && existingList.length > 0) {
         const primary = existingList[0];
-        // Clean up any duplicate rows for the exact same defect
         for (let i = 1; i < existingList.length; i++) {
           deleteCapa(existingList[i].id);
         }
         if (
           primary.defectQuantity !== info.qty ||
           primary.reportNumber !== reportSummary ||
-          primary.orderNumber !== orderSummary
+          primary.orderNumber !== orderSummary ||
+          primary.defectName !== info.displayName ||
+          primary.defectGroup !== info.categoryName
         ) {
           updateCapa(primary.id, {
+            defectName: info.displayName,
             defectQuantity: info.qty,
             reportNumber: reportSummary,
             orderNumber: orderSummary,
-            defectGroup: resolveDefectGroupLabel(info.defectObj.defectGroupId),
+            defectGroup: info.categoryName,
           });
           updatedCount++;
         }
       } else {
+        const guidance = buildDefaultCapaGuidance(info.categoryCode, info.displayName);
         addCapa({
           capaId: `CAPA-${new Date().getFullYear()}-${String(capas.length + addedCount + 1).padStart(3, '0')}`,
           inspectionReportId: info.latestReport.id,
@@ -154,14 +202,20 @@ export const CapaView: React.FC = () => {
           styleNumber: info.latestReport.styleNumber,
           buyer: info.latestReport.buyer,
           defectName: info.displayName,
-          defectGroup: resolveDefectGroupLabel(info.defectObj.defectGroupId),
-          defectSeverity: (info.defectObj.severity as any) || 'Major',
+          defectGroup: info.categoryName,
+          defectSeverity: (info.severity as any) || 'Major',
           defectQuantity: info.qty,
-          rootCause: '',
-          fiveWhyAnalysis: { why1: '', why2: '', why3: '', why4: '', why5: '' },
-          correction: '',
-          correctiveAction: '',
-          preventiveAction: '',
+          rootCause: guidance.rootCause,
+          fiveWhyAnalysis: {
+            why1: guidance.why1,
+            why2: guidance.why2,
+            why3: guidance.why3,
+            why4: guidance.why4,
+            why5: guidance.why5,
+          },
+          correction: guidance.correction,
+          correctiveAction: guidance.correctiveAction,
+          preventiveAction: guidance.preventiveAction,
           responsiblePerson: 'Quality & Production Lead',
           responsibleDepartment: 'Sewing & Finishing',
           targetCompletionDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
@@ -169,7 +223,7 @@ export const CapaView: React.FC = () => {
           monitoringMethod: 'Daily 50 garments random end-line audit',
           capaStatus: 'Open',
           effectivenessStatus: 'Under Monitoring',
-          showOnDashboard: false, // User explicitly pushes selected items to Dashboard
+          showOnDashboard: false,
           isDemo: false,
         });
         addedCount++;
@@ -179,24 +233,29 @@ export const CapaView: React.FC = () => {
     if (addedCount > 0 || updatedCount > 0) {
       addNotification(
         'success',
-        `Consolidated ${reports.length} reports: ${addedCount} new CAPAs added, ${updatedCount} totals updated (sorted highest first).`
+        `Consolidated ${reports.length} reports: ${addedCount} new CAPAs added, ${updatedCount} updated with PDF codes & categories.`
       );
     } else {
       addNotification('info', 'All consolidated defect totals are already up to date.');
     }
   };
 
-  // Form State for creating/editing CAPA
+  const defaultCat = MASTER_DEFECT_23_CATEGORIES[5]; // Seams and stitching
+  const defaultSub = defaultCat.subDefects.find((s) => s.code === 'Se-10') || defaultCat.subDefects[0];
+
+  // Form State for creating CAPA (fully linked to 23 categories & 194 PDF defects)
+  const [selectedCategoryCode, setSelectedCategoryCode] = useState<string>(defaultCat.code);
+  const [selectedSubCode, setSelectedSubCode] = useState<string>(defaultSub.code);
   const [formData, setFormData] = useState({
     capaId: `CAPA-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-    reportNumber: reports[0]?.reportNumber || 'BS-OQL-2026-1015-01',
-    orderNumber: reports[0]?.orderNumber || 'DEMO-001',
-    styleNumber: reports[0]?.styleNumber || 'DEMO-STYLE-001',
+    reportNumber: reports[0]?.reportNumber || 'BS-OQL-2026-11-01',
+    orderNumber: reports[0]?.orderNumber || 'NOF-PENDING',
+    styleNumber: reports[0]?.styleNumber || '',
     buyer: reports[0]?.buyer || 'BESTSELLER',
-    defectName: 'Broken Stitching',
-    defectGroup: 'Seams & Stitching',
-    defectSeverity: 'Major' as any,
-    defectQuantity: 8,
+    defectName: `${defaultSub.code}: ${defaultSub.name}`,
+    defectGroup: defaultCat.name,
+    defectSeverity: (defaultSub.defaultSeverity || 'Major') as any,
+    defectQuantity: 1,
     rootCause: '',
     why1: '',
     why2: '',
@@ -214,6 +273,91 @@ export const CapaView: React.FC = () => {
     capaStatus: 'Open' as CapaStatus,
     effectivenessStatus: 'Under Monitoring' as EffectivenessStatus,
   });
+
+  // Handle cross-tab deep-link from OQL & Defects Analysis
+  React.useEffect(() => {
+    if (!pendingCapaDefect) return;
+    const cat =
+      MASTER_DEFECT_23_CATEGORIES.find(
+        (c) => c.code.toLowerCase() === pendingCapaDefect.categoryCode.toLowerCase()
+      ) || MASTER_DEFECT_23_CATEGORIES[0];
+    const sub =
+      cat.subDefects.find((s) => s.code.toLowerCase() === pendingCapaDefect.code.toLowerCase()) ||
+      cat.subDefects[0];
+    const live = reportQtyBySubCode.get(sub.code.toUpperCase());
+    const defectTitle = `${sub.code}: ${sub.name}`;
+    const guidance = buildDefaultCapaGuidance(cat.code, defectTitle);
+
+    setSelectedCategoryCode(cat.code);
+    setSelectedSubCode(sub.code);
+    setFormData((prev) => ({
+      ...prev,
+      capaId: `CAPA-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      reportNumber: live?.reportSummary || reports[0]?.reportNumber || prev.reportNumber,
+      orderNumber: live?.orderSummary || reports[0]?.orderNumber || prev.orderNumber,
+      styleNumber: live?.styleNumber || reports[0]?.styleNumber || prev.styleNumber,
+      buyer: live?.buyer || reports[0]?.buyer || prev.buyer,
+      defectName: defectTitle,
+      defectGroup: cat.name,
+      defectSeverity: sub.defaultSeverity || 'Major',
+      defectQuantity: live?.qty || pendingCapaDefect.quantity || 1,
+      rootCause: guidance.rootCause,
+      why1: guidance.why1,
+      why2: guidance.why2,
+      why3: guidance.why3,
+      why4: guidance.why4,
+      why5: guidance.why5,
+      correction: guidance.correction,
+      correctiveAction: guidance.correctiveAction,
+      preventiveAction: guidance.preventiveAction,
+    }));
+    setShowCreateModal(true);
+    setPendingCapaDefect(null);
+  }, [pendingCapaDefect, setPendingCapaDefect, reportQtyBySubCode, reports]);
+
+  const activeCreateCategory = useMemo(
+    () => MASTER_DEFECT_23_CATEGORIES.find((c) => c.code === selectedCategoryCode) || MASTER_DEFECT_23_CATEGORIES[0],
+    [selectedCategoryCode]
+  );
+
+  const handleSelectMasterCategory = (catCode: string) => {
+    const cat = MASTER_DEFECT_23_CATEGORIES.find((c) => c.code === catCode);
+    if (!cat || cat.subDefects.length === 0) return;
+    const firstSub = cat.subDefects[0];
+    const live = reportQtyBySubCode.get(firstSub.code.toUpperCase());
+    setSelectedCategoryCode(cat.code);
+    setSelectedSubCode(firstSub.code);
+    setFormData((prev) => ({
+      ...prev,
+      defectGroup: cat.name,
+      defectName: `${firstSub.code}: ${firstSub.name}`,
+      defectSeverity: firstSub.defaultSeverity || 'Major',
+      defectQuantity: live?.qty || prev.defectQuantity || 1,
+      reportNumber: live?.reportSummary || prev.reportNumber,
+      orderNumber: live?.orderSummary || prev.orderNumber,
+    }));
+  };
+
+  const handleSelectSubDefect = (subCode: string) => {
+    for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+      const sub = cat.subDefects.find((s) => s.code === subCode);
+      if (sub) {
+        const live = reportQtyBySubCode.get(sub.code.toUpperCase());
+        setSelectedCategoryCode(cat.code);
+        setSelectedSubCode(sub.code);
+        setFormData((prev) => ({
+          ...prev,
+          defectGroup: cat.name,
+          defectName: `${sub.code}: ${sub.name}`,
+          defectSeverity: sub.defaultSeverity || 'Major',
+          defectQuantity: live?.qty || prev.defectQuantity || 1,
+          reportNumber: live?.reportSummary || prev.reportNumber,
+          orderNumber: live?.orderSummary || prev.orderNumber,
+        }));
+        break;
+      }
+    }
+  };
 
   // Calculate Dashboard Counters
   const totalCapa = capas.length;
@@ -233,6 +377,20 @@ export const CapaView: React.FC = () => {
   const filteredCapas = useMemo(() => {
     const list = capas.filter((c) => {
       if (statusFilter !== 'ALL' && c.capaStatus !== statusFilter) return false;
+      if (categoryFilter !== 'ALL') {
+        const displayCat = formatDisplayCategory(c.defectGroup, c.defectName).toLowerCase();
+        const grp = (c.defectGroup || '').toLowerCase();
+        const target = categoryFilter.toLowerCase();
+        const catObj = MASTER_DEFECT_23_CATEGORIES.find((cat) => cat.name.toLowerCase() === target);
+        const matchesCat =
+          grp === target ||
+          displayCat.includes(target) ||
+          (catObj &&
+            (grp.includes(catObj.code.toLowerCase()) ||
+              displayCat.includes(`[${catObj.code.toLowerCase()}]`) ||
+              c.defectName.toLowerCase().startsWith(catObj.code.toLowerCase() + '-')));
+        if (!matchesCat) return false;
+      }
       if (dashFilter === 'DASHBOARD' && c.showOnDashboard !== true) return false;
       if (dashFilter === 'CAPA_ONLY' && c.showOnDashboard === true) return false;
       if (search) {
@@ -240,6 +398,7 @@ export const CapaView: React.FC = () => {
         const match =
           c.capaId.toLowerCase().includes(q) ||
           c.defectName.toLowerCase().includes(q) ||
+          (c.defectGroup || '').toLowerCase().includes(q) ||
           c.responsiblePerson.toLowerCase().includes(q) ||
           c.orderNumber.toLowerCase().includes(q) ||
           c.reportNumber.toLowerCase().includes(q);
@@ -257,7 +416,7 @@ export const CapaView: React.FC = () => {
       }
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
-  }, [capas, statusFilter, dashFilter, search, sortBy]);
+  }, [capas, statusFilter, categoryFilter, dashFilter, search, sortBy]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,7 +480,10 @@ export const CapaView: React.FC = () => {
             </button>
           )}
           <button
-            onClick={() => exportCapaToExcel(filteredCapas)}
+            onClick={async () => {
+              const { exportCapaToExcel } = await import('../../utils/exportUtils');
+              exportCapaToExcel(filteredCapas);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-sky-600" />
@@ -435,6 +597,22 @@ export const CapaView: React.FC = () => {
           ))}
         </div>
 
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 font-semibold mr-0.5">Category:</span>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none max-w-[200px]"
+          >
+            <option value="ALL">All 23 Master Categories</option>
+            {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+              <option key={cat.code} value={cat.name}>
+                [{cat.code}] {cat.name} ({cat.subDefects.length})
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="flex items-center gap-1.5 text-xs">
           <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
           <select
@@ -484,7 +662,9 @@ export const CapaView: React.FC = () => {
                       <td className="py-2.5 px-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100">{c.defectName}</div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                          <span>{c.defectGroup}</span>
+                          <span className="font-semibold text-sky-700 dark:text-sky-400">
+                            {formatDisplayCategory(c.defectGroup, c.defectName)}
+                          </span>
                           <span>&bull;</span>
                           <span className="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 font-black">
                             Total Qty: {c.defectQuantity}
@@ -713,9 +893,9 @@ export const CapaView: React.FC = () => {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-500 mb-1">CAPA ID</label>
+                  <label className="block text-slate-500 font-bold mb-1">CAPA ID</label>
                   <input
                     type="text"
                     required
@@ -725,7 +905,7 @@ export const CapaView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 mb-1">Order Number</label>
+                  <label className="block text-slate-500 font-bold mb-1">Order Number</label>
                   <input
                     type="text"
                     required
@@ -735,19 +915,111 @@ export const CapaView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 mb-1">Defect Name</label>
+                  <label className="block text-slate-500 font-bold mb-1">Defect Quantity (Pcs)</label>
                   <input
-                    type="text"
+                    type="number"
+                    min={1}
                     required
-                    value={formData.defectName}
-                    onChange={(e) => setFormData({ ...formData, defectName: e.target.value })}
+                    value={formData.defectQuantity}
+                    onChange={(e) => setFormData({ ...formData, defectQuantity: Number(e.target.value) || 1 })}
                     className="w-full border rounded-lg p-2 font-bold"
                   />
                 </div>
               </div>
 
+              {/* Linked 23 Master Categories & 194 Official PDF Defect Codes */}
+              <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-black text-sky-900 text-[11px] uppercase tracking-wider">
+                    Official Defect Link (23 Categories &bull; 194 PDF Defect Codes)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const guidance = buildDefaultCapaGuidance(selectedCategoryCode, formData.defectName);
+                      setFormData((prev) => ({
+                        ...prev,
+                        rootCause: guidance.rootCause,
+                        why1: guidance.why1,
+                        why2: guidance.why2,
+                        why3: guidance.why3,
+                        why4: guidance.why4,
+                        why5: guidance.why5,
+                        correction: guidance.correction,
+                        correctiveAction: guidance.correctiveAction,
+                        preventiveAction: guidance.preventiveAction,
+                      }));
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold shadow-2xs cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Auto-Fill 5-Why RCA Template
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">Master Category (23 Groups)</label>
+                    <select
+                      value={selectedCategoryCode}
+                      onChange={(e) => handleSelectMasterCategory(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white font-bold text-slate-800"
+                    >
+                      {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+                        <option key={cat.code} value={cat.code}>
+                          [{cat.code}] {cat.name} ({cat.subDefects.length} codes)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">Official Defect Code ({activeCreateCategory.subDefects.length} in Group)</label>
+                    <select
+                      value={selectedSubCode}
+                      onChange={(e) => handleSelectSubDefect(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white font-bold text-slate-800"
+                    >
+                      <optgroup label={`── Selected Group: [${activeCreateCategory.code}] ${activeCreateCategory.name} ──`}>
+                        {activeCreateCategory.subDefects.map((sub) => {
+                          const live = reportQtyBySubCode.get(sub.code.toUpperCase());
+                          return (
+                            <option key={sub.code} value={sub.code}>
+                              {sub.code}: {sub.name}{live ? ` [Reports: ${live.qty} pcs]` : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                      <optgroup label="── All 194 PDF Defect Codes (23 Categories) ──">
+                        {MASTER_DEFECT_23_CATEGORIES.flatMap((cat) =>
+                          cat.subDefects.map((sub) => {
+                            const live = reportQtyBySubCode.get(sub.code.toUpperCase());
+                            return (
+                              <option key={`all-${sub.code}`} value={sub.code}>
+                                [{cat.code}] {sub.code}: {sub.name}{live ? ` [Reports: ${live.qty} pcs]` : ''}
+                              </option>
+                            );
+                          })
+                        )}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Selected Defect Title (Editable)</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.defectName}
+                    onChange={(e) => setFormData({ ...formData, defectName: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 bg-white font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-slate-500 mb-1">Primary Root Cause Summary</label>
+                <label className="block text-slate-500 font-bold mb-1">Primary Root Cause Summary</label>
                 <textarea
                   required
                   rows={2}
@@ -904,6 +1176,99 @@ export const CapaView: React.FC = () => {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-black text-sky-900 dark:text-sky-300 text-[11px] uppercase">
+                    Linked Official Category &amp; Defect Code (23 Categories &bull; 194 Codes)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const matchedCat = MASTER_DEFECT_23_CATEGORIES.find(
+                        (c) => c.name.toLowerCase() === (editingCapa.defectGroup || '').toLowerCase()
+                      );
+                      const guidance = buildDefaultCapaGuidance(matchedCat?.code || 'Se', editingCapa.defectName);
+                      setEditingCapa({
+                        ...editingCapa,
+                        rootCause: guidance.rootCause,
+                        fiveWhyAnalysis: {
+                          why1: guidance.why1,
+                          why2: guidance.why2,
+                          why3: guidance.why3,
+                          why4: guidance.why4,
+                          why5: guidance.why5,
+                        },
+                        correction: guidance.correction,
+                        correctiveAction: guidance.correctiveAction,
+                        preventiveAction: guidance.preventiveAction,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Auto-Fill 5-Why RCA
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Master Category</label>
+                    <select
+                      value={editingCapa.defectGroup}
+                      onChange={(e) => {
+                        const cat = MASTER_DEFECT_23_CATEGORIES.find((c) => c.name === e.target.value);
+                        const firstSub = cat?.subDefects[0];
+                        setEditingCapa({
+                          ...editingCapa,
+                          defectGroup: e.target.value,
+                          defectName: firstSub ? `${firstSub.code}: ${firstSub.name}` : editingCapa.defectName,
+                        });
+                      }}
+                      className="w-full border rounded-lg p-2 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white font-semibold"
+                    >
+                      {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+                        <option key={cat.code} value={cat.name}>
+                          [{cat.code}] {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Select From 194 PDF Codes</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const chosenCode = e.target.value;
+                        if (!chosenCode) return;
+                        for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+                          const sub = cat.subDefects.find((s) => s.code === chosenCode);
+                          if (sub) {
+                            setEditingCapa({
+                              ...editingCapa,
+                              defectGroup: cat.name,
+                              defectName: `${sub.code}: ${sub.name}`,
+                              defectSeverity: sub.defaultSeverity || editingCapa.defectSeverity,
+                            });
+                            break;
+                          }
+                        }
+                      }}
+                      className="w-full border rounded-lg p-2 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white font-semibold"
+                    >
+                      <option value="">-- Change / Link PDF Defect Code --</option>
+                      {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+                        <optgroup key={`edit-cat-${cat.code}`} label={`[${cat.code}] ${cat.name}`}>
+                          {cat.subDefects.map((sub) => (
+                            <option key={`edit-${sub.code}`} value={sub.code}>
+                              {sub.code}: {sub.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 font-bold mb-1">Defect Name</label>
@@ -1032,7 +1397,11 @@ export const CapaView: React.FC = () => {
                 onClick={() => {
                   updateCapa(editingCapa.id, {
                     defectName: editingCapa.defectName,
+                    defectGroup: editingCapa.defectGroup,
+                    defectSeverity: editingCapa.defectSeverity,
                     rootCause: editingCapa.rootCause,
+                    fiveWhyAnalysis: editingCapa.fiveWhyAnalysis,
+                    correction: editingCapa.correction,
                     correctiveAction: editingCapa.correctiveAction,
                     preventiveAction: editingCapa.preventiveAction,
                     responsiblePerson: editingCapa.responsiblePerson,

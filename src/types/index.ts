@@ -151,7 +151,7 @@ export interface MonitoringRecord {
 }
 
 export interface GlobalFilterState {
-  buyer: string;
+  buyer: string | string[];
   financialYear: string;
   month: string;
   dateFrom: string;

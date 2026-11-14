@@ -11,6 +11,7 @@ import {
   Filter,
   ExternalLink,
   Zap,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,7 +27,7 @@ import {
 import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect, resolveDefectAccurate } from '../../data/defectMasterData';
 
 export const DefectAnalyticsView: React.FC = () => {
-  const { filteredReports, setFilters, setActiveTab, addNotification, filters } = useApp();
+  const { filteredReports, setFilters, setActiveTab, addNotification, setPendingCapaDefect } = useApp();
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     Se: true,
@@ -65,6 +66,24 @@ export const DefectAnalyticsView: React.FC = () => {
     addNotification('info', `Filtered Dashboard for "${label}". Viewing linked analytics.`);
   };
 
+  const handleCreateCapaForDefect = (
+    code: string,
+    name: string,
+    categoryCode: string,
+    categoryName: string,
+    quantity?: number
+  ) => {
+    setPendingCapaDefect({
+      code,
+      name,
+      categoryCode,
+      categoryName,
+      defectGroupId: `dg-${categoryCode.toLowerCase()}`,
+      quantity,
+    });
+    setActiveTab('capa');
+  };
+
   const [showOnlyActive, setShowOnlyActive] = useState(false);
 
   // Compile statistics for each of the 23 Master Defect Categories and their subDefects
@@ -101,8 +120,21 @@ export const DefectAnalyticsView: React.FC = () => {
         let matchedSubCode: string | null = null;
         let matchedCatCode: string | null = preferredCat?.code || null;
 
-        // 1. Exact standardDefectName match FIRST
-        if (stdName) {
+        // 0. Exact explicit PDF code match FIRST (e.g. Se-10, La-9, Cle-3, Cle-5, Po-2)
+        if (resolved.explicitCode) {
+          const explicitUpper = resolved.explicitCode.toUpperCase();
+          for (const cat of orderedCats) {
+            const exactCode = cat.subDefects.find((sub) => sub.code.toUpperCase() === explicitUpper);
+            if (exactCode) {
+              matchedSubCode = exactCode.code;
+              matchedCatCode = cat.code;
+              break;
+            }
+          }
+        }
+
+        // 1. Exact standardDefectName match
+        if (!matchedSubCode && stdName) {
           for (const cat of orderedCats) {
             const exact = cat.subDefects.find((sub) => sub.name.toLowerCase() === stdName);
             if (exact) {
@@ -130,7 +162,7 @@ export const DefectAnalyticsView: React.FC = () => {
 
         // 3. Classify using master classifier if no exact sub-defect name matched yet
         if (!matchedSubCode) {
-          const classified = classifyRawDefect(d.standardDefectName || d.originalDefectName || '');
+          const classified = classifyRawDefect(d.originalDefectName || d.standardDefectName || '');
           const classStd = classified.standardDefectName.toLowerCase();
           for (const cat of orderedCats) {
             const found = cat.subDefects.find((s) => s.name.toLowerCase() === classStd);
@@ -170,7 +202,7 @@ export const DefectAnalyticsView: React.FC = () => {
           }
           subReportsMap.get(matchedSubCode)!.add(r.id);
         } else if (matchedCatCode) {
-          // Track within category total WITHOUT falsely polluting subDefects[0] (e.g. Fa-1 Hole / Needle cut)
+          // Track within category total WITHOUT falsely polluting subDefects[0]
           catDirectQtyMap.set(matchedCatCode, (catDirectQtyMap.get(matchedCatCode) || 0) + qty);
           if (!catDirectReportsMap.has(matchedCatCode)) {
             catDirectReportsMap.set(matchedCatCode, new Set<string>());
@@ -309,7 +341,7 @@ export const DefectAnalyticsView: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 text-[11px] font-black uppercase z-10">
                 <tr>
-                  <th className="p-2.5 w-12 text-center">Code</th>
+                  <th className="p-2.5 w-16 text-center whitespace-nowrap">Code</th>
                   <th className="p-2.5">Category &amp; Individual Defect Details</th>
                   <th className="p-2.5 text-center w-28">Inspections</th>
                   <th className="p-2.5 text-center w-28">Qty Affected</th>
@@ -397,7 +429,7 @@ export const DefectAnalyticsView: React.FC = () => {
                                 : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                             }`}
                           >
-                            <td className="p-2 pl-6 text-center font-mono font-bold text-slate-500">
+                            <td className="p-2 pl-4 text-center font-mono font-bold text-slate-500 whitespace-nowrap">
                               {sub.code}
                             </td>
                             <td className="p-2 pl-8">
@@ -425,14 +457,32 @@ export const DefectAnalyticsView: React.FC = () => {
                               </span>
                             </td>
                             <td className="p-2 text-center whitespace-nowrap">
-                              <button
-                                onClick={() => handleLinkToDashboard(sub.name, `${sub.code}: ${sub.name}`)}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 font-semibold text-[10px] transition-colors cursor-pointer"
-                                title={`Filter Dashboard specifically for ${sub.name}`}
-                              >
-                                <ExternalLink className="w-2.5 h-2.5 text-sky-600" />
-                                Link Defect
-                              </button>
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  onClick={() => handleLinkToDashboard(sub.name, `${sub.code}: ${sub.name}`)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 font-semibold text-[10px] transition-colors cursor-pointer"
+                                  title={`Filter Dashboard specifically for ${sub.name}`}
+                                >
+                                  <ExternalLink className="w-2.5 h-2.5 text-sky-600" />
+                                  Link Defect
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleCreateCapaForDefect(
+                                      sub.code,
+                                      sub.name,
+                                      cat.code,
+                                      cat.name,
+                                      sub.quantityAffected || 1
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 font-semibold text-[10px] transition-colors cursor-pointer"
+                                  title={`Open RCA & CAPA pre-linked to [${sub.code}] ${sub.name}`}
+                                >
+                                  <ShieldAlert className="w-2.5 h-2.5" />
+                                  CAPA
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -502,7 +552,7 @@ export const DefectAnalyticsView: React.FC = () => {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 25, right: 15, left: -10, bottom: 45 }}>
+                  <BarChart data={chartData} margin={{ top: 28, right: 15, left: 10, bottom: 45 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                     <XAxis
                       dataKey="name"
@@ -512,14 +562,14 @@ export const DefectAnalyticsView: React.FC = () => {
                       tick={{ fontSize: 10, fontWeight: 'bold' }}
                       height={55}
                     />
-                    <YAxis tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
                     <Tooltip
                       formatter={(val: any) => [
                         `${val} defects (${totalDefectSum > 0 ? ((Number(val) / totalDefectSum) * 100).toFixed(1) : 0}%)`,
                         'Count',
                       ]}
                     />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="count" isAnimationActive={false} radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color || '#0284c7'} />
                       ))}

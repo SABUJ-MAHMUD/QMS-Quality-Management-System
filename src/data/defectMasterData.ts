@@ -16,177 +16,171 @@ export const MASTER_DEFECT_23_CATEGORIES: DefectCategoryDefinition[] = [
   {
     code: 'Fa',
     name: 'Fabric Defects',
-    description: 'Holes, drop stitch, barre, slub, foreign yarn, knitting/weaving defects',
+    description: 'Fabric weight, drill holes, fabric faults, snags, pattern/print checks, creases, foreign yarns',
     color: '#ea580c',
     subDefects: [
-      { code: 'Fa-1', name: 'Hole / Needle cut / Yarn cut', defaultSeverity: 'Critical' },
-      { code: 'Fa-2', name: 'Drop stitch / Laddering', defaultSeverity: 'Major' },
-      { code: 'Fa-3', name: 'Slub / Thick and thin yarn', defaultSeverity: 'Minor' },
-      { code: 'Fa-4', name: 'Knit barre / Streak', defaultSeverity: 'Major' },
-      { code: 'Fa-5', name: 'Snagging / Pulled thread', defaultSeverity: 'Minor' },
-      { code: 'Fa-6', name: 'Dead cotton / Neps', defaultSeverity: 'Minor' },
-      { code: 'Fa-7', name: 'Fabric skewing / Torquing', defaultSeverity: 'Major' },
-      { code: 'Fa-8', name: 'Bow / Skewness out of tolerance', defaultSeverity: 'Major' },
-      { code: 'Fa-9', name: 'Missing yarn / Broken weave', defaultSeverity: 'Major' },
-      { code: 'Fa-10', name: 'Foreign Yarns / Fly yarn', defaultSeverity: 'Minor' },
-      { code: 'Fa-11', name: 'Lycra / Spandex drop out', defaultSeverity: 'Major' },
-      { code: 'Fa-12', name: 'Crease mark / Fold line permanent', defaultSeverity: 'Minor' },
-      { code: 'Fa-13', name: 'Abrasion / Fabric fuzzing', defaultSeverity: 'Minor' },
+      { code: 'Fa-1', name: 'Different weight / handle of fabric than approved sample', defaultSeverity: 'Major' },
+      { code: 'Fa-2', name: 'Drill hole showing', defaultSeverity: 'Major' },
+      { code: 'Fa-3', name: 'Fabric faults not evident on approved sample (e.g. Cuts, holes, spots, runs, missed picks, and ends)', defaultSeverity: 'Critical' },
+      { code: 'Fa-4', name: 'Snags, pulled yarn, pilling, weaving/knit fault', defaultSeverity: 'Major' },
+      { code: 'Fa-5', name: 'Pattern, print, stripes, checks do not match as specified', defaultSeverity: 'Major' },
+      { code: 'Fa-6', name: 'Permanent creases on fabric', defaultSeverity: 'Major' },
+      { code: 'Fa-7', name: 'Nap or pile deformation', defaultSeverity: 'Major' },
+      { code: 'Fa-8', name: 'Undesirable odour', defaultSeverity: 'Major' },
+      { code: 'Fa-9', name: 'Needle Drop', defaultSeverity: 'Major' },
+      { code: 'Fa-10', name: 'Foreign Yarns', defaultSeverity: 'Minor' },
+      { code: 'Fa-11', name: 'Wrong colour', defaultSeverity: 'Critical' },
+      { code: 'Fa-12', name: 'Fabric hand feel significantly different from sealed sample', defaultSeverity: 'Major' },
+      { code: 'Fa-13', name: 'Fabric weft yarn skewed / off-grain > 5%', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Sh',
     name: 'Shading Defects',
-    description: 'Shade variation within garment, panel to panel shading, center to selvedge',
+    description: 'Shade variations between panels, fabric/trim shade, dye streaks, batches, yellowing, wash intensity',
     color: '#d97706',
     subDefects: [
-      { code: 'Sh-1', name: 'Panel to panel shade difference', defaultSeverity: 'Major' },
-      { code: 'Sh-2', name: 'Front to back shade difference', defaultSeverity: 'Major' },
-      { code: 'Sh-3', name: 'Sleeve to body shade difference', defaultSeverity: 'Major' },
-      { code: 'Sh-4', name: 'Collar/rib to body shade difference', defaultSeverity: 'Major' },
-      { code: 'Sh-5', name: 'Uneven dye penetration / Wash shading', defaultSeverity: 'Major' },
-      { code: 'Sh-6', name: 'Side to side shading within single panel', defaultSeverity: 'Major' },
+      { code: 'Sh-1', name: 'Shade variations between panels', defaultSeverity: 'Major' },
+      { code: 'Sh-2', name: 'Shade variation of garment fabric and trim within the garment', defaultSeverity: 'Major' },
+      { code: 'Sh-3', name: 'Dye streaks or marks at critical areas', defaultSeverity: 'Major' },
+      { code: 'Sh-4', name: 'Different batches within the order comments', defaultSeverity: 'Major' },
+      { code: 'Sh-5', name: 'Visible yellowing (indigo garments)', defaultSeverity: 'Major' },
+      { code: 'Sh-6', name: 'Significant variation of wash effect intensity from sealed sample', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Cle',
     name: 'Cleanliness',
-    description: 'Spot, stain, oil mark, soil, untrimmed / uncut threads, dust marks',
+    description: 'Spot, stain, soil marks, untrimmed threads, contamination, oil spots, cuts/holes, loose threads, dust',
     color: '#059669',
     subDefects: [
-      { code: 'Cle-1', name: 'Spot, stain and soil marks', defaultSeverity: 'Minor' },
-      { code: 'Cle-2', name: 'Machine oil mark / Lubricant stain', defaultSeverity: 'Major' },
-      { code: 'Cle-3', name: 'Untrimmed thread ends reversed / Visible thread', defaultSeverity: 'Minor' },
-      { code: 'Cle-4', name: 'Dust mark / Dirt handling smear', defaultSeverity: 'Minor' },
+      { code: 'Cle-1', name: 'Spot, stain, and soil marks', defaultSeverity: 'Minor' },
+      { code: 'Cle-2', name: 'Untrimmed thread ends <1cm (m)/ Untrimmed thread ends >1cm (M)', defaultSeverity: 'Minor' },
+      { code: 'Cle-3', name: 'Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M)', defaultSeverity: 'Minor' },
+      { code: 'Cle-15', name: 'Untrimmed thread / connecting threads/ floats at seams (>1 cm critical for kids wear)', defaultSeverity: 'Critical' },
+      { code: 'Cle-4', name: 'Contamination on garment', defaultSeverity: 'Major' },
       { code: 'Cle-5', name: 'Oil spots or stains (cannot be removed)', defaultSeverity: 'Major' },
-      { code: 'Cle-6', name: 'Glue or adhesive residue', defaultSeverity: 'Minor' },
-      { code: 'Cle-7', name: 'Rust stain from needles / machinery', defaultSeverity: 'Major' },
-      { code: 'Cle-8', name: 'Water mark / Iron water drop', defaultSeverity: 'Minor' },
-      { code: 'Cle-9', name: 'Pen / Pencil / Tailor chalk marks', defaultSeverity: 'Minor' },
-      { code: 'Cle-10', name: 'Loose thread loops inside/outside', defaultSeverity: 'Minor' },
-      { code: 'Cle-11', name: 'Mildew / Mold scent or spot', defaultSeverity: 'Critical' },
-      { code: 'Cle-12', name: 'Foreign fibers attached / Fluff', defaultSeverity: 'Minor' },
-      { code: 'Cle-13', name: 'Discoloration due to chemical residue', defaultSeverity: 'Major' },
-      { code: 'Cle-14', name: 'Packing paper / carton stain', defaultSeverity: 'Minor' },
-      { code: 'Cle-15', name: 'General soiling / handling grubbiness', defaultSeverity: 'Minor' },
+      { code: 'Cle-6', name: 'Cuts and holes in fabric', defaultSeverity: 'Critical' },
+      { code: 'Cle-8', name: 'Loose threads sticking to garment surface', defaultSeverity: 'Minor' },
+      { code: 'Cle-9', name: 'Visible QC mark/paper/batch marking on surface', defaultSeverity: 'Minor' },
+      { code: 'Cle-10', name: 'Visible chalk and other marks', defaultSeverity: 'Minor' },
+      { code: 'Cle-12', name: 'Length mismatch (e.g. between shell and lining, front, and back panel)', defaultSeverity: 'Major' },
+      { code: 'Cle-13', name: 'Dust on Garments', defaultSeverity: 'Minor' },
+      { code: 'Cle-14', name: 'Poor sticking at Inside patch for breaks', defaultSeverity: 'Minor' },
     ],
   },
   {
     code: 'Em',
     name: 'Embroidery',
-    description: 'Embroidery tension, thread break, missing stitch, fuzz, misplacement',
+    description: 'Artwork size/type, untrimmed threads, insecure tacking, placement, thread density, floats',
     color: '#7c3aed',
     subDefects: [
-      { code: 'Em-1', name: 'Embroidery missing stitches / gaps', defaultSeverity: 'Major' },
-      { code: 'Em-2', name: 'Embroidery thread broken / loose loop', defaultSeverity: 'Major' },
-      { code: 'Em-3', name: 'Embroidery puckering around motif', defaultSeverity: 'Minor' },
-      { code: 'Em-4', name: 'Embroidery misplaced / off center', defaultSeverity: 'Major' },
-      { code: 'Em-5', name: 'Embroidery backing paper visible / uncut', defaultSeverity: 'Minor' },
-      { code: 'Em-6', name: 'Wrong thread colour or density', defaultSeverity: 'Major' },
-      { code: 'Em-7', name: 'Distorted artwork / jagged letters', defaultSeverity: 'Major' },
+      { code: 'Em-1', name: 'Wrong size or type of Artwork', defaultSeverity: 'Major' },
+      { code: 'Em-2', name: 'Untrimmed thread ends on surface <3mm (m)/ Untrimmed thread ends >3mm (M)', defaultSeverity: 'Minor' },
+      { code: 'Em-6', name: 'Untrimmed thread ends on reverse <2 cm(m)/ Untrimmed thread ends >2cm (M)', defaultSeverity: 'Minor' },
+      { code: 'Em-3', name: 'Insecurely tacked at ends (easily unravels)', defaultSeverity: 'Major' },
+      { code: 'Em-4', name: 'Placement more than 7 mm displacement (than specified)', defaultSeverity: 'Major' },
+      { code: 'Em-5', name: 'Incorrect thread density causing wavy and bumpy appearance', defaultSeverity: 'Major' },
+      { code: 'Em-7', name: 'Connecting threads/ floats at reverse side of the embroidery (>7 mm critical for kids wear)', defaultSeverity: 'Critical' },
     ],
   },
   {
     code: 'Pn',
     name: 'Printing',
-    description: 'Print cracking, peeling, smearing, misregistration, pinholes',
+    description: 'Unwanted print spots, faded print, placement off, incorrect print size/misfit, bleeding, curing',
     color: '#2563eb',
     subDefects: [
-      { code: 'Pn-1', name: 'Print cracking / Poor ink curing', defaultSeverity: 'Major' },
-      { code: 'Pn-2', name: 'Print bleeding / Color smear', defaultSeverity: 'Major' },
-      { code: 'Pn-3', name: 'Print misregistration / Color offset', defaultSeverity: 'Major' },
-      { code: 'Pn-4', name: 'Print peeling / Flaking off', defaultSeverity: 'Major' },
-      { code: 'Pn-5', name: 'Print pinholes / Incomplete ink fill', defaultSeverity: 'Minor' },
-      { code: 'Pn-6', name: 'Print off-spec placement / Crooked', defaultSeverity: 'Major' },
+      { code: 'Pn-1', name: 'Unwanted print spots', defaultSeverity: 'Minor' },
+      { code: 'Pn-2', name: 'Faded print', defaultSeverity: 'Major' },
+      { code: 'Pn-3', name: 'Print Placement off', defaultSeverity: 'Major' },
+      { code: 'Pn-4', name: 'Incorrect print size/ misfit', defaultSeverity: 'Major' },
+      { code: 'Pn-5', name: 'Print Bleeding', defaultSeverity: 'Major' },
+      { code: 'Pn-6', name: 'Improper Print curing/ Sticky print', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Se',
     name: 'Seams and stitching',
-    description: 'Broken stitching, open seam, skip stitch, seam puckering, uneven SPI',
+    description: 'Open seam, skipped stitch, broken stitching, seam twisted/puckered, tacking, asymmetry',
     color: '#0891b2',
     subDefects: [
-      { code: 'Se-1', name: 'Open seam / Hole in seam', defaultSeverity: 'Critical' },
-      { code: 'Se-2', name: 'Broken stitching / Ruptured seam', defaultSeverity: 'Major' },
-      { code: 'Se-3', name: 'Skip stitch / Dropped stitch', defaultSeverity: 'Major' },
-      { code: 'Se-4', name: 'Seam puckering / Gathered seam', defaultSeverity: 'Minor' },
-      { code: 'Se-5', name: 'Uneven stitching / Crooked topstitch', defaultSeverity: 'Minor' },
-      { code: 'Se-6', name: 'Incorrect SPI (stitches per inch)', defaultSeverity: 'Minor' },
-      { code: 'Se-7', name: 'Loose stitch / Tight thread tension', defaultSeverity: 'Minor' },
-      { code: 'Se-8', name: 'Raw edge exposed / Unravelled seam', defaultSeverity: 'Major' },
-      { code: 'Se-9', name: 'Needle chew / Over-penetration cut', defaultSeverity: 'Critical' },
-      { code: 'Se-10', name: 'Run-off topstitching', defaultSeverity: 'Minor' },
-      { code: 'Se-11', name: 'Wavy seam along edge', defaultSeverity: 'Minor' },
-      { code: 'Se-12', name: 'Mismatched seam intersections (cross seams)', defaultSeverity: 'Major' },
-      { code: 'Se-13', name: 'Overlap stitching too long or too short', defaultSeverity: 'Minor' },
-      { code: 'Se-14', name: 'Missing bartack / Defective bartack', defaultSeverity: 'Major' },
-      { code: 'Se-15', name: 'Incorrect thread type or color', defaultSeverity: 'Major' },
-      { code: 'Se-16', name: 'Needle hole without thread', defaultSeverity: 'Minor' },
-      { code: 'Se-17', name: 'Stitch tension unbalanced (birds nest)', defaultSeverity: 'Major' },
-      { code: 'Se-18', name: 'Twisted seam / Seam torque', defaultSeverity: 'Major' },
-      { code: 'Se-19', name: 'Uneven seam allowance width', defaultSeverity: 'Minor' },
-      { code: 'Se-20', name: 'Chain stitch unravelling at end', defaultSeverity: 'Major' },
-      { code: 'Se-21', name: 'Differential feed defect / Ruffling', defaultSeverity: 'Minor' },
-      { code: 'Se-22', name: 'Seam grinning under light tension', defaultSeverity: 'Major' },
-      { code: 'Se-23', name: 'Poor edge trimming on overlock', defaultSeverity: 'Minor' },
-      { code: 'Se-24', name: 'Stitching width out of specification', defaultSeverity: 'Minor' },
-      { code: 'Se-25', name: 'Reinforcement tape missing or twisted', defaultSeverity: 'Major' },
-      { code: 'Se-26', name: 'Double stitching irregular gap', defaultSeverity: 'Minor' },
-      { code: 'Se-27', name: 'Blind hem stitching visible on face', defaultSeverity: 'Minor' },
-      { code: 'Se-28', name: 'Reverse stitching missing at seam ends', defaultSeverity: 'Major' },
-      { code: 'Se-29', name: 'Seam crack under standard pull test', defaultSeverity: 'Critical' },
+      { code: 'Se-1', name: 'Open seam', defaultSeverity: 'Critical' },
+      { code: 'Se-2', name: 'Skipped stitch', defaultSeverity: 'Major' },
+      { code: 'Se-3', name: 'Incomplete seams', defaultSeverity: 'Major' },
+      { code: 'Se-4', name: 'Needle holes', defaultSeverity: 'Major' },
+      { code: 'Se-5', name: 'Improper stitch tension that affects appearance', defaultSeverity: 'Major' },
+      { code: 'Se-6', name: 'Raw edges outside (other than specified)', defaultSeverity: 'Major' },
+      { code: 'Se-7', name: 'Untidy mending', defaultSeverity: 'Minor' },
+      { code: 'Se-8', name: 'Monofilament yarn being used as sewing thread in any stitching incl. label stitching', defaultSeverity: 'Critical' },
+      { code: 'Se-9', name: 'Seam twisted, puckered, or pleated (other than specified) affecting the appearance', defaultSeverity: 'Major' },
+      { code: 'Se-10', name: 'Broken stitching', defaultSeverity: 'Major' },
+      { code: 'Se-11', name: 'Uneven stitch density', defaultSeverity: 'Minor' },
+      { code: 'Se-12', name: 'Uneven/run off stitching', defaultSeverity: 'Minor' },
+      { code: 'Se-13', name: 'Untidy or improper tacking (e.g., unravels)', defaultSeverity: 'Major' },
+      { code: 'Se-14', name: 'Too long tacking', defaultSeverity: 'Minor' },
+      { code: 'Se-15', name: 'Missing bar tacks', defaultSeverity: 'Major' },
+      { code: 'Se-16', name: 'Incorrect seam allowance', defaultSeverity: 'Major' },
+      { code: 'Se-17', name: 'Untidy cutting of seam allowance reverse side', defaultSeverity: 'Minor' },
+      { code: 'Se-20', name: 'Interline fusing delamination or bubble appearance', defaultSeverity: 'Major' },
+      { code: 'Se-22', name: 'Stay / Faults stitch', defaultSeverity: 'Major' },
+      { code: 'Se-23', name: 'Irregular / Gathering stitch', defaultSeverity: 'Minor' },
+      { code: 'Se-24', name: 'Over stitch', defaultSeverity: 'Minor' },
+      { code: 'Se-25', name: 'Asymmetrical length / width- Sleeve, neck, shoulder, leg, string, pocket, flap etc', defaultSeverity: 'Major' },
+      { code: 'Se-26', name: 'Asymmetrical shape / height at Left & Right- Neck, Armhole, pocket, hem etc.', defaultSeverity: 'Major' },
+      { code: 'Se-28', name: 'Length mismatch (e.g., between shell and lining, front and back panel)', defaultSeverity: 'Major' },
+      { code: 'Se-29', name: 'Asymmetrical belt loop', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Pr',
     name: 'Pressing',
-    description: 'Shine mark, burn mark, poor crease, pressing impressions, watermark',
+    description: 'Over pressing seam impression, stretched/distorted, wrinkles, shine mark, pressed poorly',
     color: '#ca8a04',
     subDefects: [
-      { code: 'Pr-1', name: 'Poor iron press / Wrinkled garment', defaultSeverity: 'Minor' },
-      { code: 'Pr-2', name: 'Iron scorch / Burn mark', defaultSeverity: 'Critical' },
-      { code: 'Pr-3', name: 'Seam impression on garment face', defaultSeverity: 'Minor' },
-      { code: 'Pr-4', name: 'Shine mark on fabric from iron/heat', defaultSeverity: 'Major' },
-      { code: 'Pr-5', name: 'Steam water spot or watermark', defaultSeverity: 'Minor' },
+      { code: 'Pr-1', name: 'Over pressing causing seam impression', defaultSeverity: 'Minor' },
+      { code: 'Pr-2', name: 'Stretched or distorted during pressing', defaultSeverity: 'Major' },
+      { code: 'Pr-3', name: 'Wrinkles that require pressing', defaultSeverity: 'Minor' },
+      { code: 'Pr-4', name: 'Shine mark', defaultSeverity: 'Major' },
+      { code: 'Pr-5', name: 'Pressed poorly or not pressed at all', defaultSeverity: 'Minor' },
     ],
   },
   {
     code: 'La',
     name: 'Label, Hangtags, and other accessories',
-    description: 'Care label, brand label, size label, hangtags, price stickers, placement',
+    description: 'Tags, hangtags, care & main labels, sewing thread colour, placement, faded/damaged accessories',
     color: '#0d9488',
     subDefects: [
-      { code: 'La-1', name: 'Missing main brand label', defaultSeverity: 'Major' },
-      { code: 'La-2', name: 'Missing or wrong size label', defaultSeverity: 'Critical' },
-      { code: 'La-3', name: 'Missing or wrong care label content', defaultSeverity: 'Critical' },
-      { code: 'La-4', name: 'Label sewn crooked or inverted', defaultSeverity: 'Minor' },
-      { code: 'La-5', name: 'Label placed in wrong position', defaultSeverity: 'Minor' },
-      { code: 'La-6', name: 'Care label illegible / Faded printing', defaultSeverity: 'Major' },
-      { code: 'La-7', name: 'Missing hangtag or incorrect barcode', defaultSeverity: 'Major' },
-      { code: 'La-8', name: 'Hangtag attached through fabric instead of seam', defaultSeverity: 'Minor' },
-      { code: 'La-9', name: 'Wrong price sticker / EAN barcode mismatch', defaultSeverity: 'Critical' },
-      { code: 'La-10', name: 'Security tag missing or broken', defaultSeverity: 'Major' },
-      { code: 'La-11', name: 'Label scratchy / Raw edge irritating', defaultSeverity: 'Minor' },
-      { code: 'La-12', name: 'Extra / Duplicate label attached', defaultSeverity: 'Minor' },
+      { code: 'La-1', name: 'Missing or wrong tags, hangtag, price tags etc.', defaultSeverity: 'Critical' },
+      { code: 'La-2', name: 'Hangtags insecurely attached or misplaced', defaultSeverity: 'Minor' },
+      { code: 'La-3', name: 'Missing labels, care, main label etc.', defaultSeverity: 'Critical' },
+      { code: 'La-4', name: 'Wrong labels, care, main label etc.', defaultSeverity: 'Critical' },
+      { code: 'La-5', name: 'Label sewing thread does not match colour of garment (other than specified)', defaultSeverity: 'Minor' },
+      { code: 'La-6', name: 'Label sewing seam uneven, puckered and more than 5 mm away from label edge', defaultSeverity: 'Minor' },
+      { code: 'La-7', name: 'Labels insecurely attached', defaultSeverity: 'Major' },
+      { code: 'La-8', name: 'Care label missing all or some care symbols (min. the basic 5 pictograms)', defaultSeverity: 'Critical' },
+      { code: 'La-9', name: 'Main label incorrectly placed', defaultSeverity: 'Minor' },
+      { code: 'La-10', name: 'Care label incorrect placed <1cm displacement (m)/ >1cm displacement (M)', defaultSeverity: 'Minor' },
+      { code: 'La-11', name: 'Faded Main labels, tags, wash care', defaultSeverity: 'Major' },
+      { code: 'La-12', name: 'Damaged, Faded, unreadable accessories', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Da',
     name: 'Darts',
-    description: 'Dart point, dart shape, puckering at dart tip',
+    description: 'Dart shape, length, and depth out of size description',
     color: '#475569',
     subDefects: [
-      { code: 'Da-1', name: 'Dart asymmetrical / Puckered at point', defaultSeverity: 'Major' },
+      { code: 'Da-1', name: 'Incorrect in shape, length, and depth more than 5 mm out of size description', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Po',
     name: 'Pockets and flaps',
-    description: 'Pocket location, shape, size, puckering, flap placement, balance',
+    description: 'Pocket location, shape, crooked sewing, size, uniformity, pucker at joints, flaps placement, symmetry',
     color: '#4f46e5',
     subDefects: [
       { code: 'Po-1', name: 'Not in specified location more than 7 mm displacement', defaultSeverity: 'Major' },
-      { code: 'Po-2', name: 'Shaped poorly', defaultSeverity: 'Minor' },
+      { code: 'Po-2', name: 'Shaped poorly', defaultSeverity: 'Major' },
       { code: 'Po-3', name: 'Sewn crooked', defaultSeverity: 'Major' },
       { code: 'Po-4', name: 'Not of specified size and shape', defaultSeverity: 'Major' },
       { code: 'Po-5', name: 'Not uniform', defaultSeverity: 'Minor' },
@@ -198,7 +192,7 @@ export const MASTER_DEFECT_23_CATEGORIES: DefectCategoryDefinition[] = [
   {
     code: 'Ne',
     name: 'Neckline, Half-moon, Collar and Cuffs',
-    description: 'Neck shape, collar points balance, stand shape, puckering, cuff symmetry',
+    description: 'Neckline, half-moon, collar & cuff shape, balance, alignment, puckering, rib tightness, twisting',
     color: '#b91c1c',
     subDefects: [
       { code: 'Ne-1', name: 'Incorrect Neckline and half-moon shape', defaultSeverity: 'Major' },
@@ -219,7 +213,7 @@ export const MASTER_DEFECT_23_CATEGORIES: DefectCategoryDefinition[] = [
   {
     code: 'Pl',
     name: 'Plackets',
-    description: 'Placket alignment, length, covering, crooked stitch, pleats at ends',
+    description: 'Placket fabric/colour, length balance, inner placket coverage, top stitch, pleats at ends',
     color: '#9333ea',
     subDefects: [
       { code: 'Pl-1', name: 'Wrong fabric or colour (if specified other than main fabric and colour)', defaultSeverity: 'Major' },
@@ -232,156 +226,175 @@ export const MASTER_DEFECT_23_CATEGORIES: DefectCategoryDefinition[] = [
   {
     code: 'He',
     name: 'Hemming',
-    description: 'Hem shape, raw edges outside, uneven hem width, roping',
+    description: 'Wrong shape and raw edges outside on hems',
     color: '#0284c7',
     subDefects: [
-      { code: 'He-1', name: 'Wrong shape / Asymmetrical hem', defaultSeverity: 'Major' },
+      { code: 'He-1', name: 'Wrong shape', defaultSeverity: 'Major' },
       { code: 'He-2', name: 'Raw edges outside (other than specified)', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Clo',
     name: 'Closure',
-    description: 'Buttons, buttonholes, snaps, zippers, hooks, velcro, alignment',
+    description: 'Buttons, buttonholes, loops, snaps, fasteners, zippers, rivets, trims, drawstrings',
     color: '#dc2626',
     subDefects: [
-      { code: 'Clo-1', name: 'Button missing / Broken button', defaultSeverity: 'Major' },
-      { code: 'Clo-2', name: 'Button loose / Poorly attached', defaultSeverity: 'Minor' },
-      { code: 'Clo-3', name: 'Buttonhole uncut / Partially cut', defaultSeverity: 'Major' },
-      { code: 'Clo-4', name: 'Button and buttonhole misaligned / Gapping', defaultSeverity: 'Major' },
-      { code: 'Clo-5', name: 'Zipper wavy / Puckered attachment', defaultSeverity: 'Major' },
-      { code: 'Clo-6', name: 'Zipper slider stuck or malfunction', defaultSeverity: 'Critical' },
-      { code: 'Clo-7', name: 'Snap button loose or defective', defaultSeverity: 'Major' },
+      { code: 'Clo-1', name: 'Wrong buttons size, type, or colour', defaultSeverity: 'Major' },
+      { code: 'Clo-2', name: 'Buttons missing or damaged', defaultSeverity: 'Major' },
+      { code: 'Clo-3', name: 'Buttons placement off', defaultSeverity: 'Major' },
+      { code: 'Clo-4', name: 'Buttons not sewn securely', defaultSeverity: 'Major' },
+      { code: 'Clo-5', name: 'Buttonholes incorrect orientation than approved sample or specified (vertical, horizontal, or diagonal)', defaultSeverity: 'Major' },
+      { code: 'Clo-6', name: 'Buttonholes placement off', defaultSeverity: 'Major' },
+      { code: 'Clo-7', name: 'Buttonholes, button loops, omitted or added', defaultSeverity: 'Major' },
+      { code: 'Clo-8', name: 'Buttonholes uncut (other than specified)', defaultSeverity: 'Major' },
+      { code: 'Clo-9', name: 'Buttonholes, button loops incorrect in size (do not fit with the button)', defaultSeverity: 'Major' },
+      { code: 'Clo-10', name: 'Buttonholes, button loops not sewn securely (easily unravels)', defaultSeverity: 'Major' },
+      { code: 'Clo-11', name: 'Wrong thread colour (if specified other than tone in tone with main fabric)', defaultSeverity: 'Minor' },
+      { code: 'Clo-12', name: 'Wrong type, size, or colour', defaultSeverity: 'Major' },
+      { code: 'Clo-13', name: 'Defective snaps or fasteners that do not function', defaultSeverity: 'Major' },
+      { code: 'Clo-14', name: 'Misalignments of fasteners causing bad appearance', defaultSeverity: 'Major' },
+      { code: 'Clo-15', name: 'Snaps not attached properly or release very easily', defaultSeverity: 'Major' },
+      { code: 'Clo-16', name: 'Improper zippers setting causing wavy and bumpy appearance', defaultSeverity: 'Major' },
+      { code: 'Clo-17', name: 'Incorrect zipper size, type, or colour', defaultSeverity: 'Major' },
+      { code: 'Clo-18', name: 'Defective zipper slides', defaultSeverity: 'Critical' },
+      { code: 'Clo-19', name: 'Defective zipper stopper', defaultSeverity: 'Major' },
+      { code: 'Clo-20', name: 'Tight clearance between slides and seam edge causing difficult slider operation', defaultSeverity: 'Major' },
+      { code: 'Clo-21', name: 'Wrong rivet type, size, or colour', defaultSeverity: 'Major' },
+      { code: 'Clo-22', name: 'Rivets incorrect placed more than 3 mm displacement', defaultSeverity: 'Major' },
+      { code: 'Clo-23', name: 'Rivets with rough edges', defaultSeverity: 'Critical' },
+      { code: 'Clo-24', name: 'Rivets not attached properly or release very easily', defaultSeverity: 'Major' },
+      { code: 'Clo-25', name: 'Fabric pleats under rivets causing a bad appearance', defaultSeverity: 'Minor' },
+      { code: 'Clo-26', name: 'Rusty or tarnish trims', defaultSeverity: 'Major' },
+      { code: 'Clo-27', name: 'Raw or unfinished edge - draw strings, ties, and ribbon', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Bu',
     name: 'Buckles, etc.',
-    description: 'Buckles, D-rings, metal eyelets, rivets, adjusters',
+    description: 'Buckle size/colour, placement, and attachment safety for kids wear',
     color: '#71717a',
     subDefects: [
-      { code: 'Bu-1', name: 'Buckle missing, broken, or defective', defaultSeverity: 'Major' },
-      { code: 'Bu-2', name: 'Rivet or eyelet sharp edge / Burr', defaultSeverity: 'Critical' },
-      { code: 'Bu-3', name: 'Corrosion or tarnish on metal fittings', defaultSeverity: 'Major' },
+      { code: 'Bu-1', name: 'Wrong size or colour', defaultSeverity: 'Major' },
+      { code: 'Bu-2', name: 'Incorrect placement', defaultSeverity: 'Major' },
+      { code: 'Bu-3', name: 'Buckle insecurely attached for kids wear', defaultSeverity: 'Critical' },
     ],
   },
   {
     code: 'Fo',
     name: 'Folding and packing',
-    description: 'Folding format, polybag size, tissue paper, hangtag position',
+    description: 'Packing spec, assortment in box, mold contamination, shade variation in box, folding, polybag',
     color: '#16a34a',
     subDefects: [
-      { code: 'Fo-1', name: 'Garment folded incorrectly against spec', defaultSeverity: 'Minor' },
-      { code: 'Fo-2', name: 'Wrong size polybag used', defaultSeverity: 'Minor' },
-      { code: 'Fo-3', name: 'Polybag suffocation warning missing', defaultSeverity: 'Critical' },
-      { code: 'Fo-4', name: 'Silica gel packet missing / Broken', defaultSeverity: 'Major' },
-      { code: 'Fo-5', name: 'Garment damp inside polybag', defaultSeverity: 'Critical' },
-      { code: 'Fo-6', name: 'Polybag seal defective / Open', defaultSeverity: 'Minor' },
+      { code: 'Fo-1', name: 'Not as specified', defaultSeverity: 'Minor' },
+      { code: 'Fo-2', name: 'Incorrect assortment in a box', defaultSeverity: 'Major' },
+      { code: 'Fo-3', name: 'Mold contamination (spots or smell)', defaultSeverity: 'Critical' },
+      { code: 'Fo-4', name: 'Shade variation within the box', defaultSeverity: 'Major' },
+      { code: 'Fo-5', name: 'Folding not as specified', defaultSeverity: 'Minor' },
+      { code: 'Fo-6', name: 'Damaged or incorrect polybag', defaultSeverity: 'Minor' },
     ],
   },
   {
     code: 'De',
     name: 'Design and colour way',
-    description: 'Wrong design detail, contrast stitching missing, incorrect silhouette',
+    description: 'Design and colour way not according to approved sample or specified',
     color: '#c026d3',
     subDefects: [
-      { code: 'De-1', name: 'Design detail off specification / Wrong color way', defaultSeverity: 'Critical' },
+      { code: 'De-1', name: 'Not according to approved sample or specified', defaultSeverity: 'Critical' },
     ],
   },
   {
     code: 'Sc',
     name: 'Shipping Mark and Carton',
-    description: 'Carton barcode, shipping marks, carton quality, quantity per box',
+    description: 'Carton markings, over/understuffed, weight limit, dimensions, carton quality, wet/damaged cartons',
     color: '#854d0e',
     subDefects: [
-      { code: 'SC-1', name: 'Carton shipping mark incorrect / Missing', defaultSeverity: 'Major' },
-      { code: 'SC-2', name: 'Carton barcode unscannable', defaultSeverity: 'Major' },
-      { code: 'SC-3', name: 'Damaged or crushed carton box', defaultSeverity: 'Major' },
-      { code: 'SC-4', name: 'Wrong quantity packed inside carton', defaultSeverity: 'Critical' },
-      { code: 'SC-5', name: 'Mixed sizes or colors in solid carton', defaultSeverity: 'Critical' },
-      { code: 'SC-6', name: 'Carton sealing tape broken / Poor adhesive', defaultSeverity: 'Minor' },
-      { code: 'SC-7', name: 'Gross / Net weight mismatch on carton', defaultSeverity: 'Minor' },
+      { code: 'SC-1', name: 'Damaged, wrong, or incomplete markings', defaultSeverity: 'Major' },
+      { code: 'SC-2', name: 'Overstuffed carton', defaultSeverity: 'Minor' },
+      { code: 'SC-3', name: 'Under stuffed carton', defaultSeverity: 'Minor' },
+      { code: 'SC-4', name: 'Carton exceeding maximum weight limit', defaultSeverity: 'Major' },
+      { code: 'SC-5', name: 'Incorrect carton Dimension', defaultSeverity: 'Major' },
+      { code: 'SC-6', name: 'Incorrect Carton Quality', defaultSeverity: 'Major' },
+      { code: 'SC-7', name: 'Wet or damaged cartons', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Pa',
     name: 'Padding',
-    description: 'Wadding, padding distribution, quilting lines, fill weight',
+    description: 'Padding volume, unevenness, visibility at seams, penetration of fibre/down',
     color: '#0369a1',
     subDefects: [
-      { code: 'Pa-1', name: 'Uneven padding / Lumping inside panel', defaultSeverity: 'Major' },
-      { code: 'Pa-2', name: 'Padding migration through shell / Leakage', defaultSeverity: 'Major' },
-      { code: 'Pa-3', name: 'Quilting line missed or irregular', defaultSeverity: 'Minor' },
-      { code: 'Pa-4', name: 'Insufficient fill weight / Thin spots', defaultSeverity: 'Major' },
+      { code: 'Pa-1', name: 'Incorrect voluminous of padding (compared to sealed sample)', defaultSeverity: 'Major' },
+      { code: 'Pa-2', name: 'Unevenness of padding', defaultSeverity: 'Major' },
+      { code: 'Pa-3', name: 'Visible padding at seams', defaultSeverity: 'Major' },
+      { code: 'Pa-4', name: 'Penetration of fibre/down', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'WA',
     name: 'Washing Defects',
-    description: 'Wash effect, handfeel, smell, color bleed, enzyme damage',
+    description: 'Wash/dye mark, handfeel, uneven wash, cross stain, crease, PP spray, whisker, grinding, smell, moisture',
     color: '#0284c7',
     subDefects: [
-      { code: 'Wa-1', name: 'Wash effect too light or too dark', defaultSeverity: 'Major' },
-      { code: 'Wa-2', name: 'Uneven wash effect / Streaks', defaultSeverity: 'Major' },
-      { code: 'Wa-3', name: 'Garment harsh handfeel / Not softened', defaultSeverity: 'Minor' },
-      { code: 'Wa-4', name: 'Chemical / Foul odor remaining', defaultSeverity: 'Major' },
-      { code: 'Wa-5', name: 'Abrasion / Hole caused by heavy washing', defaultSeverity: 'Critical' },
-      { code: 'Wa-6', name: 'Color bleeding onto white parts', defaultSeverity: 'Major' },
-      { code: 'Wa-7', name: 'Staining from pocket bag dye', defaultSeverity: 'Major' },
-      { code: 'Wa-8', name: 'Excess shrinkage after wash', defaultSeverity: 'Major' },
-      { code: 'Wa-9', name: 'Pilling formed during wash cycle', defaultSeverity: 'Minor' },
-      { code: 'Wa-10', name: 'Towel or lint residue stuck to fabric', defaultSeverity: 'Minor' },
+      { code: 'Wa-1', name: 'Wash / Dye mark, spot', defaultSeverity: 'Major' },
+      { code: 'Wa-2', name: 'Hand feels hard / Soft', defaultSeverity: 'Minor' },
+      { code: 'Wa-3', name: 'Uneven Wash', defaultSeverity: 'Major' },
+      { code: 'Wa-4', name: 'Cross stain, cleaning stain', defaultSeverity: 'Major' },
+      { code: 'Wa-5', name: 'Line / Crease mark', defaultSeverity: 'Minor' },
+      { code: 'Wa-6', name: 'Improper PP spray / Hand scraping  (compared to approved standard)', defaultSeverity: 'Major' },
+      { code: 'Wa-7', name: 'Improper whisker / Chevron compared to approved standard', defaultSeverity: 'Major' },
+      { code: 'Wa-8', name: 'Grinding / Destroy compared to approved standard', defaultSeverity: 'Major' },
+      { code: 'Wa-9', name: 'Bad Smell', defaultSeverity: 'Major' },
+      { code: 'Wa-10', name: 'Moisture', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Le',
     name: 'Leather',
-    description: 'Leather scratches, grain variation, stiffness, loose stitches',
+    description: 'Leather gauge/thickness, wrinkles, shower/butcher cut, stiff leather, pin holes, panel variation, coating off',
     color: '#78350f',
     subDefects: [
-      { code: 'Le-1', name: 'Leather surface scratch / Scuff mark', defaultSeverity: 'Major' },
-      { code: 'Le-2', name: 'Uneven leather grain / Color variation', defaultSeverity: 'Major' },
-      { code: 'Le-3', name: 'Leather stiffness / Hardness variation', defaultSeverity: 'Minor' },
-      { code: 'Le-4', name: 'Edge paint cracking / Peeling', defaultSeverity: 'Major' },
-      { code: 'Le-5', name: 'Stitch holes enlarged / Torn needle cut', defaultSeverity: 'Critical' },
-      { code: 'Le-6', name: 'Glue residue on leather face', defaultSeverity: 'Minor' },
-      { code: 'Le-7', name: 'Leather thickness out of specification', defaultSeverity: 'Major' },
+      { code: 'Le-1', name: 'Gauge/Thickness uneven', defaultSeverity: 'Major' },
+      { code: 'Le-2', name: 'Wrinkles', defaultSeverity: 'Minor' },
+      { code: 'Le-3', name: 'Shower/butcher cut', defaultSeverity: 'Major' },
+      { code: 'Le-4', name: 'Stiff leather', defaultSeverity: 'Major' },
+      { code: 'Le-5', name: 'Pin holes.', defaultSeverity: 'Major' },
+      { code: 'Le-6', name: 'Panel variation.', defaultSeverity: 'Major' },
+      { code: 'Le-7', name: 'Coating off', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Ms',
     name: 'Measurement',
-    description: 'Key points of measurement out of buyer tolerance table',
+    description: 'Plus/minus out of tolerance measurement, oversize, and undersize measurement',
     color: '#0891b2',
     subDefects: [
-      { code: 'Ms-1', name: 'Out of tolerance on critical point (Chest / Length / Waist)', defaultSeverity: 'Major' },
-      { code: 'Ms-2', name: 'Out of tolerance on secondary point (Sleeve / Neck / Hem)', defaultSeverity: 'Minor' },
-      { code: 'Ms-3', name: 'Asymmetrical measurement (Left vs Right sleeve/leg)', defaultSeverity: 'Major' },
-      { code: 'Ms-4', name: 'Sizing graded incorrectly across full size run', defaultSeverity: 'Critical' },
+      { code: 'Ms-1', name: 'Plus, out of tolerance measurement', defaultSeverity: 'Major' },
+      { code: 'Ms-2', name: 'Minus out of tolerance measurement', defaultSeverity: 'Major' },
+      { code: 'Ms-3', name: 'Oversize measurement', defaultSeverity: 'Major' },
+      { code: 'Ms-4', name: 'Undersize measurement', defaultSeverity: 'Major' },
     ],
   },
   {
     code: 'Sf',
     name: 'Safety',
-    description: 'Needle fragments, sharp points, cord hazards, choking risks',
+    description: 'Broken needle, neck strength, sharp edges, mold, draw length, insecure small parts/trims, insects, foreign objects',
     color: '#b91c1c',
     subDefects: [
-      { code: 'Sf-1', name: 'Broken needle fragment detected', defaultSeverity: 'Critical' },
-      { code: 'Sf-2', name: 'Sharp pin, staple, or wire left in garment', defaultSeverity: 'Critical' },
-      { code: 'Sf-3', name: 'Drawstring length exceeds safety standard (choking hazard)', defaultSeverity: 'Critical' },
-      { code: 'Sf-4', name: 'Small parts detachment / Choking hazard (<90N pull test)', defaultSeverity: 'Critical' },
-      { code: 'Sf-5', name: 'Sharp edge or burr on metal component', defaultSeverity: 'Critical' },
-      { code: 'Sf-6', name: 'Lead or phthalate prohibited substance issue', defaultSeverity: 'Critical' },
-      { code: 'Sf-7', name: 'Flammability test non-compliance', defaultSeverity: 'Critical' },
-      { code: 'Sf-8', name: 'Unsecured toggle or cord stopper on infant garment', defaultSeverity: 'Critical' },
-      { code: 'Sf-9', name: 'Suffocation risk on packaging bag (no holes/warning)', defaultSeverity: 'Critical' },
-      { code: 'Sf-10', name: 'Hazardous odor or chemical residue', defaultSeverity: 'Critical' },
+      { code: 'Sf-1', name: 'Broken needle', defaultSeverity: 'Critical' },
+      { code: 'Sf-2', name: 'Neck strength', defaultSeverity: 'Critical' },
+      { code: 'Sf-3', name: 'Sharp edges', defaultSeverity: 'Critical' },
+      { code: 'Sf-4', name: 'Mold', defaultSeverity: 'Critical' },
+      { code: 'Sf-5', name: 'Draw length etc. exceed than specified for kids wear', defaultSeverity: 'Critical' },
+      { code: 'Sf-6', name: 'Insecure small acc / decoration on baby products (under 3 years children)', defaultSeverity: 'Critical' },
+      { code: 'Sf-7', name: 'Insect on product', defaultSeverity: 'Critical' },
+      { code: 'Sf-9', name: 'Foreign substance/object in the box', defaultSeverity: 'Critical' },
+      { code: 'Sf-10', name: "Insecure trims attaching (Children's wear - critical & Adults wear – Major)", defaultSeverity: 'Critical' },
     ],
   },
 ];
 
 // Convert the 23 categories into DefectGroup[] and DefectMasterItem[]
-export const INITIAL_DEFECT_GROUPS: DefectGroup[] = MASTER_DEFECT_23_CATEGORIES.map((cat, idx) => ({
+export const INITIAL_DEFECT_GROUPS: DefectGroup[] = MASTER_DEFECT_23_CATEGORIES.map((cat) => ({
   id: `dg-${cat.code.toLowerCase()}`,
   groupName: `${cat.name} (${cat.code})`,
   description: cat.description,
@@ -390,7 +403,7 @@ export const INITIAL_DEFECT_GROUPS: DefectGroup[] = MASTER_DEFECT_23_CATEGORIES.
 }));
 
 export const INITIAL_DEFECT_MASTER: DefectMasterItem[] = MASTER_DEFECT_23_CATEGORIES.flatMap((cat) =>
-  cat.subDefects.map((sub, sIdx) => ({
+  cat.subDefects.map((sub) => ({
     id: `dm-${sub.code.toLowerCase()}`,
     standardDefectName: sub.name,
     defectGroupId: `dg-${cat.code.toLowerCase()}`,
@@ -402,6 +415,51 @@ export const INITIAL_DEFECT_MASTER: DefectMasterItem[] = MASTER_DEFECT_23_CATEGO
     updatedAt: '2026-08-01',
   }))
 );
+
+export interface CanonicalDefectEntry {
+  code: string;
+  name: string;
+  defaultSeverity: DefectSeverity;
+  categoryCode: string;
+  categoryName: string;
+  defectGroupId: string;
+  color: string;
+}
+
+export const CATEGORY_BY_CODE_MAP = new Map<string, DefectCategoryDefinition>();
+export const SUB_DEFECT_BY_CODE_MAP = new Map<string, CanonicalDefectEntry>();
+export const SUB_DEFECT_BY_NAME_MAP = new Map<string, CanonicalDefectEntry>();
+
+for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+  CATEGORY_BY_CODE_MAP.set(cat.code.toUpperCase(), cat);
+  const gid = `dg-${cat.code.toLowerCase()}`;
+  for (const sub of cat.subDefects) {
+    const entry: CanonicalDefectEntry = {
+      code: sub.code,
+      name: sub.name,
+      defaultSeverity: sub.defaultSeverity,
+      categoryCode: cat.code,
+      categoryName: cat.name,
+      defectGroupId: gid,
+      color: cat.color,
+    };
+    SUB_DEFECT_BY_CODE_MAP.set(sub.code.toUpperCase(), entry);
+    if (!SUB_DEFECT_BY_NAME_MAP.has(sub.name.toLowerCase())) {
+      SUB_DEFECT_BY_NAME_MAP.set(sub.name.toLowerCase(), entry);
+    }
+  }
+}
+
+function findSubDefect(code: string) {
+  const entry = SUB_DEFECT_BY_CODE_MAP.get(code.toUpperCase());
+  if (!entry) return null;
+  return {
+    code: entry.code,
+    standardDefectName: entry.name,
+    defectGroupId: entry.defectGroupId,
+    severity: entry.defaultSeverity,
+  };
+}
 
 /**
  * Normalizes compact or alias PDF defect codes into canonical MASTER_DEFECT_23_CATEGORIES codes
@@ -428,7 +486,7 @@ export function normalizeCompactDefectCode(rawCode: string): string | null {
 
 /**
  * Intelligent Keyword & Defect Matching Engine
- * Matches raw descriptions (e.g. "Ne-7 Collar points...", "CL5 Oil spots...", "CL1 Spot...", "NO1 ...")
+ * Matches raw descriptions & official BESTSELLER codes (e.g. "Ne-7 Collar points...", "Cle-5 Oil spots...", "Se-10 Broken stitching", "CL5", "CL1", "NO1")
  */
 export function classifyRawDefect(
   rawText: string,
@@ -466,17 +524,29 @@ export function classifyRawDefect(
     ? clean.slice(leadingCodeMatch[0].length).replace(/^[:.\-\s]+/, '').toLowerCase()
     : lower;
 
-  // 1. If descriptive text is present, match exact sub-defect name or semantic keyword first
-  // (Handles BESTSELLER codes whose numbering differs from catalog, e.g., "Se-10 Broken stitching", "La-9 Main label incorrectly placed")
+  // 1. Exact canonical code match (since catalog now mirrors the exact official BESTSELLER PDF list)
+  if (normalizedCode && prefixCategory) {
+    const exactCodeSub = prefixCategory.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
+    if (exactCodeSub) {
+      return {
+        standardDefectName: exactCodeSub.name,
+        defectGroupId: `dg-${prefixCategory.code.toLowerCase()}`,
+        severity: exactCodeSub.defaultSeverity,
+        matchType: 'Auto-Matched',
+        confidence: 98,
+      };
+    }
+  }
+
+  // 2. If descriptive text is present, match exact sub-defect name or semantic keyword
   if (descriptionPart.length >= 4) {
-    // 1a. Exact sub-defect name match within prefix category first, then across all categories
     const searchCats = prefixCategory
       ? [prefixCategory, ...MASTER_DEFECT_23_CATEGORIES.filter((c) => c !== prefixCategory)]
       : MASTER_DEFECT_23_CATEGORIES;
 
     for (const cat of searchCats) {
       for (const sub of cat.subDefects) {
-        if (descriptionPart.includes(sub.name.toLowerCase())) {
+        if (descriptionPart.includes(sub.name.toLowerCase()) || sub.name.toLowerCase().includes(descriptionPart)) {
           return {
             standardDefectName: sub.name,
             defectGroupId: `dg-${cat.code.toLowerCase()}`,
@@ -488,85 +558,81 @@ export function classifyRawDefect(
       }
     }
 
-    // 1b. Semantic description matching
+    // Semantic description matching mapped directly to exact PDF sub-defects
     if (lower.includes('oil spot') || lower.includes('oil stain') || (lower.includes('oil') && lower.includes('stain'))) {
-      return { standardDefectName: 'Oil spots or stains (cannot be removed)', defectGroupId: 'dg-cle', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+      return { ...(findSubDefect('Cle-5')!), matchType: 'Auto-Matched', confidence: 95 };
     }
     if (lower.includes('untrimmed') || lower.includes('uncut thread') || lower.includes('loose thread')) {
-      return { standardDefectName: 'Untrimmed thread ends reversed / Visible thread', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 94 };
+      const code = lower.includes('surface') ? 'Cle-8' : 'Cle-3';
+      return { ...(findSubDefect(code)!), matchType: 'Auto-Matched', confidence: 94 };
     }
-    if (lower.includes('dirt') || lower.includes('stain') || lower.includes('soil') || lower.includes('spot') || lower.includes('chalk') || lower.includes('glue') || lower.includes('clean')) {
-      return { standardDefectName: 'Spot, stain and soil marks', defectGroupId: 'dg-cle', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
+    if (lower.includes('dirt') || lower.includes('stain') || lower.includes('soil') || lower.includes('spot') || lower.includes('chalk') || lower.includes('glue')) {
+      return { ...(findSubDefect('Cle-1')!), matchType: 'Auto-Matched', confidence: 92 };
     }
     if (lower.includes('collar point')) {
-      return { standardDefectName: 'Collar points not uniform and balanced (other than specified)', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 94 };
+      return { ...(findSubDefect('Ne-7')!), matchType: 'Auto-Matched', confidence: 94 };
     }
     if (lower.includes('neckline') || lower.includes('half-moon') || lower.includes('collar') || lower.includes('cuff')) {
-      return { standardDefectName: 'Incorrect Neckline and half-moon shape', defectGroupId: 'dg-ne', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+      return { ...(findSubDefect('Ne-1')!), matchType: 'Auto-Matched', confidence: 92 };
     }
     if (lower.includes('shine') || lower.includes('press mark') || lower.includes('iron')) {
-      return { standardDefectName: 'Shine mark on fabric from iron/heat', defectGroupId: 'dg-pr', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+      return { ...(findSubDefect('Pr-4')!), matchType: 'Auto-Matched', confidence: 92 };
     }
     if (lower.includes('foreign yarn') || lower.includes('fly yarn')) {
-      return { standardDefectName: 'Foreign Yarns / Fly yarn', defectGroupId: 'dg-fa', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
+      return { ...(findSubDefect('Fa-10')!), matchType: 'Auto-Matched', confidence: 92 };
     }
-    // Use strict word boundary for "hole" so "armhole" or "buttonhole" NEVER falsely trigger Fabric Hole / Needle cut!
-    if (/\bholes?\b/i.test(lower) || lower.includes('needle cut') || lower.includes('yarn cut')) {
-      return { standardDefectName: 'Hole / Needle cut / Yarn cut', defectGroupId: 'dg-fa', severity: 'Critical', matchType: 'Auto-Matched', confidence: 92 };
+    // Use strict word boundary for "hole" so "armhole" or "buttonhole" never falsely trigger fabric hole
+    if (/\bholes?\b/i.test(lower) || lower.includes('cuts and holes')) {
+      const code = lower.includes('drill') ? 'Fa-2' : lower.includes('fabric') ? 'Fa-3' : 'Cle-6';
+      return { ...(findSubDefect(code)!), matchType: 'Auto-Matched', confidence: 92 };
     }
     if (lower.includes('broken stitch')) {
-      return { standardDefectName: 'Broken stitching / Ruptured seam', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 95 };
+      return { ...(findSubDefect('Se-10')!), matchType: 'Auto-Matched', confidence: 95 };
     }
     if (lower.includes('open seam')) {
-      return { standardDefectName: 'Open seam / Hole in seam', defectGroupId: 'dg-se', severity: 'Critical', matchType: 'Auto-Matched', confidence: 94 };
+      return { ...(findSubDefect('Se-1')!), matchType: 'Auto-Matched', confidence: 94 };
     }
-    if (lower.includes('skip stitch')) {
-      return { standardDefectName: 'Skip stitch / Dropped stitch', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
+    if (lower.includes('skip') && lower.includes('stitch')) {
+      return { ...(findSubDefect('Se-2')!), matchType: 'Auto-Matched', confidence: 93 };
     }
-    if (lower.includes('twisted seam') || lower.includes('seam twisted')) {
-      return { standardDefectName: 'Twisted seam / Seam torque', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
+    if (lower.includes('twisted seam') || lower.includes('seam twisted') || lower.includes('pucker')) {
+      return { ...(findSubDefect('Se-9')!), matchType: 'Auto-Matched', confidence: 93 };
     }
     if (lower.includes('buttonhole')) {
-      return { standardDefectName: 'Button and buttonhole misaligned / Gapping', defectGroupId: 'dg-clo', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+      return { ...(findSubDefect('Clo-6')!), matchType: 'Auto-Matched', confidence: 92 };
     }
-    if (prefixCategory?.code === 'Se' && normalizedCode) {
-      const exactSub = prefixCategory.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
-      if (exactSub) {
-        return { standardDefectName: exactSub.name, defectGroupId: 'dg-se', severity: exactSub.defaultSeverity, matchType: 'Auto-Matched', confidence: 96 };
-      }
-    }
-    if (lower.includes('seam') || lower.includes('pucker') || lower.includes('stitch')) {
-      return { standardDefectName: 'Seam puckering / Gathered seam', defectGroupId: 'dg-se', severity: 'Minor', matchType: 'Auto-Matched', confidence: 88 };
+    if (lower.includes('seam') || lower.includes('stitch')) {
+      return { ...(findSubDefect('Se-9')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('label') && (lower.includes('place') || lower.includes('position') || lower.includes('incorrect'))) {
-      return { standardDefectName: 'Label placed in wrong position', defectGroupId: 'dg-la', severity: 'Minor', matchType: 'Auto-Matched', confidence: 93 };
+      return { ...(findSubDefect('La-9')!), matchType: 'Auto-Matched', confidence: 93 };
     }
     if (lower.includes('label') || lower.includes('hangtag')) {
-      return { standardDefectName: 'Missing main brand label', defectGroupId: 'dg-la', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('La-3')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('shaped poorly') || (prefixCategory?.code === 'Po' && lower.includes('shape'))) {
-      return { standardDefectName: 'Shaped poorly', defectGroupId: 'dg-po', severity: 'Minor', matchType: 'Auto-Matched', confidence: 94 };
+      return { ...(findSubDefect('Po-2')!), matchType: 'Auto-Matched', confidence: 94 };
     }
     if (lower.includes('pocket') || lower.includes('flap')) {
-      return { standardDefectName: 'Sewn crooked', defectGroupId: 'dg-po', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Po-3')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('shade') || lower.includes('shading')) {
-      return { standardDefectName: 'Panel to panel shade difference', defectGroupId: 'dg-sh', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Sh-1')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('embroidery')) {
-      return { standardDefectName: 'Embroidery missing stitches / gaps', defectGroupId: 'dg-em', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Em-1')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('print')) {
-      return { standardDefectName: 'Print cracking / Poor ink curing', defectGroupId: 'dg-pn', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Pn-3')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('button') || lower.includes('zipper') || lower.includes('snap')) {
-      return { standardDefectName: 'Button missing / Broken button', defectGroupId: 'dg-clo', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Clo-2')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('placket')) {
-      return { standardDefectName: 'Unbalanced and crooked placket top stitch', defectGroupId: 'dg-pl', severity: 'Minor', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('Pl-4')!), matchType: 'Auto-Matched', confidence: 88 };
     }
     if (lower.includes('hem')) {
-      return { standardDefectName: 'Wrong shape / Asymmetrical hem', defectGroupId: 'dg-he', severity: 'Major', matchType: 'Auto-Matched', confidence: 88 };
+      return { ...(findSubDefect('He-1')!), matchType: 'Auto-Matched', confidence: 88 };
     }
 
     for (const dm of defectMaster) {
@@ -585,18 +651,8 @@ export function classifyRawDefect(
     }
   }
 
-  // 2. Direct canonical / compact code prefix lookup fallback
-  if (normalizedCode && prefixCategory) {
-    const sub = prefixCategory.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
-    if (sub) {
-      return {
-        standardDefectName: sub.name,
-        defectGroupId: `dg-${prefixCategory.code.toLowerCase()}`,
-        severity: sub.defaultSeverity,
-        matchType: 'Auto-Matched',
-        confidence: 96,
-      };
-    }
+  // 3. Category prefix fallback when code number wasn't matched directly
+  if (prefixCategory) {
     return {
       standardDefectName: prefixCategory.subDefects[0]?.name || clean.replace(/^[A-Za-z]{2,4}-?\d{1,3}\s*/, ''),
       defectGroupId: `dg-${prefixCategory.code.toLowerCase()}`,
@@ -606,7 +662,7 @@ export function classifyRawDefect(
     };
   }
 
-  // 3. Sub-code substring match fallback
+  // 4. Sub-code substring match fallback
   for (const cat of MASTER_DEFECT_23_CATEGORIES) {
     for (const sub of cat.subDefects) {
       if (lower.includes(sub.code.toLowerCase()) || lower.includes(sub.name.toLowerCase())) {
@@ -635,8 +691,7 @@ export function classifyRawDefect(
 
 /**
  * Resolves a stored defect record cleanly, repairing any legacy misclassifications
- * where an explicit code prefix in originalDefectName (e.g. "Se-26 ... Armhole ...")
- * conflicts with an older incorrectly saved defectGroupId (e.g. "dg-fa" / "Hole / Needle cut").
+ * or legacy catalog labels so every code prefix maps accurately to its exact PDF category/sub-defect.
  */
 export function resolveDefectAccurate(defect: {
   originalDefectName?: string;
@@ -656,6 +711,18 @@ export function resolveDefectAccurate(defect: {
   const prefix = explicitCode ? explicitCode.split('-')[0].toLowerCase() : '';
   const expectedGid = prefix ? `dg-${prefix}` : '';
 
+  // Map explicit PDF code cleanly to canonical sub-defect name if present
+  if (explicitCode) {
+    const exactMatch = findSubDefect(explicitCode);
+    if (exactMatch) {
+      return {
+        standardDefectName: exactMatch.standardDefectName,
+        defectGroupId: exactMatch.defectGroupId,
+        explicitCode,
+      };
+    }
+  }
+
   if (expectedGid && gid && expectedGid !== gid.toLowerCase()) {
     const reclassified = classifyRawDefect(raw);
     return {
@@ -669,5 +736,71 @@ export function resolveDefectAccurate(defect: {
     standardDefectName: std || raw,
     defectGroupId: gid || expectedGid || 'dg-se',
     explicitCode,
+  };
+}
+
+/**
+ * Resolves any InspectionDefect record into a canonical single defect with official PDF code & category.
+ */
+export function getCanonicalDefectInfo(defect: {
+  originalDefectName?: string;
+  standardDefectName?: string;
+  defectGroupId?: string;
+}): {
+  code: string;
+  name: string;
+  categoryCode: string;
+  categoryName: string;
+  defectGroupId: string;
+} {
+  const resolved = resolveDefectAccurate(defect);
+
+  if (resolved.explicitCode) {
+    const byCode = SUB_DEFECT_BY_CODE_MAP.get(resolved.explicitCode.toUpperCase());
+    if (byCode) {
+      return {
+        code: byCode.code,
+        name: byCode.name,
+        categoryCode: byCode.categoryCode,
+        categoryName: byCode.categoryName,
+        defectGroupId: byCode.defectGroupId,
+      };
+    }
+  }
+
+  const stdLower = resolved.standardDefectName.trim().toLowerCase();
+  if (stdLower) {
+    const byName = SUB_DEFECT_BY_NAME_MAP.get(stdLower);
+    if (byName) {
+      return {
+        code: byName.code,
+        name: byName.name,
+        categoryCode: byName.categoryCode,
+        categoryName: byName.categoryName,
+        defectGroupId: byName.defectGroupId,
+      };
+    }
+  }
+
+  const classified = classifyRawDefect(defect.originalDefectName || defect.standardDefectName || '');
+  const classEntry = SUB_DEFECT_BY_NAME_MAP.get(classified.standardDefectName.toLowerCase());
+  if (classEntry) {
+    return {
+      code: classEntry.code,
+      name: classEntry.name,
+      categoryCode: classEntry.categoryCode,
+      categoryName: classEntry.categoryName,
+      defectGroupId: classEntry.defectGroupId,
+    };
+  }
+
+  const catCode = (resolved.defectGroupId || '').replace(/^dg-/i, '').toUpperCase();
+  const cat = CATEGORY_BY_CODE_MAP.get(catCode);
+  return {
+    code: resolved.explicitCode || cat?.code || 'Gen',
+    name: resolved.standardDefectName || defect.originalDefectName || 'Unspecified Defect',
+    categoryCode: cat?.code || 'Se',
+    categoryName: cat?.name || 'Seams and stitching',
+    defectGroupId: resolved.defectGroupId || 'dg-se',
   };
 }

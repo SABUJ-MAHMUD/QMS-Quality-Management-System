@@ -5,6 +5,7 @@ import { classifyRawDefect } from '../data/defectMasterData';
 const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export interface ExtractedInspectionDraft {
+  existingReportId?: string;
   buyer: string; // Brand (e.g. ONLY&SONS, ONLY, NAME IT, BESTSELLER)
   brand?: string;
   factory: string;
@@ -30,6 +31,7 @@ export interface ExtractedInspectionDraft {
   inspectionLevel: string;
   pdfFileName: string;
   extractionConfidence: number;
+  extractionWarning?: string;
   rawText?: string;
   targetMonth?: string;
   floor?: string;
@@ -97,15 +99,15 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Pr-4 Shine mark.',
-        standard: 'Shine mark on fabric from iron/heat',
+        standard: 'Shine mark',
         groupId: 'dg-pr',
         severity: 'Major' as const,
         qty: 1,
         remarks: 'Items affected: 1 (Panel press shine mark)',
       },
       {
-        name: 'Cle-1 Spot, stain and soil marks.',
-        standard: 'Spot, stain and soil marks',
+        name: 'Cle-1 Spot, stain, and soil marks.',
+        standard: 'Spot, stain, and soil marks',
         groupId: 'dg-cle',
         severity: 'Minor' as const,
         qty: 1,
@@ -113,7 +115,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Fa-10 Foreign Yarns.',
-        standard: 'Foreign Yarns / Fly yarn',
+        standard: 'Foreign Yarns',
         groupId: 'dg-fa',
         severity: 'Minor' as const,
         qty: 1,
@@ -154,7 +156,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Cle-3 Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M).',
-        standard: 'Untrimmed thread ends reversed / Visible thread',
+        standard: 'Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M)',
         groupId: 'dg-cle',
         severity: 'Major' as const,
         qty: 1,
@@ -162,7 +164,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'SL-1 Dirt/Stain/Mark(Glue/pen/pencil/Chalk/Adhesive/Rust) >= 2,5mm.',
-        standard: 'Spot, stain and soil marks',
+        standard: 'Spot, stain, and soil marks',
         groupId: 'dg-cle',
         severity: 'Minor' as const,
         qty: 1,
@@ -194,8 +196,8 @@ export const FACTORY_PDF_REPORTS = [
     defectsCount: 4,
     sampleDefects: [
       {
-        name: 'Se-2 Broken stitch on shoulder rib join',
-        standard: 'Broken stitching / Ruptured seam',
+        name: 'Se-10 Broken stitching on shoulder rib join',
+        standard: 'Broken stitching',
         groupId: 'dg-se',
         severity: 'Major' as const,
         qty: 2,
@@ -211,7 +213,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Cle-3 Untrimmed thread ends > 10mm at hem',
-        standard: 'Untrimmed thread ends reversed / Visible thread',
+        standard: 'Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M)',
         groupId: 'dg-cle',
         severity: 'Minor' as const,
         qty: 3,
@@ -243,8 +245,8 @@ export const FACTORY_PDF_REPORTS = [
     defectsCount: 2,
     sampleDefects: [
       {
-        name: 'Se-3 Skip stitch on neckline band',
-        standard: 'Skip stitch / Dropped stitch',
+        name: 'Se-2 Skipped stitch on neckline band',
+        standard: 'Skipped stitch',
         groupId: 'dg-se',
         severity: 'Major' as const,
         qty: 1,
@@ -252,7 +254,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Cle-3 Loose untrimmed thread',
-        standard: 'Untrimmed thread ends reversed / Visible thread',
+        standard: 'Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M)',
         groupId: 'dg-cle',
         severity: 'Minor' as const,
         qty: 2,
@@ -284,10 +286,10 @@ export const FACTORY_PDF_REPORTS = [
     defectsCount: 3,
     sampleDefects: [
       {
-        name: 'Clo-2 Loose button on placket',
-        standard: 'Button loose / Poorly attached',
+        name: 'Clo-4 Buttons not sewn securely on placket',
+        standard: 'Buttons not sewn securely',
         groupId: 'dg-clo',
-        severity: 'Minor' as const,
+        severity: 'Major' as const,
         qty: 2,
         remarks: 'Top button stitch tension weak',
       },
@@ -301,7 +303,7 @@ export const FACTORY_PDF_REPORTS = [
       },
       {
         name: 'Cle-3 Untrimmed thread at slit',
-        standard: 'Untrimmed thread ends reversed / Visible thread',
+        standard: 'Untrimmed thread ends reverse side < 2 cm (m)/Untrimmed thread ends reverse side >2 cm (M)',
         groupId: 'dg-cle',
         severity: 'Minor' as const,
         qty: 3,
@@ -324,10 +326,18 @@ async function recognizeCanvasesWithOcr(
   try {
     onProgress?.(45, 'Loading local OCR engine for scanned PDF / image...');
     const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker('eng', 1, {
-      workerPath: '/tesseract-worker.min.js',
-      errorHandler: (err: any) => console.warn('OCR worker note:', err),
-    });
+    let worker: any;
+    try {
+      worker = await createWorker('eng', 1, {
+        workerPath: '/tesseract-worker.min.js',
+        errorHandler: (err: any) => console.warn('OCR worker note:', err),
+      });
+    } catch (workerErr) {
+      console.warn('Local tesseract worker fallback to default loader:', workerErr);
+      worker = await createWorker('eng', 1, {
+        errorHandler: (err: any) => console.warn('OCR default worker note:', err),
+      });
+    }
 
     let ocrText = '';
     try {
@@ -416,27 +426,29 @@ async function renderPdfPagesToCanvases(pdfDoc: any, maxPages: number = 3): Prom
  * Reconstructs visual table rows from PDF.js textContent items using Y-proximity & X-gap
  * cell detection (` | `), and falls back to OCR when a PDF is scanned/image-only.
  */
-export async function extractTextFromPdfFile(
-  file: File,
-  onProgress?: (pct: number, status: string) => void
-): Promise<string> {
-  // Method 1: Lazy-loaded PDF.js with local .js worker + safe timeout
+async function openPdfDocumentResilient(pdfjsLib: any, dataBytes: Uint8Array): Promise<any> {
+  // Stage A: Try Vite-bundled module worker URL (immune to stale /pdf.worker.min.js SW HTML fallback)
+  let workerUrl = '/pdf.worker.min.js';
   try {
-    onProgress?.(25, `Opening PDF document: ${file.name}...`);
-    const pdfjsLib = await import('pdfjs-dist');
-    if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+    const workerUrlMod = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+    if (workerUrlMod?.default) {
+      workerUrl = workerUrlMod.default;
     }
+  } catch {
+    // Fallback to public worker path
+  }
 
-    const arrayBuffer = await file.arrayBuffer();
+  const runAttempt = async (src: string, timeoutMs: number) => {
+    if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = src;
+    }
     const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(arrayBuffer),
+      data: dataBytes.slice(),
       disableFontFace: true,
       useSystemFonts: true,
       stopAtErrors: false,
       verbosity: 0,
     });
-
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
@@ -445,12 +457,49 @@ export async function extractTextFromPdfFile(
         } catch {
           // ignore
         }
-        reject(new Error('PDF text extraction timed out'));
-      }, 15000);
+        reject(new Error('PDF worker extraction timed out'));
+      }, timeoutMs);
     });
+    try {
+      const doc = await Promise.race([loadingTask.promise, timeoutPromise]);
+      if (timeoutId) clearTimeout(timeoutId);
+      return doc;
+    } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId);
+      try {
+        loadingTask.destroy();
+      } catch {
+        // ignore
+      }
+      throw err;
+    }
+  };
 
-    const pdfDoc = await Promise.race([loadingTask.promise, timeoutPromise]);
-    if (timeoutId) clearTimeout(timeoutId);
+  try {
+    return await runAttempt(workerUrl, 8000);
+  } catch (primaryErr) {
+    console.warn('Primary PDF Web Worker unavailable, switching to in-bundle fallback:', primaryErr);
+    // Stage B: Pre-populate globalThis.pdfjsWorker with bundled WorkerMessageHandler so PDF.js runs cleanly on shared proxy / strict CSP origins without external worker fetch
+    try {
+      const workerMod = await import('pdfjs-dist/build/pdf.worker.min.mjs');
+      (globalThis as any).pdfjsWorker = workerMod;
+    } catch {
+      // ignore
+    }
+    return await runAttempt('data:application/javascript,', 12000);
+  }
+}
+
+export async function extractTextFromPdfFile(
+  file: File,
+  onProgress?: (pct: number, status: string) => void
+): Promise<string> {
+  // Method 1: Lazy-loaded PDF.js with resilient worker + in-bundle fallback
+  try {
+    onProgress?.(25, `Opening PDF document: ${file.name}...`);
+    const pdfjsLib = await import('pdfjs-dist');
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await openPdfDocumentResilient(pdfjsLib, new Uint8Array(arrayBuffer));
 
     let fullText = '';
     const maxPages = Math.min(pdfDoc.numPages, 12);
@@ -531,7 +580,7 @@ export async function extractTextFromPdfFile(
     const meaningfulChars = fullText.replace(/---\s*Page\s*\d+\s*---/gi, '').replace(/\s+/g, '');
     if (meaningfulChars.length >= 40) {
       try {
-        await ((pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.() ?? loadingTask.destroy());
+        await (pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.();
       } catch {
         // ignore
       }
@@ -541,7 +590,7 @@ export async function extractTextFromPdfFile(
     // Scanned / Image-only PDF (0 selectable text): render pages and run OCR automatically!
     const canvases = await renderPdfPagesToCanvases(pdfDoc, 3);
     try {
-      await ((pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.() ?? loadingTask.destroy());
+      await (pdfDoc as unknown as { destroy?: () => Promise<void> }).destroy?.();
     } catch {
       // ignore
     }
@@ -640,7 +689,15 @@ export async function parseInspectionFile(
     return draft;
   }
 
-  return extractDataFromText(rawText || file.name, file.name, defectMaster, defectGroups, targetMonth);
+  const draft = extractDataFromText(rawText || file.name, file.name, defectMaster, defectGroups, targetMonth);
+  if (
+    file instanceof File &&
+    (!rawText || rawText.trim() === file.name || rawText.replace(/---\s*Page\s*\d+\s*---/gi, '').trim().length < 40)
+  ) {
+    draft.extractionWarning =
+      'PDF text layer or OCR engine could not read content from this file. Please try re-exporting the PDF with selectable text, uploading a crisp PNG/JPG screenshot, or pasting report text in Tab 3.';
+  }
+  return draft;
 }
 
 function createDraftFromReportTemplate(
@@ -664,6 +721,7 @@ function createDraftFromReportTemplate(
   const total = crit + maj + min;
 
   const brand = resolveBrandFromStyle(match.styleNumber, match.brand || 'ONLY&SONS');
+  const derivedMonth = match.date ? match.date.slice(0, 7) : targetMonth || match.targetMonth;
 
   return {
     buyer: brand,
@@ -672,7 +730,7 @@ function createDraftFromReportTemplate(
     reportNumber: fileName.replace(/\.(pdf|png|jpg|jpeg)$/i, '').trim(),
     inspectionType: 'Final',
     inspectionDate: match.date,
-    targetMonth: targetMonth || match.targetMonth,
+    targetMonth: derivedMonth,
     orderNumber: match.orderNumber,
     poNumber: match.orderNumber,
     inspector: match.inspector,
@@ -893,7 +951,11 @@ function extractInspectorName(lines: string[], bodyText: string): string {
   return '';
 }
 
-function extractInspectionDate(lines: string[], bodyText: string, fileName: string): string {
+function extractInspectionDate(
+  lines: string[],
+  bodyText: string,
+  fileName: string
+): { date: string; fromDocument: boolean } {
   // 1. Check explicit "Inspection Date" row/cell first
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -902,12 +964,12 @@ function extractInspectionDate(lines: string[], bodyText: string, fileName: stri
     const after = line.slice(m.index + m[0].length);
     const firstCell = after.split('|').map((c) => c.trim()).find(Boolean) || after;
     const parsed = normalizeParsedDate(firstCell);
-    if (parsed) return parsed;
+    if (parsed) return { date: parsed, fromDocument: true };
 
     // Next line check
     for (let j = 1; j <= 2 && i + j < lines.length; j++) {
       const nextParsed = normalizeParsedDate(lines[i + j]);
-      if (nextParsed) return nextParsed;
+      if (nextParsed) return { date: nextParsed, fromDocument: true };
     }
   }
 
@@ -915,7 +977,7 @@ function extractInspectionDate(lines: string[], bodyText: string, fileName: stri
   const plannedMatch = bodyText.match(/\bPlanned\s*Date\s*[:.\-|]*\s*([^\r\n|]+)/i);
   if (plannedMatch?.[1]) {
     const parsed = normalizeParsedDate(plannedMatch[1]);
-    if (parsed) return parsed;
+    if (parsed) return { date: parsed, fromDocument: true };
   }
 
   // 3. Any date pattern inside bodyText
@@ -924,7 +986,7 @@ function extractInspectionDate(lines: string[], bodyText: string, fileName: stri
   );
   if (anyDateMatch?.[1]) {
     const parsed = normalizeParsedDate(anyDateMatch[1]);
-    if (parsed) return parsed;
+    if (parsed) return { date: parsed, fromDocument: true };
   }
 
   // 4. Filename date fallback (e.g. 2026 11 09)
@@ -935,10 +997,10 @@ function extractInspectionDate(lines: string[], bodyText: string, fileName: stri
       Number(fileDateMatch[2]),
       Number(fileDateMatch[3])
     );
-    if (parsed) return parsed;
+    if (parsed) return { date: parsed, fromDocument: true };
   }
 
-  return getLocalTodayYMD();
+  return { date: getLocalTodayYMD(), fromDocument: false };
 }
 
 /**
@@ -1168,8 +1230,9 @@ export function extractDataFromText(
     inspectorConclusion = 'Rejected';
   }
 
-  // 9. Inspection Date
-  const inspectionDate = extractInspectionDate(lines, bodyText, fileName);
+  // 9. Inspection Date & auto-derived Target Inspection Month
+  const dateInfo = extractInspectionDate(lines, bodyText, fileName);
+  const inspectionDate = dateInfo.date;
 
   // 10. Sampling Method
   let inspectionLevel = 'AQL 2.5/2.5 Level II Reduced';
@@ -1351,7 +1414,7 @@ export function extractDataFromText(
     reportNumber,
     inspectionType,
     inspectionDate,
-    targetMonth: targetMonth || inspectionDate.slice(0, 7),
+    targetMonth: dateInfo.fromDocument ? inspectionDate.slice(0, 7) : targetMonth || inspectionDate.slice(0, 7),
     floor,
     section: floor,
     orderNumber,
@@ -1375,6 +1438,68 @@ export function extractDataFromText(
       rawText ||
       `File: ${fileName}\nOrder: ${orderNumber}\nStyle: ${styleNumber} (${styleName})\nBrand: ${brand}\nInspected Qty: ${inspectedQuantity}\nDefects: ${total}`,
     defects,
+  };
+}
+
+export function reportToDraft(report: InspectionReport): ExtractedInspectionDraft {
+  const orderNumber = report.orderNumber || '';
+  const styleNumber = report.styleNumber || '';
+  const brand = resolveBrandFromStyle(styleNumber, report.buyer || report.brand || 'BESTSELLER');
+  const inspectorConclusion: 'Approved' | 'Rejected' | 'Pending' =
+    report.inspectorConclusion || (report.inspectionResult === 'FAILED' ? 'Rejected' : 'Approved');
+  const derivedMonth =
+    report.targetMonth || (report.inspectionDate ? report.inspectionDate.slice(0, 7) : '');
+
+  return {
+    existingReportId: report.id,
+    buyer: brand,
+    brand,
+    factory: report.factory || 'NORTHERN FASHION LTD.',
+    inspector: report.inspector || '',
+    inspectorConclusion,
+    reportNumber: report.reportNumber || '',
+    inspectionType: report.inspectionType || 'Final',
+    inspectionDate: report.inspectionDate || '',
+    targetMonth: derivedMonth,
+    floor: report.floor || 'SEW-1',
+    section: report.section || report.floor || 'SEW-1',
+    orderNumber,
+    poNumber: report.poNumber || orderNumber,
+    nofSerialDetected: orderNumber.toUpperCase().includes('NOF'),
+    styleNumber,
+    styleName: report.styleName || report.productDescription || '',
+    color: report.color || 'Solid / Melange',
+    productDescription: report.productDescription || report.styleName || '',
+    orderQuantity: Number(report.orderQuantity) || 0,
+    inspectedQuantity: Number(report.inspectedQuantity) || 0,
+    criticalDefectQuantity: Number(report.criticalDefectQuantity) || 0,
+    majorDefectQuantity: Number(report.majorDefectQuantity) || 0,
+    minorDefectQuantity: Number(report.minorDefectQuantity) || 0,
+    totalDefectQuantity: Number(report.totalDefectQuantity) || 0,
+    inspectionResult: report.inspectionResult || (inspectorConclusion === 'Rejected' ? 'FAILED' : 'PASSED'),
+    inspectionLevel: report.inspectionLevel || 'AQL 2.5/2.5 Level II Reduced',
+    pdfFileName: report.pdfFileName || `${report.reportNumber || orderNumber}.pdf`,
+    extractionConfidence: Number(report.extractionConfidence) || 99,
+    rawText: [
+      `File: ${report.pdfFileName || report.reportNumber}`,
+      `Order (NOF): ${orderNumber}`,
+      `Style: ${styleNumber} (${report.styleName || report.productDescription || ''})`,
+      `Brand: ${brand}`,
+      `Inspector: ${report.inspector || 'N/A'}`,
+      `Inspection Date: ${report.inspectionDate}`,
+      `Stage: ${report.inspectionType || 'Final'} | Result: ${report.inspectionResult}`,
+      `Order Qty: ${report.orderQuantity} | Inspected Qty: ${report.inspectedQuantity}`,
+      `Defects: ${report.totalDefectQuantity} (C:${report.criticalDefectQuantity} M:${report.majorDefectQuantity} Min:${report.minorDefectQuantity}) | OQL: ${Number(report.oql || 0).toFixed(2)}%`,
+    ].join('\n'),
+    defects: (report.defects || []).map((d) => ({
+      id: d.id,
+      originalDefectName: d.originalDefectName,
+      standardDefectName: d.standardDefectName,
+      defectGroupId: d.defectGroupId,
+      severity: d.severity,
+      defectQuantity: Number(d.defectQuantity) || 1,
+      remarks: d.remarks,
+    })),
   };
 }
 

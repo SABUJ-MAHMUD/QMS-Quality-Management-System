@@ -28,6 +28,12 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
 
 [[headers]]
+  for = "/version.json"
+  [headers.values]
+    Content-Type = "application/json; charset=utf-8"
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
   for = "/pdf.worker.min.js"
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"

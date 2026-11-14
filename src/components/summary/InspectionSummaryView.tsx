@@ -32,6 +32,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
+import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 
 export const InspectionSummaryView: React.FC = () => {
   const { filteredReports, settings, setActiveTab, defectGroups, kpiMetrics } = useApp();
@@ -69,17 +70,11 @@ export const InspectionSummaryView: React.FC = () => {
 
   filteredReports.forEach((r) => {
     (r.defects || []).forEach((d) => {
-      let gName = 'General Workmanship';
+      const canonical = getCanonicalDefectInfo(d);
+      let gName = canonical.categoryName || 'General Workmanship';
       if (d.defectGroupId) {
         const found = defectGroups.find((g) => g.id === d.defectGroupId);
         if (found) gName = found.groupName;
-      }
-      if (
-        gName.toLowerCase().includes('neckline') ||
-        d.standardDefectName.toLowerCase().includes('neck') ||
-        d.standardDefectName.toLowerCase().includes('half moon')
-      ) {
-        gName = 'Neckline & Half Moon';
       }
 
       const cur = groupDefectMap.get(gName) || {
@@ -209,7 +204,7 @@ export const InspectionSummaryView: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={sortedGroupData}
-                    margin={{ top: 25, right: 20, bottom: 25, left: -10 }}
+                    margin={{ top: 28, right: 20, bottom: 25, left: 10 }}
                     onClick={(state) => {
                       if (state && state.activeLabel !== undefined && state.activeLabel !== null) {
                         const labelStr = String(state.activeLabel);
@@ -221,19 +216,19 @@ export const InspectionSummaryView: React.FC = () => {
                     <XAxis
                       dataKey="groupName"
                       tick={{ fontSize: 10, fill: '#334155', fontWeight: 600 }}
-                      angle={-20}
+                      angle={-15}
                       textAnchor="end"
-                      height={45}
+                      height={50}
                     />
-                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} width={34} />
                     <Tooltip
                       formatter={(val: any, name: any) => [`${val} items`, name]}
                       contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                    <Bar dataKey="critical" name="Critical" stackId="a" fill="#dc2626" />
-                    <Bar dataKey="major" name="Major" stackId="a" fill="#ea580c" />
-                    <Bar dataKey="minor" name="Minor" stackId="a" fill="#0284c7" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="critical" name="Critical" stackId="a" isAnimationActive={false} fill="#dc2626" />
+                    <Bar dataKey="major" name="Major" stackId="a" isAnimationActive={false} fill="#ea580c" />
+                    <Bar dataKey="minor" name="Minor" stackId="a" isAnimationActive={false} fill="#0284c7" radius={[4, 4, 0, 0]}>
                       {/* Visible quantity and percentage on top of bar */}
                       <LabelList
                         dataKey="displayLabel"
@@ -311,6 +306,7 @@ export const InspectionSummaryView: React.FC = () => {
                         data={severityPieData}
                         cx="50%"
                         cy="50%"
+                        isAnimationActive={false}
                         innerRadius={40}
                         outerRadius={70}
                         paddingAngle={3}

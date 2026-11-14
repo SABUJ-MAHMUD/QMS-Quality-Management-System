@@ -32,8 +32,12 @@ import {
   PieChart,
   Pie,
   Cell,
+  LabelList,
 } from 'recharts';
 import { getFinancialYear } from '../../utils/oqlCalculator';
+import { getCanonicalDefectInfo } from '../../data/defectMasterData';
+import { formatQtyAndPct } from '../../utils/dashboardAnalytics';
+import { DefectAxisTick } from '../common/DefectAxisTick';
 
 const SEVERITY_COLORS = {
   Critical: '#ef4444',
@@ -74,21 +78,35 @@ export const OqlAnalyticsView: React.FC = () => {
       }));
   }, [filteredReports, settings.targetOql]);
 
-  // Defect-wise column chart data (User Requirement 4: "ডিফেক্ট ওয়াইজ কলাম চার্ট")
+  // Defect-wise column chart data with canonical PDF Code, Name, Qty & %
   const defectWiseData = useMemo(() => {
-    const map = new Map<string, { defectName: string; quantity: number; severity: string; group: string }>();
+    const map = new Map<
+      string,
+      {
+        code: string;
+        defectName: string;
+        codeAndName: string;
+        quantity: number;
+        severity: string;
+        group: string;
+      }
+    >();
     let totalD = 0;
 
     filteredReports.forEach((r) => {
       r.defects?.forEach((d) => {
-        const key = d.originalDefectName || d.standardDefectName;
+        const qty = Number(d.defectQuantity) || 0;
+        if (qty <= 0) return;
+        const info = getCanonicalDefectInfo(d);
+        const key = `${info.code}::${info.name.toLowerCase()}`;
         const cur = map.get(key) || {
-          defectName: key,
+          code: info.code,
+          defectName: info.name,
+          codeAndName: `${info.code}: ${info.name}`,
           quantity: 0,
           severity: d.severity || 'Major',
-          group: d.defectGroupId || 'Cleanness',
+          group: info.categoryName,
         };
-        const qty = Number(d.defectQuantity) || 0;
         cur.quantity += qty;
         totalD += qty;
         map.set(key, cur);
@@ -96,10 +114,14 @@ export const OqlAnalyticsView: React.FC = () => {
     });
 
     return Array.from(map.values())
-      .map((d) => ({
-        ...d,
-        percentage: totalD > 0 ? Number(((d.quantity / totalD) * 100).toFixed(1)) : 0,
-      }))
+      .map((d) => {
+        const percentage = totalD > 0 ? Number(((d.quantity / totalD) * 100).toFixed(1)) : 0;
+        return {
+          ...d,
+          percentage,
+          barLabel: formatQtyAndPct(d.quantity, percentage),
+        };
+      })
       .sort((a, b) => b.quantity - a.quantity);
   }, [filteredReports]);
 
@@ -304,31 +326,50 @@ export const OqlAnalyticsView: React.FC = () => {
 
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={defectWiseData} margin={{ top: 15, right: 25, left: -10, bottom: 35 }}>
+              <BarChart data={defectWiseData} margin={{ top: 28, right: 20, left: 12, bottom: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
                 <XAxis
-                  dataKey="defectName"
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  angle={-20}
-                  textAnchor="end"
+                  dataKey="codeAndName"
+                  tick={<DefectAxisTick maxCharsPerLine={15} maxNameLines={2} />}
+                  height={58}
                   interval={0}
                 />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} width={34} />
                 <Tooltip
-                  formatter={(val: any, name: any, item: any) => [
+                  formatter={(val: any, _name: any, item: any) => [
                     `${val} defects (${item.payload.percentage}%)`,
-                    'Quantity',
+                    item.payload.codeAndName,
                   ]}
                   contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }}
                 />
-                <Bar dataKey="quantity" fill="#0284c7" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="quantity" isAnimationActive={false} fill="#0284c7" radius={[6, 6, 0, 0]}>
                   {defectWiseData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                   ))}
+                  <LabelList
+                    dataKey="barLabel"
+                    position="top"
+                    style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {defectWiseData.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              {defectWiseData.map((d, i) => (
+                <div
+                  key={`${d.code}-${i}`}
+                  className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 rounded"
+                >
+                  <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
+                    <strong className="text-sky-700 dark:text-sky-400">[{d.code}]</strong> {d.defectName}
+                  </span>
+                  <span className="font-black text-slate-900 dark:text-white shrink-0">{d.barLabel}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -457,6 +498,7 @@ export const OqlAnalyticsView: React.FC = () => {
                     data={severityData}
                     dataKey="value"
                     nameKey="name"
+                    isAnimationActive={false}
                     cx="50%"
                     cy="50%"
                     outerRadius={75}

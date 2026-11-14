@@ -1,43 +1,54 @@
 import React from 'react';
 
 interface SpeedometerGaugeProps {
-  value: number; // e.g. 7.2 or 4.5
-  target?: number; // default 4.5
-  max?: number; // default 12.0
+  value: number; // e.g. 7.2 for OQL, or 98.5 for Pass Rate
+  target?: number; // default 4.5 for OQL, 95 for passRate
+  max?: number; // default 12.0 for OQL, 100 for passRate
   size?: 'sm' | 'md' | 'lg';
   showTargetPill?: boolean;
   subLabel?: string;
+  mode?: 'oql' | 'passRate';
+  decimals?: number;
 }
 
 export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
   value = 0,
-  target = 4.5,
-  max = 12.0,
+  target,
+  max,
   size = 'md',
-  showTargetPill = true,
-  subLabel = `Target: ${target.toFixed(2)}%`,
+  subLabel,
+  mode = 'oql',
+  decimals,
 }) => {
+  const effectiveMax = max ?? (mode === 'passRate' ? 100 : 12.0);
+  const effectiveTarget = target ?? (mode === 'passRate' ? 95 : 4.5);
+  const effectiveDecimals = decimals ?? (mode === 'passRate' ? 1 : 2);
+  const effectiveSubLabel =
+    subLabel !== undefined
+      ? subLabel
+      : mode === 'passRate'
+      ? `Target: >=${effectiveTarget.toFixed(0)}%`
+      : `Target: ${effectiveTarget.toFixed(2)}%`;
+
   // Constrain value between 0 and max
-  const clampedValue = Math.max(0, Math.min(value, max));
-  
-  // Calculate angle: 0% is 180 degrees (left), max is 0 degrees (right)
-  // Angle goes from 180 to 0 (counter-clockwise) or -180 to 0
-  const percentage = clampedValue / max;
-  const needleAngle = -180 + percentage * 180; // -180 is left, 0 is right
+  const clampedValue = Math.max(0, Math.min(value, effectiveMax));
+
+  // Calculate angle: 0% is -180 degrees (left), max is 0 degrees (right)
+  const percentage = effectiveMax > 0 ? clampedValue / effectiveMax : 0;
+  const needleAngle = -180 + percentage * 180;
 
   // Dimensions
   const dimensions = {
-    sm: { width: 125, height: 70, radius: 46, strokeWidth: 12, fontSize: 'text-base', labelSize: 'text-[9px]' },
-    md: { width: 170, height: 95, radius: 64, strokeWidth: 14, fontSize: 'text-xl', labelSize: 'text-[11px]' },
-    lg: { width: 220, height: 125, radius: 82, strokeWidth: 18, fontSize: 'text-2xl', labelSize: 'text-xs' },
+    sm: { width: 125, height: 78, radius: 44, strokeWidth: 11, fontSize: 'text-base', labelSize: 'text-[9px]' },
+    md: { width: 170, height: 102, radius: 62, strokeWidth: 14, fontSize: 'text-xl', labelSize: 'text-[11px]' },
+    lg: { width: 220, height: 130, radius: 80, strokeWidth: 18, fontSize: 'text-2xl', labelSize: 'text-xs' },
   }[size];
 
   const cx = dimensions.width / 2;
-  const cy = dimensions.height - 10;
+  const cy = dimensions.height - 18;
   const r = dimensions.radius;
   const sw = dimensions.strokeWidth;
 
-  // Helpers to draw arc segment
   const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
     const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
     return {
@@ -53,29 +64,47 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
     return ['M', start.x, start.y, 'A', radius, radius, 0, arcSweep, 0, end.x, end.y].join(' ');
   };
 
-  // Color segment zones:
-  // Green zone: 0% to 3.5%
-  // Yellow/Amber zone: 3.5% to 5.0%
-  // Red zone: 5.0% to 12.0%
-  const greenEndAngle = -180 + (3.5 / max) * 180;
-  const yellowEndAngle = -180 + (5.0 / max) * 180;
-
-  const greenPath = describeArc(cx, cy, r, -180, greenEndAngle);
-  const yellowPath = describeArc(cx, cy, r, greenEndAngle, yellowEndAngle);
-  const redPath = describeArc(cx, cy, r, yellowEndAngle, 0);
+  // Arc zone geometry differs by mode:
+  // - 'oql': lower is better (Green 0->3.5, Yellow 3.5->5.0, Red 5.0->12)
+  // - 'passRate': higher is better (Red 0->85, Yellow 85->95, Green 95->100)
+  let segments: Array<{ path: string; color: string; roundCap?: boolean }> = [];
+  if (mode === 'passRate') {
+    const redEndAngle = -180 + (85 / effectiveMax) * 180;
+    const yellowEndAngle = -180 + (95 / effectiveMax) * 180;
+    segments = [
+      { path: describeArc(cx, cy, r, -180, redEndAngle), color: '#ef4444', roundCap: true },
+      { path: describeArc(cx, cy, r, redEndAngle, yellowEndAngle), color: '#f59e0b' },
+      { path: describeArc(cx, cy, r, yellowEndAngle, 0), color: '#22c55e', roundCap: true },
+    ];
+  } else {
+    const greenEndAngle = -180 + (3.5 / effectiveMax) * 180;
+    const yellowEndAngle = -180 + (5.0 / effectiveMax) * 180;
+    segments = [
+      { path: describeArc(cx, cy, r, -180, greenEndAngle), color: '#22c55e', roundCap: true },
+      { path: describeArc(cx, cy, r, greenEndAngle, yellowEndAngle), color: '#f59e0b' },
+      { path: describeArc(cx, cy, r, yellowEndAngle, 0), color: '#ef4444', roundCap: true },
+    ];
+  }
 
   // Status color for text
   const valueColor =
-    value <= target
+    mode === 'passRate'
+      ? value >= effectiveTarget
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : value >= 85
+        ? 'text-amber-700 dark:text-amber-400'
+        : 'text-red-700 dark:text-red-400'
+      : value <= effectiveTarget
       ? 'text-emerald-700 dark:text-emerald-400'
       : value <= 5.5
       ? 'text-amber-700 dark:text-amber-400'
       : 'text-red-700 dark:text-red-400';
 
+  const needleColor = mode === 'passRate' ? '#0284c7' : '#dc2626';
+
   return (
     <div className="flex flex-col items-center justify-center select-none w-full">
       <div className="relative flex items-center justify-center">
-        {/* SVG Dial */}
         <svg
           width={dimensions.width}
           height={dimensions.height}
@@ -92,35 +121,21 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
             className="dark:stroke-slate-800"
           />
 
-          {/* Green Zone (Safe / Pass) */}
-          <path
-            d={greenPath}
-            fill="none"
-            stroke="#22c55e"
-            strokeWidth={sw}
-            strokeLinecap="round"
-          />
+          {/* Color Zones */}
+          {segments.map((seg, i) => (
+            <path
+              key={i}
+              d={seg.path}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={sw}
+              strokeLinecap={seg.roundCap ? 'round' : undefined}
+            />
+          ))}
 
-          {/* Yellow Zone (Warning / Borderline) */}
-          <path
-            d={yellowPath}
-            fill="none"
-            stroke="#f59e0b"
-            strokeWidth={sw}
-          />
-
-          {/* Red Zone (Fail / High OQL) */}
-          <path
-            d={redPath}
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth={sw}
-            strokeLinecap="round"
-          />
-
-          {/* Target tick marker at 4.5% */}
+          {/* Target tick marker */}
           {(() => {
-            const targetAngle = -180 + (target / max) * 180;
+            const targetAngle = -180 + (effectiveTarget / effectiveMax) * 180;
             const pInner = polarToCartesian(cx, cy, r - sw / 2 - 2, targetAngle);
             const pOuter = polarToCartesian(cx, cy, r + sw / 2 + 3, targetAngle);
             return (
@@ -145,35 +160,33 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
               transition: 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
             }}
           >
-            {/* Needle shape */}
             <path
               d={`M 0 -3 L ${r - sw / 2} 0 L 0 3 Z`}
-              fill="#dc2626"
+              fill={needleColor}
               filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.3))"
             />
-            {/* Needle center cap */}
             <circle cx="0" cy="0" r="5" fill="#1e293b" stroke="#ffffff" strokeWidth="2" />
           </g>
 
           {/* Scale min / max labels */}
-          <text x={cx - r - 2} y={cy + 8} fontSize="8" fill="#64748b" textAnchor="middle" fontWeight="bold">
+          <text x={cx - r + 2} y={cy + 14} fontSize="7.5" fill="#64748b" textAnchor="middle" fontWeight="bold">
             0%
           </text>
-          <text x={cx + r + 2} y={cy + 8} fontSize="8" fill="#64748b" textAnchor="middle" fontWeight="bold">
-            {max}%
+          <text x={cx + r - 2} y={cy + 14} fontSize="7.5" fill="#64748b" textAnchor="middle" fontWeight="bold">
+            {effectiveMax}%
           </text>
         </svg>
       </div>
 
-      {/* Main OQL Value Display */}
+      {/* Main Percentage Display */}
       <div className={`mt-0.5 font-black tracking-tight ${valueColor} ${dimensions.fontSize}`}>
-        {value.toFixed(2)}%
+        {value.toFixed(effectiveDecimals)}%
       </div>
 
       {/* Sublabel */}
-      {subLabel && (
+      {effectiveSubLabel && (
         <div className={`font-semibold text-slate-500 dark:text-slate-400 ${dimensions.labelSize}`}>
-          {subLabel}
+          {effectiveSubLabel}
         </div>
       )}
     </div>

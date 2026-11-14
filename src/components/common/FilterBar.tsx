@@ -16,8 +16,12 @@ export const FilterBar: React.FC = () => {
     )
   ).filter(Boolean);
 
+  const hasBuyerFilter = Array.isArray(filters.buyer)
+    ? filters.buyer.length > 0 && !filters.buyer.includes('ALL')
+    : filters.buyer !== 'ALL';
+
   const hasActiveFilters =
-    filters.buyer !== 'ALL' ||
+    hasBuyerFilter ||
     filters.financialYear !== 'ALL' ||
     filters.month !== 'ALL' ||
     filters.dateFrom !== '' ||

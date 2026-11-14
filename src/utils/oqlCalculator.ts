@@ -38,6 +38,23 @@ export function calculateAggregatedOql(
 }
 
 /**
+ * Calculates Inspection Pass Rate (%) from inspectionResult === 'PASSED':
+ * Pass Rate (%) = (Passed Reports Count / Total Reports Count) * 100
+ */
+export function calculatePassRate(
+  reports: Array<{ inspectionResult?: string }>,
+  decimals: number = 1
+): { passRate: number; passedCount: number; totalCount: number } {
+  const totalCount = reports?.length || 0;
+  if (totalCount === 0) {
+    return { passRate: 0, passedCount: 0, totalCount: 0 };
+  }
+  const passedCount = reports.filter((r) => (r.inspectionResult || '').toUpperCase() === 'PASSED').length;
+  const passRate = Number(((passedCount / totalCount) * 100).toFixed(decimals));
+  return { passRate, passedCount, totalCount };
+}
+
+/**
  * Calculates Defect Reduction percentage for CAPA Monitoring:
  * Reduction (%) = ((Previous Defect Qty - Current Defect Qty) / Previous Defect Qty) * 100
  * Returns null if Previous Defect Qty is <= 0.
@@ -137,7 +154,7 @@ export function computeParetoAnalysis(
 export function filterReports(
   reports: InspectionReport[],
   filters: {
-    buyer?: string;
+    buyer?: string | string[];
     financialYear?: string;
     month?: string;
     dateFrom?: string;
@@ -152,7 +169,13 @@ export function filterReports(
   fyStartMonth: number = 8
 ): InspectionReport[] {
   return reports.filter((report) => {
-    if (filters.buyer && filters.buyer !== 'ALL' && report.buyer.toLowerCase() !== filters.buyer.toLowerCase()) {
+    if (Array.isArray(filters.buyer)) {
+      if (filters.buyer.length > 0 && !filters.buyer.includes('ALL')) {
+        const repBuyer = (report.buyer || '').toLowerCase().trim();
+        const matched = filters.buyer.some((b) => b.toLowerCase().trim() === repBuyer);
+        if (!matched) return false;
+      }
+    } else if (filters.buyer && filters.buyer !== 'ALL' && report.buyer.toLowerCase() !== filters.buyer.toLowerCase()) {
       return false;
     }
 

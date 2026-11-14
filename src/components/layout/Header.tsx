@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import {
@@ -19,6 +19,8 @@ import {
   Clock,
   Maximize2,
   Minimize2,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -45,15 +47,14 @@ const LiveClock: React.FC = React.memo(() => {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-    year: 'numeric',
   });
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono">
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono shrink-0">
       <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
-      <span className="text-xs font-black text-emerald-400 tracking-wider whitespace-nowrap">{timeStr}</span>
-      <span className="text-slate-500 font-sans hidden sm:inline">|</span>
-      <span className="text-xs font-semibold text-slate-300 font-sans hidden sm:inline whitespace-nowrap">{todayStr}</span>
+      <span className="text-[11px] font-black text-emerald-400 tracking-wide whitespace-nowrap">{timeStr}</span>
+      <span className="text-slate-500 font-sans hidden 2xl:inline">|</span>
+      <span className="text-[11px] font-semibold text-slate-300 font-sans hidden 2xl:inline whitespace-nowrap">{todayStr}</span>
     </div>
   );
 });
@@ -76,13 +77,33 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [showBuyerMenu, setShowBuyerMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const buyerMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFsChange);
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
+
+  useEffect(() => {
+    if (!showBuyerMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (buyerMenuRef.current && !buyerMenuRef.current.contains(e.target as Node)) {
+        setShowBuyerMenu(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowBuyerMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showBuyerMenu]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -92,20 +113,51 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
     }
   };
 
-  // Derive unique buyers and financial years
+  // Standard factory buyers + any extra buyers from uploaded reports
   const availableBuyers = useMemo(() => {
-    const buyers = Array.from(new Set(reports.map((r) => r.buyer)));
-    if (!buyers.includes('BESTSELLER')) buyers.push('BESTSELLER');
-    return buyers;
+    const base = ['NAME IT', 'ONLY', 'ONLY&SONS', 'BESTSELLER'];
+    const set = new Set<string>(base);
+    reports.forEach((r) => {
+      if (r.buyer && r.buyer.trim()) set.add(r.buyer.trim());
+    });
+    return Array.from(set);
   }, [reports]);
+
+  const selectedBuyers = useMemo(() => {
+    if (Array.isArray(filters.buyer)) {
+      return filters.buyer.filter((b) => b && b !== 'ALL');
+    }
+    if (filters.buyer && filters.buyer !== 'ALL') {
+      return [filters.buyer];
+    }
+    return [];
+  }, [filters.buyer]);
+
+  const toggleBuyerSelection = (buyerName: string) => {
+    const exists = selectedBuyers.some((b) => b.toLowerCase() === buyerName.toLowerCase());
+    const next = exists
+      ? selectedBuyers.filter((b) => b.toLowerCase() !== buyerName.toLowerCase())
+      : [...selectedBuyers, buyerName];
+    setFilters((prev) => ({
+      ...prev,
+      buyer: next.length === 0 ? 'ALL' : next,
+    }));
+  };
+
+  const buyerButtonLabel =
+    selectedBuyers.length === 0
+      ? 'All Buyers'
+      : selectedBuyers.length === 1
+      ? selectedBuyers[0]
+      : `${selectedBuyers.slice(0, 2).join(', ')}${selectedBuyers.length > 2 ? ` +${selectedBuyers.length - 2}` : ''}`;
 
   const roles: UserRole[] = ['Admin', 'QMS Manager', 'QMS Executive', 'Viewer'];
 
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-sky-100 dark:border-slate-800 shadow-xs transition-colors">
-      <div className="px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+      <div className="px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
         {/* Left Section: 3-Dots Sidebar Toggle + Brand Title with Clean Green Quality Mark */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
@@ -116,80 +168,149 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
             </button>
           )}
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Northern Fashions Swirl Monogram */}
-            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center p-1 shadow-xs shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center p-1 shadow-xs shrink-0">
               <svg viewBox="0 0 40 40" className="w-full h-full" fill="none">
                 <path d="M 12 28 C 12 18 20 12 28 12 C 24 18 20 22 12 28 Z" fill="#84cc16" />
                 <path d="M 28 12 C 28 22 20 28 12 28 C 16 22 20 18 28 12 Z" fill="#94a3b8" />
                 <path d="M 16 24 C 20 20 24 16 26 14" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-wider uppercase leading-none">
+            <div className="hidden lg:block shrink-0">
+              <div className="flex items-center gap-1">
+                <h1 className="text-xs font-black text-slate-900 dark:text-white tracking-wide uppercase leading-none whitespace-nowrap">
                   NORTHERN FASHIONS LTD.
                 </h1>
-                <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+                <span className="text-[9px] uppercase font-bold px-1 py-0.2 rounded bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
                   QMS
                 </span>
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-none">
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-none whitespace-nowrap">
                   QMS - Quality Management System
                 </p>
-                <div className="h-0.5 w-4 bg-lime-500 rounded-full" />
+                <div className="h-0.5 w-3 bg-lime-500 rounded-full" />
               </div>
             </div>
           </div>
         </div>
 
         {/* Global Controls & Filters in Header */}
-        <div className="flex items-center gap-2.5 flex-1 max-w-2xl justify-center">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-center overflow-visible">
           {/* Global Search */}
-          <div className="relative w-full max-w-xs">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <div className="relative flex-1 min-w-[120px] max-w-[190px]">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
-              placeholder="Search reports, styles, defects..."
+              placeholder="Search NOF, style..."
               value={filters.searchQuery}
               onChange={(e) => setFilters((prev) => ({ ...prev, searchQuery: e.target.value }))}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+              className="w-full pl-8 pr-6 py-1 text-xs bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
             />
             {filters.searchQuery && (
               <button
                 onClick={() => setFilters((prev) => ({ ...prev, searchQuery: '' }))}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Buyer Selector */}
-          <div className="flex items-center bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200">
-            <span className="text-slate-400 dark:text-slate-500 font-medium mr-1.5">Buyer:</span>
-            <select
-              value={filters.buyer}
-              onChange={(e) => setFilters((prev) => ({ ...prev, buyer: e.target.value }))}
-              className="bg-transparent font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+          {/* Multi-Select Buyer Checkbox Filter */}
+          <div className="relative shrink-0" ref={buyerMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowBuyerMenu((prev) => !prev)}
+              aria-expanded={showBuyerMenu}
+              aria-haspopup="listbox"
+              aria-label="Filter by Buyer"
+              className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-sky-400 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 cursor-pointer transition-colors whitespace-nowrap"
             >
-              <option value="ALL" className="dark:bg-slate-800">All Buyers</option>
-              {availableBuyers.map((b) => (
-                <option key={b} value={b} className="dark:bg-slate-800">
-                  {b}
-                </option>
-              ))}
-            </select>
+              <span className="text-slate-400 dark:text-slate-500 font-medium">Buyer:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-100 max-w-[68px] xl:max-w-[80px] truncate">
+                {buyerButtonLabel}
+              </span>
+              {selectedBuyers.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-sky-600 text-white text-[10px] font-black">
+                  {selectedBuyers.length}
+                </span>
+              )}
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            </button>
+
+            {showBuyerMenu && (
+              <div
+                role="listbox"
+                aria-multiselectable="true"
+                className="absolute left-0 mt-1.5 w-60 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 space-y-1"
+              >
+                <div className="px-2 py-1 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Select Buyers (Multi)
+                  </span>
+                  {selectedBuyers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilters((prev) => ({ ...prev, buyer: 'ALL' }))}
+                      className="text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* All Buyers option */}
+                <label className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={selectedBuyers.length === 0}
+                    onChange={() => setFilters((prev) => ({ ...prev, buyer: 'ALL' }))}
+                    className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                  />
+                  <span className={`font-bold ${selectedBuyers.length === 0 ? 'text-sky-700 dark:text-sky-300' : 'text-slate-700 dark:text-slate-200'}`}>
+                    All Buyers
+                  </span>
+                </label>
+
+                <div className="border-t border-slate-100 dark:border-slate-700 pt-1 space-y-0.5 max-h-52 overflow-y-auto">
+                  {availableBuyers.map((b) => {
+                    const isChecked = selectedBuyers.some((s) => s.toLowerCase() === b.toLowerCase());
+                    return (
+                      <label
+                        key={b}
+                        className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                          isChecked
+                            ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-800 dark:text-sky-200 font-bold'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleBuyerSelection(b)}
+                            className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                          />
+                          <span>{b}</span>
+                        </span>
+                        {isChecked && <Check className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Financial Year Selector */}
-          <div className="flex items-center bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200">
-            <span className="text-slate-400 dark:text-slate-500 font-medium mr-1.5">FY:</span>
+          <div className="flex items-center bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shrink-0">
+            <span className="text-slate-400 dark:text-slate-500 font-medium mr-1">FY:</span>
             <select
               value={filters.financialYear}
               onChange={(e) => setFilters((prev) => ({ ...prev, financialYear: e.target.value }))}
-              className="bg-transparent font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+              className="bg-transparent font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-[76px] min-w-0 truncate"
             >
               <option value="ALL" className="dark:bg-slate-800">All FYs</option>
               <option value="FY26/27" className="dark:bg-slate-800">FY26/27 (Aug 26 - Jul 27)</option>
@@ -199,14 +320,14 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
         </div>
 
         {/* Right Section: Live Clock, Fullscreen, Day/Night Switch, Notifications, User Profile */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Live Clock & Date */}
           <LiveClock />
 
-          {/* Fullscreen Button (User Requirement 7: "ডেশবোর্ডটি যেন ফুলস্ক্রি হয় ফুল স্ক্রিন করার জন্য একটি বাটুন সংযুক্ত করে দাও") */}
+          {/* Fullscreen Button */}
           <button
             onClick={handleToggleFullscreen}
-            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all cursor-pointer shadow-2xs"
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all cursor-pointer shadow-2xs shrink-0"
             title={isFullscreen ? 'Exit Full Screen' : 'View Full Screen'}
             aria-label="Toggle Full Screen"
           >
@@ -216,19 +337,19 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
           {/* Day / Night Mode Switch */}
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all cursor-pointer text-xs font-bold shadow-2xs"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all cursor-pointer text-xs font-bold shadow-2xs whitespace-nowrap shrink-0"
             title={theme === 'dark' ? 'Switch to Day (Light) Mode' : 'Switch to Night (Dark) Mode'}
             aria-label="Toggle Day / Night Mode"
           >
             {theme === 'dark' ? (
               <>
-                <Sun className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline text-amber-300">Day Mode</span>
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden 2xl:inline text-amber-300">Day Mode</span>
               </>
             ) : (
               <>
-                <Moon className="w-4 h-4 text-sky-600" />
-                <span className="hidden sm:inline text-slate-700">Night Mode</span>
+                <Moon className="w-3.5 h-3.5 text-sky-600" />
+                <span className="hidden 2xl:inline text-slate-700">Night Mode</span>
               </>
             )}
           </button>
@@ -283,19 +404,19 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
           </div>
 
           {/* User Profile / Role Selector */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className="flex items-center gap-2 p-1.5 pl-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-slate-600 hover:bg-sky-50/50 dark:hover:bg-slate-800 transition-all text-left cursor-pointer"
+              className="flex items-center gap-1.5 p-1 pl-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-slate-600 hover:bg-sky-50/50 dark:hover:bg-slate-800 transition-all text-left cursor-pointer"
             >
-              <div className="hidden sm:block text-right">
-                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none truncate max-w-[130px]">
+              <div className="hidden lg:block text-right">
+                <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-none truncate max-w-[90px]">
                   {currentUserEmail === 'quality.engineer.bd@gmail.com' ? 'Super Admin' : (currentUserName || 'Northern QMS')}
                 </div>
                 <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">{currentUserRole}</div>
               </div>
               <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center font-bold text-xs">
-                <User className="w-4 h-4" />
+                <User className="w-3.5 h-3.5" />
               </div>
             </button>
 
@@ -350,7 +471,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
           <button
             onClick={logout}
             title="Sign Out to QMS Portal"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer text-xs font-bold"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer text-xs font-bold whitespace-nowrap shrink-0"
           >
             <LogOut className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
             <span className="hidden sm:inline">Sign Out</span>

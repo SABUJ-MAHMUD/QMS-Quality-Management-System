@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterReports } from '../src/utils/oqlCalculator.ts';
+import { filterReports, calculatePassRate } from '../src/utils/oqlCalculator.ts';
 import { sanitizeForFirestore } from '../src/utils/firestoreSanitizer.ts';
 import type { InspectionReport } from '../src/types/index.ts';
 
@@ -36,7 +36,7 @@ const sampleReports: InspectionReport[] = [
         inspectionReportId: 'rep-1',
         defectGroupId: 'dg-po',
         originalDefectName: 'Po-2 Shaped poorly.',
-        standardDefectName: 'Pocket / flap poorly shaped',
+        standardDefectName: 'Shaped poorly',
         classificationStatus: 'Auto-Matched',
         severity: 'Major',
         defectQuantity: 1,
@@ -47,7 +47,7 @@ const sampleReports: InspectionReport[] = [
         inspectionReportId: 'rep-1',
         defectGroupId: 'dg-se',
         originalDefectName: 'Se-10 Broken stitching.',
-        standardDefectName: 'Broken stitching / Ruptured seam',
+        standardDefectName: 'Broken stitching',
         classificationStatus: 'Auto-Matched',
         severity: 'Major',
         defectQuantity: 1,
@@ -120,7 +120,7 @@ test('filterReports matches 23 master category names ("Cleanliness", "Seams and 
   assert.equal(seamFiltered.length, 2);
 
   const subDefectFiltered = filterReports(sampleReports, {
-    defectGroup: 'Broken stitching / Ruptured seam',
+    defectGroup: 'Broken stitching',
   });
   assert.equal(subDefectFiltered.length, 1);
   assert.equal(subDefectFiltered[0].orderNumber, 'NOF4705853');
@@ -142,3 +142,32 @@ test('sanitizeForFirestore strips undefined fields and converts NaN/Infinity to 
   assert.equal('empty' in cleaned.nested[0], false);
   assert.equal(cleaned.nested[0].qty, 2);
 });
+
+test('filterReports supports multi-select Buyer arrays alongside single string & ALL', () => {
+  const onlyAndSonsPlusOnly = filterReports(sampleReports, { buyer: ['ONLY', 'ONLY&SONS'] });
+  assert.equal(onlyAndSonsPlusOnly.length, 1);
+  assert.equal(onlyAndSonsPlusOnly[0].buyer, 'ONLY&SONS');
+
+  const multiBoth = filterReports(sampleReports, { buyer: ['NAME IT', 'ONLY&SONS'] });
+  assert.equal(multiBoth.length, 2);
+
+  const allBuyers = filterReports(sampleReports, { buyer: 'ALL' });
+  assert.equal(allBuyers.length, 2);
+});
+
+test('calculatePassRate computes exact PASSED ratio (e.g. 129/131 = 98.5%) and handles empty state', () => {
+  const emptyRes = calculatePassRate([]);
+  assert.equal(emptyRes.passRate, 0);
+  assert.equal(emptyRes.passedCount, 0);
+  assert.equal(emptyRes.totalCount, 0);
+
+  const mock131 = [
+    ...Array.from({ length: 129 }, () => ({ inspectionResult: 'PASSED' })),
+    ...Array.from({ length: 2 }, () => ({ inspectionResult: 'FAILED' })),
+  ];
+  const res131 = calculatePassRate(mock131, 1);
+  assert.equal(res131.passedCount, 129);
+  assert.equal(res131.totalCount, 131);
+  assert.equal(res131.passRate, 98.5);
+});
+

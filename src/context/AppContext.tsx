@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   InspectionReport,
   InspectionDefect,
@@ -12,7 +12,7 @@ import {
 } from '../types';
 import { INITIAL_DEFECT_GROUPS, INITIAL_DEFECT_MASTER } from '../data/defectMasterData';
 import { INITIAL_DEMO_REPORTS, INITIAL_DEMO_CAPA, INITIAL_DEMO_MONITORING } from '../data/demoData';
-import { calculateReportOql, calculateAggregatedOql, filterReports, getFinancialYear } from '../utils/oqlCalculator';
+import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear } from '../utils/oqlCalculator';
 import { firestoreService } from '../services/firestoreService';
 import { testConnection } from '../lib/firebase';
 
@@ -100,6 +100,7 @@ interface AppContextType {
     minorDefects: number;
     aggregatedOql: number;
     passRate: number;
+    passedReportsCount: number;
     previousPeriodOql: number;
     oqlDifference: number;
     trendDirection: 'up' | 'down' | 'neutral';
@@ -109,6 +110,26 @@ interface AppContextType {
   notifications: NotificationItem[];
   addNotification: (type: NotificationItem['type'], message: string) => void;
   clearNotifications: () => void;
+
+  // Cross-tab RCA & CAPA defect link handoff
+  pendingCapaDefect: {
+    code: string;
+    name: string;
+    categoryCode: string;
+    categoryName: string;
+    defectGroupId: string;
+    quantity?: number;
+  } | null;
+  setPendingCapaDefect: React.Dispatch<
+    React.SetStateAction<{
+      code: string;
+      name: string;
+      categoryCode: string;
+      categoryName: string;
+      defectGroupId: string;
+      quantity?: number;
+    } | null>
+  >;
 
   // Permission helpers
   canManageData: boolean;
@@ -124,6 +145,8 @@ try {
     localStorage.removeItem('gqa_qms_reports_clean_v1');
     localStorage.removeItem('gqa_qms_capa_clean_v3');
     localStorage.removeItem('gqa_qms_monitoring_clean_v3');
+    localStorage.removeItem('gqa_qms_defect_groups_v3');
+    localStorage.removeItem('gqa_qms_defect_master_v3');
   }
 } catch {
   // ignore
@@ -131,8 +154,8 @@ try {
 
 const STORAGE_KEYS = {
   REPORTS: 'gqa_qms_reports_fresh_zero_v6',
-  DEFECT_GROUPS: 'gqa_qms_defect_groups_v3',
-  DEFECT_MASTER: 'gqa_qms_defect_master_v3',
+  DEFECT_GROUPS: 'gqa_qms_defect_groups_v4',
+  DEFECT_MASTER: 'gqa_qms_defect_master_v4',
   CAPA: 'gqa_qms_capa_fresh_zero_v6',
   MONITORING: 'gqa_qms_monitoring_fresh_zero_v6',
   SETTINGS: 'gqa_qms_settings_v3',
@@ -163,10 +186,35 @@ const DEFAULT_FILTERS: GlobalFilterState = {
   searchQuery: '',
 };
 
+const scheduleStorageWrite = (key: string, value: unknown): (() => void) => {
+  const write = () => {
+    try {
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+      localStorage.setItem(key, serialized);
+    } catch {
+      // ignore storage quota errors
+    }
+  };
+  if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+    const id = (window as any).requestIdleCallback(write, { timeout: 600 });
+    return () => (window as any).cancelIdleCallback?.(id);
+  }
+  const timer = setTimeout(write, 0);
+  return () => clearTimeout(timer);
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [pendingCapaDefect, setPendingCapaDefect] = useState<{
+    code: string;
+    name: string;
+    categoryCode: string;
+    categoryName: string;
+    defectGroupId: string;
+    quantity?: number;
+  } | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
     return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
   });
@@ -419,34 +467,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  // Sync state to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(reports));
-  }, [reports]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DEFECT_GROUPS, JSON.stringify(defectGroups));
-  }, [defectGroups]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DEFECT_MASTER, JSON.stringify(defectMaster));
-  }, [defectMaster]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CAPA, JSON.stringify(capas));
-  }, [capas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MONITORING, JSON.stringify(monitoringRecords));
-  }, [monitoringRecords]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USER_ROLE, currentUserRole);
-  }, [currentUserRole]);
+  // Sync state to localStorage asynchronously during browser idle frames so UI never stalls
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.REPORTS, reports), [reports]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_GROUPS, defectGroups), [defectGroups]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_MASTER, defectMaster), [defectMaster]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.CAPA, capas), [capas]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.MONITORING, monitoringRecords), [monitoringRecords]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.SETTINGS, settings), [settings]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.USER_ROLE, currentUserRole), [currentUserRole]);
 
   // Notification helper
   const addNotification = (type: NotificationItem['type'], message: string) => {
@@ -560,8 +588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Official aggregated OQL formula: (Sum of Defects / Sum of Inspected) * 100
     const aggregatedOql = calculateAggregatedOql(filteredReports, settings.oqlDecimals);
 
-    const passedCount = filteredReports.filter((r) => r.inspectionResult === 'PASSED').length;
-    const passRate = totalReports > 0 ? Number(((passedCount / totalReports) * 100).toFixed(1)) : 100;
+    const { passRate, passedCount: passedReportsCount } = calculatePassRate(filteredReports, 1);
 
     // Previous period baseline for comparison
     const previousPeriodOql = 4.85;
@@ -580,6 +607,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       minorDefects,
       aggregatedOql,
       passRate,
+      passedReportsCount,
       previousPeriodOql,
       oqlDifference,
       trendDirection,
@@ -795,66 +823,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addNotification('info', 'Monitoring record deleted.');
   };
 
-  return (
-    <AppContext.Provider
-      value={{
-        activeTab,
-        setActiveTab,
-        currentUserRole,
-        setCurrentUserRole,
-        currentUserEmail,
-        setCurrentUserEmail,
-        currentUserName,
-        setCurrentUserName,
-        isAuthenticated,
-        setIsAuthenticated,
-        login,
-        logout,
-        theme,
-        toggleTheme,
-        setTheme,
-        isFirebaseConnected,
-        settings,
-        updateSettings,
-        filters,
-        setFilters,
-        resetFilters,
-        reports,
-        filteredReports,
-        addInspectionReport,
-        updateInspectionReport,
-        deleteInspectionReport,
-        defectGroups,
-        defectMaster,
-        addDefectGroup,
-        updateDefectGroup,
-        deleteDefectGroup,
-        addDefectMasterItem,
-        updateDefectMasterItem,
-        deleteDefectMasterItem,
-        capas,
-        addCapa,
-        updateCapa,
-        deleteCapa,
-        monitoringRecords,
-        addMonitoringRecord,
-        deleteMonitoringRecord,
-        hasDemoData,
-        clearDemoData,
-        restoreDemoData,
-        clearAllData,
-        kpiMetrics,
-        notifications,
-        addNotification,
-        clearNotifications,
-        canManageData,
-        canUpload,
-        canManageSettings,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
+  const contextValue = useMemo<AppContextType>(
+    () => ({
+      activeTab,
+      setActiveTab,
+      currentUserRole,
+      setCurrentUserRole,
+      currentUserEmail,
+      setCurrentUserEmail,
+      currentUserName,
+      setCurrentUserName,
+      isAuthenticated,
+      setIsAuthenticated,
+      login,
+      logout,
+      theme,
+      toggleTheme,
+      setTheme,
+      isFirebaseConnected,
+      settings,
+      updateSettings,
+      filters,
+      setFilters,
+      resetFilters,
+      reports,
+      filteredReports,
+      addInspectionReport,
+      updateInspectionReport,
+      deleteInspectionReport,
+      defectGroups,
+      defectMaster,
+      addDefectGroup,
+      updateDefectGroup,
+      deleteDefectGroup,
+      addDefectMasterItem,
+      updateDefectMasterItem,
+      deleteDefectMasterItem,
+      capas,
+      addCapa,
+      updateCapa,
+      deleteCapa,
+      monitoringRecords,
+      addMonitoringRecord,
+      deleteMonitoringRecord,
+      hasDemoData,
+      clearDemoData,
+      restoreDemoData,
+      clearAllData,
+      kpiMetrics,
+      notifications,
+      addNotification,
+      clearNotifications,
+      pendingCapaDefect,
+      setPendingCapaDefect,
+      canManageData,
+      canUpload,
+      canManageSettings,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      activeTab,
+      currentUserRole,
+      currentUserEmail,
+      currentUserName,
+      isAuthenticated,
+      theme,
+      isFirebaseConnected,
+      settings,
+      filters,
+      reports,
+      filteredReports,
+      defectGroups,
+      defectMaster,
+      capas,
+      monitoringRecords,
+      hasDemoData,
+      kpiMetrics,
+      notifications,
+      pendingCapaDefect,
+    ]
   );
+
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 };
 
 export function useApp() {
