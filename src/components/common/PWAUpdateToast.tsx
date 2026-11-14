@@ -51,7 +51,33 @@ export const PWAUpdateToast: React.FC = () => {
     },
   });
 
-  // Poll /version.json (always bypassing cache) so shared links & logged-out users also receive instant Update Your App alerts
+  const sessionStartRef = useRef<number>(Date.now());
+
+  const clearCachesAndReload = useCallback(async (targetVersion?: string) => {
+    try {
+      if (targetVersion && typeof sessionStorage !== 'undefined') {
+        const alreadyReloaded = sessionStorage.getItem('qms_reloaded_for_version');
+        if (alreadyReloaded === targetVersion) {
+          return false;
+        }
+        sessionStorage.setItem('qms_reloaded_for_version', targetVersion);
+      }
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const cacheKeys = await window.caches.keys();
+        await Promise.all(cacheKeys.map((k) => window.caches.delete(k)));
+      }
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.update().catch(() => {})));
+      }
+    } catch (e) {
+      console.warn('Cache clearing notice:', e);
+    }
+    window.location.reload();
+    return true;
+  }, []);
+
+  // Poll /version.json (always bypassing cache) so shared links & logged-out users receive instant updates
   const checkServerVersion = useCallback(async () => {
     if (checkingRef.current || typeof window === 'undefined' || !navigator.onLine) return;
     checkingRef.current = true;
@@ -71,6 +97,16 @@ export const PWAUpdateToast: React.FC = () => {
         data.version !== CURRENT_BUILD_ID
       ) {
         setRemoteVersion(data.version);
+        // If user just opened a stale cached link (< 10s since page load), auto-refresh seamlessly once
+        const elapsedSinceBoot = Date.now() - sessionStartRef.current;
+        const alreadyAttempted =
+          typeof sessionStorage !== 'undefined' &&
+          sessionStorage.getItem('qms_reloaded_for_version') === data.version;
+
+        if (elapsedSinceBoot < 10000 && !alreadyAttempted) {
+          await clearCachesAndReload(data.version);
+          return;
+        }
         setVersionMismatchDetected(true);
       }
     } catch {
@@ -78,12 +114,11 @@ export const PWAUpdateToast: React.FC = () => {
     } finally {
       checkingRef.current = false;
     }
-  }, []);
+  }, [clearCachesAndReload]);
 
   useEffect(() => {
-    const initialTimer = setTimeout(() => {
-      checkServerVersion();
-    }, 1500);
+    // Immediate check on startup so stale cached tabs update right away
+    checkServerVersion();
 
     const interval = setInterval(() => {
       checkServerVersion();
@@ -95,8 +130,17 @@ export const PWAUpdateToast: React.FC = () => {
       }
     };
 
+    const onControllerChange = () => {
+      if (CURRENT_BUILD_ID !== 'dev' && Date.now() - sessionStartRef.current < 15000) {
+        clearCachesAndReload(`sw-${Date.now()}`);
+      }
+    };
+
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    }
 
     // Expose hook for automated testing / manual verification
     window.__QMS_FORCE_UPDATE_PROMPT__ = () => {
@@ -105,12 +149,14 @@ export const PWAUpdateToast: React.FC = () => {
     };
 
     return () => {
-      clearTimeout(initialTimer);
       clearInterval(interval);
       window.removeEventListener('focus', onFocusOrVisible);
       document.removeEventListener('visibilitychange', onFocusOrVisible);
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      }
     };
-  }, [checkServerVersion]);
+  }, [checkServerVersion, clearCachesAndReload]);
 
   // Track online/offline status
   useEffect(() => {
@@ -139,28 +185,13 @@ export const PWAUpdateToast: React.FC = () => {
   const handleUpdateNow = async () => {
     setIsUpdating(true);
     try {
-      if (typeof window !== 'undefined' && 'caches' in window) {
-        const cacheKeys = await window.caches.keys();
-        await Promise.all(cacheKeys.map((k) => window.caches.delete(k)));
-      }
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.update().catch(() => {})));
-      }
-    } catch (e) {
-      console.warn('Cache clearing notice:', e);
-    }
-
-    try {
       if (needRefresh) {
         await updateServiceWorker(true);
       }
     } catch {
-      // fall through to reload
+      // fall through to cache clear + reload
     }
-
-    // Force fresh reload bypassing browser cache while preserving Firebase/localStorage data
-    window.location.reload();
+    await clearCachesAndReload(remoteVersion || undefined);
   };
 
   const closeRefreshToast = () => {

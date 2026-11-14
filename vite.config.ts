@@ -48,7 +48,7 @@ export default defineConfig(() => {
       tailwindcss(),
       versionManifestPlugin(appBuildId),
       VitePWA({
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
@@ -84,6 +84,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          skipWaiting: true,
           clientsClaim: true,
           navigateFallbackDenylist: [
             /^\/pdf\.worker/,
@@ -93,7 +94,13 @@ export default defineConfig(() => {
           ],
           maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
           globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg,woff,woff2}'],
-          globIgnores: ['**/assets/aistudio/**', '**/version.json', '**/pdf.worker*', '**/tesseract-worker*'],
+          globIgnores: [
+            '**/assets/aistudio/**',
+            '**/version.json',
+            '**/pdf.worker*',
+            '**/assets/pdf.worker*',
+            '**/tesseract-worker*',
+          ],
           cleanupOutdatedCaches: true,
           runtimeCaching: [
             {
