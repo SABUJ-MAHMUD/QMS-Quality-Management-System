@@ -227,3 +227,14 @@ appearance. | - | 1 | -
   assert.equal(se9?.severity, 'Major');
 });
 
+test('Words containing "hole" substring (Armhole, Buttonhole) never trigger Fa-1 Hole / Needle cut', () => {
+  const se26 = classifyRawDefect('Se-26 Asymmetrical shape / height at Left & Right- Neck, Armhole, pocket');
+  assert.equal(se26.defectGroupId, 'dg-se');
+  assert.notEqual(se26.standardDefectName, 'Hole / Needle cut / Yarn cut');
+
+  const btnHole = classifyRawDefect('Clo-4 Buttonhole misaligned or gapping');
+  assert.equal(btnHole.defectGroupId, 'dg-clo');
+  assert.notEqual(btnHole.standardDefectName, 'Hole / Needle cut / Yarn cut');
+});
+
+

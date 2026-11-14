@@ -23,7 +23,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect } from '../../data/defectMasterData';
+import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect, resolveDefectAccurate } from '../../data/defectMasterData';
 
 export const DefectAnalyticsView: React.FC = () => {
   const { filteredReports, setFilters, setActiveTab, addNotification, filters } = useApp();
@@ -65,69 +65,101 @@ export const DefectAnalyticsView: React.FC = () => {
     addNotification('info', `Filtered Dashboard for "${label}". Viewing linked analytics.`);
   };
 
+  const [showOnlyActive, setShowOnlyActive] = useState(false);
+
   // Compile statistics for each of the 23 Master Defect Categories and their subDefects
-  // Strictly assigns each defect record to ONE sub-defect slot (zero double-counting!)
+  // Strictly assigns each defect record to ONE sub-defect slot (zero double-counting, zero false Fa-1 Hole/Needle cut!)
   const categoryStats = useMemo(() => {
     const subQtyMap = new Map<string, number>();
     const subReportsMap = new Map<string, Set<string>>();
+    const catDirectQtyMap = new Map<string, number>();
+    const catDirectReportsMap = new Map<string, Set<string>>();
 
     filteredReports.forEach((r) => {
       r.defects?.forEach((d) => {
         const qty = Number(d.defectQuantity) || 0;
         if (qty <= 0) return;
 
-        const rawName = (d.originalDefectName || '').toLowerCase();
-        const stdName = (d.standardDefectName || '').toLowerCase();
-        const gid = (d.defectGroupId || '').toLowerCase();
+        const resolved = resolveDefectAccurate(d);
+        const rawName = (d.originalDefectName || '').trim().toLowerCase();
+        const stdName = resolved.standardDefectName.trim().toLowerCase();
+        const gid = resolved.defectGroupId.trim().toLowerCase();
+
+        // Determine preferred category from explicit defectGroupId if present
+        const preferredCat = gid
+          ? MASTER_DEFECT_23_CATEGORIES.find(
+              (c) => `dg-${c.code.toLowerCase()}` === gid || c.name.toLowerCase() === gid
+            )
+          : undefined;
+        // When an explicit BESTSELLER prefix code is present (e.g. Se-26, Cle-5), restrict search to that category first
+        const orderedCats = preferredCat
+          ? resolved.explicitCode
+            ? [preferredCat]
+            : [preferredCat, ...MASTER_DEFECT_23_CATEGORIES.filter((c) => c !== preferredCat)]
+          : MASTER_DEFECT_23_CATEGORIES;
 
         let matchedSubCode: string | null = null;
+        let matchedCatCode: string | null = preferredCat?.code || null;
 
-        // 1. Exact code or exact standard defect name match
-        for (const cat of MASTER_DEFECT_23_CATEGORIES) {
-          for (const sub of cat.subDefects) {
-            const subCode = sub.code.toLowerCase();
-            const subName = sub.name.toLowerCase();
-            const codeBoundaryRegex = new RegExp(`(^|[^a-z0-9])${subCode}([^0-9]|$)`, 'i');
-            if (
-              codeBoundaryRegex.test(rawName) ||
-              stdName === subName ||
-              rawName.includes(subName)
-            ) {
-              matchedSubCode = sub.code;
+        // 1. Exact standardDefectName match FIRST
+        if (stdName) {
+          for (const cat of orderedCats) {
+            const exact = cat.subDefects.find((sub) => sub.name.toLowerCase() === stdName);
+            if (exact) {
+              matchedSubCode = exact.code;
+              matchedCatCode = cat.code;
               break;
             }
           }
-          if (matchedSubCode) break;
         }
 
-        // 2. Fallback via classifyRawDefect (handles compact codes like CL5, CL1, NO1, SL-1)
+        // 2. Sub-defect full name inclusion in originalDefectName or standardDefectName
+        if (!matchedSubCode) {
+          for (const cat of orderedCats) {
+            const found = cat.subDefects.find((sub) => {
+              const subName = sub.name.toLowerCase();
+              return rawName.includes(subName) || (stdName && stdName.includes(subName));
+            });
+            if (found) {
+              matchedSubCode = found.code;
+              matchedCatCode = cat.code;
+              break;
+            }
+          }
+        }
+
+        // 3. Classify using master classifier if no exact sub-defect name matched yet
         if (!matchedSubCode) {
           const classified = classifyRawDefect(d.standardDefectName || d.originalDefectName || '');
           const classStd = classified.standardDefectName.toLowerCase();
-          for (const cat of MASTER_DEFECT_23_CATEGORIES) {
+          for (const cat of orderedCats) {
             const found = cat.subDefects.find((s) => s.name.toLowerCase() === classStd);
             if (found) {
               matchedSubCode = found.code;
+              matchedCatCode = cat.code;
               break;
             }
           }
-          if (!matchedSubCode) {
-            const targetCat = MASTER_DEFECT_23_CATEGORIES.find(
-              (c) => `dg-${c.code.toLowerCase()}` === (gid || classified.defectGroupId.toLowerCase())
+          if (!matchedCatCode && classified.defectGroupId) {
+            const fallbackCat = MASTER_DEFECT_23_CATEGORIES.find(
+              (c) => `dg-${c.code.toLowerCase()}` === classified.defectGroupId.toLowerCase()
             );
-            if (targetCat && targetCat.subDefects.length > 0) {
-              matchedSubCode = targetCat.subDefects[0].code;
-            }
+            if (fallbackCat) matchedCatCode = fallbackCat.code;
           }
         }
 
-        // 3. Final group fallback by defectGroupId
-        if (!matchedSubCode && gid) {
-          const targetCat = MASTER_DEFECT_23_CATEGORIES.find(
-            (c) => `dg-${c.code.toLowerCase()}` === gid || c.name.toLowerCase() === gid
-          );
-          if (targetCat && targetCat.subDefects.length > 0) {
-            matchedSubCode = targetCat.subDefects[0].code;
+        // 4. Exact code prefix match (e.g. Fa-10, Po-2) ONLY when nothing above matched
+        if (!matchedSubCode) {
+          for (const cat of orderedCats) {
+            const found = cat.subDefects.find((sub) => {
+              const codeBoundaryRegex = new RegExp(`(^|[^a-z0-9])${sub.code.toLowerCase()}([^0-9]|$)`, 'i');
+              return codeBoundaryRegex.test(rawName);
+            });
+            if (found) {
+              matchedSubCode = found.code;
+              matchedCatCode = cat.code;
+              break;
+            }
           }
         }
 
@@ -137,13 +169,20 @@ export const DefectAnalyticsView: React.FC = () => {
             subReportsMap.set(matchedSubCode, new Set<string>());
           }
           subReportsMap.get(matchedSubCode)!.add(r.id);
+        } else if (matchedCatCode) {
+          // Track within category total WITHOUT falsely polluting subDefects[0] (e.g. Fa-1 Hole / Needle cut)
+          catDirectQtyMap.set(matchedCatCode, (catDirectQtyMap.get(matchedCatCode) || 0) + qty);
+          if (!catDirectReportsMap.has(matchedCatCode)) {
+            catDirectReportsMap.set(matchedCatCode, new Set<string>());
+          }
+          catDirectReportsMap.get(matchedCatCode)!.add(r.id);
         }
       });
     });
 
     return MASTER_DEFECT_23_CATEGORIES.map((cat) => {
-      let totalQty = 0;
-      const inspectionCountSet = new Set<string>();
+      let totalQty = catDirectQtyMap.get(cat.code) || 0;
+      const inspectionCountSet = new Set<string>(catDirectReportsMap.get(cat.code) || []);
 
       const subStats = cat.subDefects.map((sub) => {
         const subQty = subQtyMap.get(sub.code) || 0;
@@ -162,14 +201,18 @@ export const DefectAnalyticsView: React.FC = () => {
         ...cat,
         totalQuantityAffected: totalQty,
         totalInspectionsWithDefects: inspectionCountSet.size,
+        unmappedQty: catDirectQtyMap.get(cat.code) || 0,
         subStats,
       };
     });
   }, [filteredReports]);
 
-  // Filter categories by search and sort by highest defect count descending
+  // Filter categories by search / active-only and sort by highest defect count descending
   const filteredCategoryStats = useMemo(() => {
     let list = categoryStats;
+    if (showOnlyActive) {
+      list = list.filter((c) => c.totalQuantityAffected > 0);
+    }
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       list = list.filter(
@@ -181,7 +224,7 @@ export const DefectAnalyticsView: React.FC = () => {
     }
     // Auto-sort by frequency: category with highest defects automatically floats to row #1
     return [...list].sort((a, b) => b.totalQuantityAffected - a.totalQuantityAffected);
-  }, [categoryStats, searchTerm]);
+  }, [categoryStats, searchTerm, showOnlyActive]);
 
   // Data for the Right Chart: 100% Dynamic Parallel Counting from Left Table (No dummy data)
   const chartData = useMemo(() => {
@@ -211,7 +254,7 @@ export const DefectAnalyticsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
             <input
@@ -223,12 +266,26 @@ export const DefectAnalyticsView: React.FC = () => {
             />
           </div>
           <button
+            type="button"
+            onClick={() => setShowOnlyActive((prev) => !prev)}
+            className={`px-2.5 py-1.5 rounded border text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+              showOnlyActive
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Filter className="w-3 h-3" />
+            Active Only ({categoryStats.filter((c) => c.totalQuantityAffected > 0).length})
+          </button>
+          <button
+            type="button"
             onClick={expandAll}
             className="px-2.5 py-1.5 rounded bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
           >
             Expand All
           </button>
           <button
+            type="button"
             onClick={collapseAll}
             className="px-2.5 py-1.5 rounded bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
           >
@@ -334,7 +391,11 @@ export const DefectAnalyticsView: React.FC = () => {
                         cat.subStats.map((sub) => (
                           <tr
                             key={sub.code}
-                            className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-[11px]"
+                            className={`transition-colors text-[11px] ${
+                              sub.quantityAffected > 0
+                                ? 'bg-rose-50/70 dark:bg-rose-950/20 hover:bg-rose-100/60'
+                                : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                            }`}
                           >
                             <td className="p-2 pl-6 text-center font-mono font-bold text-slate-500">
                               {sub.code}
@@ -375,6 +436,33 @@ export const DefectAnalyticsView: React.FC = () => {
                             </td>
                           </tr>
                         ))}
+
+                      {/* Unmapped Custom Defects inside this Category (keeps sub-rows summing 100% to Category Total) */}
+                      {isExpanded && cat.unmappedQty > 0 && (
+                        <tr className="bg-amber-50/70 dark:bg-amber-950/20 text-[11px]">
+                          <td className="p-2 pl-6 text-center font-mono font-bold text-amber-700">
+                            {cat.code}-*
+                          </td>
+                          <td className="p-2 pl-8">
+                            <span className="font-semibold text-amber-900 dark:text-amber-200">
+                              Other / Custom Defects in {cat.name}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center text-amber-800 dark:text-amber-300">-</td>
+                          <td className="p-2 text-center font-black text-amber-800 dark:text-amber-300">
+                            {cat.unmappedQty}
+                          </td>
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => handleLinkToDashboard(cat.name, cat.name)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold text-[10px] cursor-pointer"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              Link Group
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   );
                 })}
@@ -451,11 +539,46 @@ export const DefectAnalyticsView: React.FC = () => {
               )}
             </div>
 
+            {/* Parallel Live Category Breakdown Strip */}
+            {chartData.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 space-y-1.5 max-h-40 overflow-y-auto">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                  Parallel Category Breakdown ({chartData.length} Active Groups)
+                </div>
+                {chartData.map((entry) => {
+                  const pct = totalDefectSum > 0 ? ((entry.count / totalDefectSum) * 100).toFixed(1) : '0.0';
+                  return (
+                    <div
+                      key={entry.code}
+                      className="flex items-center justify-between text-xs px-2 py-1 rounded bg-slate-50 dark:bg-slate-800/70"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-black text-white shrink-0"
+                          style={{ backgroundColor: entry.color }}
+                        >
+                          {entry.code}
+                        </span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {entry.name}
+                        </span>
+                      </div>
+                      <span className="font-black text-slate-900 dark:text-white shrink-0 ml-2">
+                        {entry.count} <span className="text-[10px] font-semibold text-slate-500">({pct}%)</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Quick Summary Pill Row */}
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
               <div className="p-2 rounded bg-slate-50 dark:bg-slate-800">
-                <div className="text-[10px] text-slate-500 font-bold uppercase">Total Categories</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white">23</div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Active Groups</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white">
+                  {chartData.length} <span className="text-xs font-bold text-slate-400">/ 23</span>
+                </div>
               </div>
               <div className="p-2 rounded bg-slate-50 dark:bg-slate-800">
                 <div className="text-[10px] text-slate-500 font-bold uppercase">Active Defects</div>

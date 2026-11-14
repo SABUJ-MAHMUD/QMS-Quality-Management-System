@@ -32,7 +32,7 @@ import {
   LabelList,
 } from 'recharts';
 import { SpeedometerGauge } from '../common/SpeedometerGauge';
-import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
+import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../../data/defectMasterData';
 
 interface InlineCapaRow {
   serial: number;
@@ -153,7 +153,8 @@ export const DashboardView: React.FC = () => {
     filteredReports.forEach((r) => {
       if (r.defects && r.defects.length > 0) {
         r.defects.forEach((d) => {
-          const name = d.standardDefectName || d.originalDefectName;
+          const resolved = resolveDefectAccurate(d);
+          const name = resolved.standardDefectName || d.originalDefectName;
           map.set(name, (map.get(name) || 0) + (d.defectQuantity || 1));
         });
       }
@@ -227,7 +228,8 @@ export const DashboardView: React.FC = () => {
         .filter((r) => (r.targetMonth === monthKey) || (r.inspectionDate && r.inspectionDate.startsWith(monthKey)))
         .forEach((r) => {
           r.defects?.forEach((d) => {
-            const name = d.standardDefectName || d.originalDefectName;
+            const resolved = resolveDefectAccurate(d);
+            const name = resolved.standardDefectName || d.originalDefectName;
             map.set(name, (map.get(name) || 0) + (Number(d.defectQuantity) || 1));
           });
         });
@@ -255,21 +257,23 @@ export const DashboardView: React.FC = () => {
   }, [reports, availableMonths, filters.month]);
 
   // Bottom Right: Root Cause Analysis & CAPA Summary Table
-  // User Requirement: Automatically reflects records saved in RCA & CAPA module with "Push to Dashboard" switch
+  // User Requirement: Strictly shows ONLY records pushed to Dashboard (showOnDashboard === true).
+  // Pulling a record in RCA & CAPA immediately removes it from here.
   const dashboardCapaList = useMemo(() => {
-    // Check if user specifically toggled CAPAs to show on dashboard
-    const toggled = capas.filter((c) => c.showOnDashboard === true);
-    const sourceList = toggled.length > 0 ? toggled : capas.slice(0, 5);
-
-    return sourceList.map((c, index) => ({
-      serial: index + 1,
-      defectName: c.defectName,
-      rootCause: c.rootCause || 'Root cause analyzed via 5-Why method in RCA & CAPA module.',
-      correctiveAction: c.correctiveAction || c.correction || 'Immediate containment & lot sorting.',
-      preventiveAction: c.preventiveAction || 'Machine calibration & operator retraining.',
-      responsiblePerson: c.responsiblePerson || 'QA Lead',
-      status: c.capaStatus,
-    }));
+    return [...capas]
+      .filter((c) => c.showOnDashboard === true)
+      .sort((a, b) => (Number(b.defectQuantity) || 0) - (Number(a.defectQuantity) || 0))
+      .map((c, index) => ({
+        id: c.id,
+        serial: index + 1,
+        defectName: c.defectName,
+        defectQuantity: Number(c.defectQuantity) || 0,
+        rootCause: c.rootCause || 'Root cause analyzed via 5-Why method in RCA & CAPA module.',
+        correctiveAction: c.correctiveAction || c.correction || 'Immediate containment & lot sorting.',
+        preventiveAction: c.preventiveAction || 'Machine calibration & operator retraining.',
+        responsiblePerson: c.responsiblePerson || 'QA Lead',
+        status: c.capaStatus,
+      }));
   }, [capas]);
 
   return (
@@ -782,14 +786,17 @@ export const DashboardView: React.FC = () => {
                 ) : (
                   dashboardCapaList.map((row) => (
                     <tr
-                      key={row.serial}
+                      key={row.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <td className="p-1.5 text-center font-bold text-slate-500">
                         {row.serial}
                       </td>
                       <td className="p-1.5 font-bold text-slate-800 dark:text-slate-100">
-                        {row.defectName}
+                        <div>{row.defectName}</div>
+                        <div className="text-[10px] font-black text-rose-600 dark:text-rose-400">
+                          Total Qty: {row.defectQuantity}
+                        </div>
                       </td>
                       <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
                         {row.rootCause}
@@ -804,9 +811,19 @@ export const DashboardView: React.FC = () => {
                         {row.responsiblePerson}
                       </td>
                       <td className="p-1.5 text-center whitespace-nowrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                          {row.status}
-                        </span>
+                        <div className="inline-flex items-center gap-1">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                            {row.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateCapa(row.id, { showOnDashboard: false })}
+                            title="Pull off Dashboard (keeps in RCA & CAPA)"
+                            className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
+                          >
+                            &minus;
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

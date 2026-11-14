@@ -1,4 +1,5 @@
 import { InspectionReport, DefectGroup, InspectionDefect } from '../types';
+import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../data/defectMasterData';
 
 /**
  * Calculates single report OQL percentage based on official BESTSELLER formula:
@@ -192,17 +193,26 @@ export function filterReports(
 
     if (filters.defectGroup && filters.defectGroup !== 'ALL') {
       const q = filters.defectGroup.toLowerCase().trim();
+      const matchedCat = MASTER_DEFECT_23_CATEGORIES.find(
+        (c) =>
+          c.name.toLowerCase() === q ||
+          c.code.toLowerCase() === q ||
+          `dg-${c.code.toLowerCase()}` === q ||
+          `${c.name.toLowerCase()} (${c.code.toLowerCase()})` === q
+      );
+      const targetGid = matchedCat ? `dg-${matchedCat.code.toLowerCase()}` : '';
       const hasGroup = report.defects?.some((d) => {
-        const gid = (d.defectGroupId || '').toLowerCase();
+        const resolved = resolveDefectAccurate(d);
+        const gid = resolved.defectGroupId.toLowerCase();
         const orig = (d.originalDefectName || '').toLowerCase();
-        const std = (d.standardDefectName || '').toLowerCase();
+        const std = resolved.standardDefectName.toLowerCase();
         return (
+          (targetGid && gid === targetGid) ||
           gid === q ||
           gid.includes(q) ||
           orig.includes(q) ||
           std.includes(q) ||
-          (q.startsWith('dg-') && gid === q) ||
-          (q.includes('-') && (orig.includes(q) || std.includes(q)))
+          (q.startsWith('dg-') && gid === q)
         );
       });
       if (!hasGroup) return false;

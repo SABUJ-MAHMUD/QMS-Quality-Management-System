@@ -322,36 +322,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
-  // Initial Firestore synchronization & healthcheck
+  // Initial Firestore synchronization & real-time multi-user listeners
   useEffect(() => {
     let isMounted = true;
+    let unsubReports: (() => void) | null = null;
+    let unsubCapas: (() => void) | null = null;
+    let unsubMonitoring: (() => void) | null = null;
+
     const initCloudDatabase = async () => {
       try {
         const isHealthy = await testConnection();
         if (isMounted) setIsFirebaseConnected(isHealthy);
-        if (isHealthy) {
-          // Fetch remote reports if available
-          const remoteReports = await firestoreService.fetchReports();
-          if (isMounted && remoteReports && remoteReports.length > 0) {
-            setReports(remoteReports);
+        if (!isHealthy) return;
+
+        // Subscribe to real-time updates so 10-15+ colleagues see each other's uploads immediately
+        let initialReportsChecked = false;
+        unsubReports = firestoreService.subscribeReports(
+          (remoteReports) => {
+            if (!isMounted) return;
+            setIsFirebaseConnected(true);
+            setReports((localPrev) => {
+              // On first snapshot, push any local-only non-demo reports up to Firestore so nothing is lost
+              if (!initialReportsChecked) {
+                initialReportsChecked = true;
+                const remoteIds = new Set(remoteReports.map((r) => r.id));
+                const unsyncedLocal = localPrev.filter((r) => !r.isDemo && !remoteIds.has(r.id));
+                unsyncedLocal.forEach((r) => {
+                  firestoreService.saveReport(r).catch((err) => {
+                    console.warn('Backfill local report to Firestore note:', err);
+                  });
+                });
+                if (unsyncedLocal.length > 0) {
+                  return [...unsyncedLocal, ...remoteReports];
+                }
+              }
+              return remoteReports;
+            });
+          },
+          (err) => {
+            console.warn('Firestore reports listener note:', err);
+            if (isMounted) setIsFirebaseConnected(false);
           }
-          const remoteCapas = await firestoreService.fetchCapas();
-          if (isMounted && remoteCapas && remoteCapas.length > 0) {
-            setCapas(remoteCapas);
-          }
-          const remoteMon = await firestoreService.fetchMonitoring();
-          if (isMounted && remoteMon && remoteMon.length > 0) {
+        );
+
+        let initialCapasChecked = false;
+        unsubCapas = firestoreService.subscribeCapas(
+          (remoteCapas) => {
+            if (!isMounted) return;
+            setCapas((localPrev) => {
+              if (!initialCapasChecked) {
+                initialCapasChecked = true;
+                const remoteIds = new Set(remoteCapas.map((c) => c.id));
+                const unsynced = localPrev.filter((c) => !c.isDemo && !remoteIds.has(c.id));
+                unsynced.forEach((c) => {
+                  firestoreService.saveCapa(c).catch((err) => console.warn('Backfill CAPA note:', err));
+                });
+                if (unsynced.length > 0) {
+                  return [...unsynced, ...remoteCapas];
+                }
+              }
+              return remoteCapas;
+            });
+          },
+          (err) => console.warn('Firestore capas listener note:', err)
+        );
+
+        unsubMonitoring = firestoreService.subscribeMonitoring(
+          (remoteMon) => {
+            if (!isMounted) return;
             setMonitoringRecords(remoteMon);
-          }
-          addNotification('success', 'Connected to Firebase Cloud Firestore database.');
-        }
+          },
+          (err) => console.warn('Firestore monitoring listener note:', err)
+        );
+
+        addNotification('success', 'Connected to Firebase Cloud Firestore real-time sync.');
       } catch (err) {
         console.warn('Firestore initial sync note:', err);
+        if (isMounted) setIsFirebaseConnected(false);
       }
     };
     initCloudDatabase();
     return () => {
       isMounted = false;
+      unsubReports?.();
+      unsubCapas?.();
+      unsubMonitoring?.();
     };
   }, []);
 
@@ -551,9 +606,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setReports((prev) => [newReport, ...prev]);
-    firestoreService.saveReport(newReport).catch((err) => {
-      console.warn('Failed to sync new report to Firestore:', err);
-    });
+    firestoreService
+      .saveReport(newReport)
+      .then(() => {
+        setIsFirebaseConnected(true);
+      })
+      .catch((err) => {
+        console.error('Failed to sync new report to Firestore:', err);
+        addNotification(
+          'warning',
+          `Report ${data.reportNumber} saved locally, but cloud sync failed (${err?.message || 'network/permissions'}).`
+        );
+      });
     addNotification('success', `Inspection Report ${data.reportNumber} saved and approved into database.`);
     return newReport;
   };
@@ -579,7 +643,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           auditLogs: updatedAudit,
         };
         firestoreService.saveReport(updated).catch((err) => {
-          console.warn('Failed to sync updated report to Firestore:', err);
+          console.error('Failed to sync updated report to Firestore:', err);
+          addNotification('warning', 'Report updated locally; cloud sync error occurred.');
         });
         return updated;
       })
@@ -594,7 +659,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setReports((prev) => prev.filter((r) => r.id !== id));
     firestoreService.deleteReport(id).catch((err) => {
-      console.warn('Failed to delete report from Firestore:', err);
+      console.error('Failed to delete report from Firestore:', err);
+      addNotification('warning', 'Deleted locally, but cloud deletion failed.');
     });
     addNotification('warning', `Inspection report deleted.`);
     return true;
@@ -653,7 +719,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // CAPA CRUD with Firestore persistence
   const addCapa = (data: Omit<CAPARecord, 'id' | 'createdAt' | 'updatedAt'>): CAPARecord => {
-    const id = `capa-${Date.now()}`;
+    const id = `capa-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const now = new Date().toISOString();
     const newCapa: CAPARecord = {
       ...data,
@@ -663,7 +729,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setCapas((prev) => [newCapa, ...prev]);
     firestoreService.saveCapa(newCapa).catch((err) => {
-      console.warn('Failed to sync new CAPA to Firestore:', err);
+      console.error('Failed to sync new CAPA to Firestore:', err);
+      addNotification('warning', `CAPA ${data.capaId} saved locally, but cloud sync failed.`);
     });
     addNotification('success', `CAPA Plan ${data.capaId} created.`);
     return newCapa;
@@ -676,7 +743,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (c.id !== id) return c;
         const updated = { ...c, ...updates, updatedAt: now };
         firestoreService.saveCapa(updated).catch((err) => {
-          console.warn('Failed to sync updated CAPA to Firestore:', err);
+          console.error('Failed to sync updated CAPA to Firestore:', err);
+          addNotification('warning', 'CAPA updated locally, but cloud sync failed.');
         });
         return updated;
       })
@@ -687,14 +755,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteCapa = (id: string) => {
     setCapas((prev) => prev.filter((c) => c.id !== id));
     firestoreService.deleteCapa(id).catch((err) => {
-      console.warn('Failed to delete CAPA from Firestore:', err);
+      console.error('Failed to delete CAPA from Firestore:', err);
+      addNotification('warning', 'CAPA deleted locally, but cloud deletion failed.');
     });
     addNotification('warning', `CAPA record deleted.`);
   };
 
   // Monitoring CRUD with Firestore persistence
   const addMonitoringRecord = (data: Omit<MonitoringRecord, 'id' | 'createdAt'>) => {
-    const id = `mon-${Date.now()}`;
+    const id = `mon-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const now = new Date().toISOString();
     const newMon: MonitoringRecord = {
       ...data,
@@ -703,7 +772,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setMonitoringRecords((prev) => [newMon, ...prev]);
     firestoreService.saveMonitoring(newMon).catch((err) => {
-      console.warn('Failed to sync monitoring record to Firestore:', err);
+      console.error('Failed to sync monitoring record to Firestore:', err);
+      addNotification('warning', 'Monitoring record saved locally, but cloud sync failed.');
     });
 
     // If marked effective, update CAPA status
@@ -719,7 +789,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteMonitoringRecord = (id: string) => {
     setMonitoringRecords((prev) => prev.filter((m) => m.id !== id));
     firestoreService.deleteMonitoring(id).catch((err) => {
-      console.warn('Failed to delete monitoring record from Firestore:', err);
+      console.error('Failed to delete monitoring record from Firestore:', err);
+      addNotification('warning', 'Monitoring record deleted locally, but cloud deletion failed.');
     });
     addNotification('info', 'Monitoring record deleted.');
   };

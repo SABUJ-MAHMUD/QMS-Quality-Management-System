@@ -510,7 +510,8 @@ export function classifyRawDefect(
     if (lower.includes('foreign yarn') || lower.includes('fly yarn')) {
       return { standardDefectName: 'Foreign Yarns / Fly yarn', defectGroupId: 'dg-fa', severity: 'Minor', matchType: 'Auto-Matched', confidence: 92 };
     }
-    if (lower.includes('hole') || lower.includes('needle cut')) {
+    // Use strict word boundary for "hole" so "armhole" or "buttonhole" NEVER falsely trigger Fabric Hole / Needle cut!
+    if (/\bholes?\b/i.test(lower) || lower.includes('needle cut') || lower.includes('yarn cut')) {
       return { standardDefectName: 'Hole / Needle cut / Yarn cut', defectGroupId: 'dg-fa', severity: 'Critical', matchType: 'Auto-Matched', confidence: 92 };
     }
     if (lower.includes('broken stitch')) {
@@ -524,6 +525,15 @@ export function classifyRawDefect(
     }
     if (lower.includes('twisted seam') || lower.includes('seam twisted')) {
       return { standardDefectName: 'Twisted seam / Seam torque', defectGroupId: 'dg-se', severity: 'Major', matchType: 'Auto-Matched', confidence: 93 };
+    }
+    if (lower.includes('buttonhole')) {
+      return { standardDefectName: 'Button and buttonhole misaligned / Gapping', defectGroupId: 'dg-clo', severity: 'Major', matchType: 'Auto-Matched', confidence: 92 };
+    }
+    if (prefixCategory?.code === 'Se' && normalizedCode) {
+      const exactSub = prefixCategory.subDefects.find((s) => s.code.toUpperCase() === normalizedCode);
+      if (exactSub) {
+        return { standardDefectName: exactSub.name, defectGroupId: 'dg-se', severity: exactSub.defaultSeverity, matchType: 'Auto-Matched', confidence: 96 };
+      }
     }
     if (lower.includes('seam') || lower.includes('pucker') || lower.includes('stitch')) {
       return { standardDefectName: 'Seam puckering / Gathered seam', defectGroupId: 'dg-se', severity: 'Minor', matchType: 'Auto-Matched', confidence: 88 };
@@ -620,5 +630,44 @@ export function classifyRawDefect(
     severity: 'Major',
     matchType: 'Pending',
     confidence: 60,
+  };
+}
+
+/**
+ * Resolves a stored defect record cleanly, repairing any legacy misclassifications
+ * where an explicit code prefix in originalDefectName (e.g. "Se-26 ... Armhole ...")
+ * conflicts with an older incorrectly saved defectGroupId (e.g. "dg-fa" / "Hole / Needle cut").
+ */
+export function resolveDefectAccurate(defect: {
+  originalDefectName?: string;
+  standardDefectName?: string;
+  defectGroupId?: string;
+}): {
+  standardDefectName: string;
+  defectGroupId: string;
+  explicitCode: string | null;
+} {
+  const raw = (defect.originalDefectName || '').trim();
+  const std = (defect.standardDefectName || '').trim();
+  const gid = (defect.defectGroupId || '').trim();
+
+  const leadingMatch = raw.match(/^([A-Za-z]{2,4}-?\d{1,3})\b/);
+  const explicitCode = leadingMatch ? normalizeCompactDefectCode(leadingMatch[1]) : null;
+  const prefix = explicitCode ? explicitCode.split('-')[0].toLowerCase() : '';
+  const expectedGid = prefix ? `dg-${prefix}` : '';
+
+  if (expectedGid && gid && expectedGid !== gid.toLowerCase()) {
+    const reclassified = classifyRawDefect(raw);
+    return {
+      standardDefectName: reclassified.standardDefectName,
+      defectGroupId: reclassified.defectGroupId,
+      explicitCode,
+    };
+  }
+
+  return {
+    standardDefectName: std || raw,
+    defectGroupId: gid || expectedGid || 'dg-se',
+    explicitCode,
   };
 }

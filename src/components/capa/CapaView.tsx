@@ -1,24 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CAPARecord, CapaStatus, EffectivenessStatus } from '../../types';
 import {
   ShieldAlert,
   Plus,
+  Minus,
   Search,
-  Filter,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  FileSpreadsheet,
   Download,
   Eye,
   Trash2,
   Edit2,
   X,
-  FileCheck,
   Zap,
+  ArrowUpDown,
 } from 'lucide-react';
+import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../../data/defectMasterData';
 import { exportCapaToExcel } from '../../utils/exportUtils';
+
+const resolveDefectGroupLabel = (defectGroupId?: string): string => {
+  if (!defectGroupId) return 'Cleanliness & Workmanship';
+  const found = MASTER_DEFECT_23_CATEGORIES.find(
+    (c) => `dg-${c.code.toLowerCase()}` === defectGroupId.toLowerCase()
+  );
+  return found ? found.name : defectGroupId;
+};
 
 export const CapaView: React.FC = () => {
   const {
@@ -27,47 +32,129 @@ export const CapaView: React.FC = () => {
     updateCapa,
     deleteCapa,
     reports,
-    defectGroups,
     canManageData,
     addNotification,
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [dashFilter, setDashFilter] = useState<'ALL' | 'DASHBOARD' | 'CAPA_ONLY'>('ALL');
+  const [sortBy, setSortBy] = useState<'qty_desc' | 'qty_asc' | 'newest'>('qty_desc');
   const [selectedCapa, setSelectedCapa] = useState<CAPARecord | null>(null);
   const [editingCapa, setEditingCapa] = useState<CAPARecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Auto-sync defects from uploaded inspection reports into CAPA
-  const handleSyncDefectsFromReports = () => {
-    const existingDefectNames = new Set(capas.map((c) => (c.defectName || '').trim().toLowerCase()));
-    const defectMap = new Map<string, { qty: number; report: (typeof reports)[0]; defectObj: any }>();
+  // Live consolidated defect summary across ALL uploaded reports (10 / 50 / 100+ reports)
+  const aggregatedReportDefects = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        displayName: string;
+        qty: number;
+        reportIds: Set<string>;
+        orderNumbers: Set<string>;
+        latestReport: (typeof reports)[0];
+        defectObj: any;
+      }
+    >();
 
     reports.forEach((r) => {
       (r.defects || []).forEach((d) => {
-        const name = (d.standardDefectName || d.originalDefectName || '').trim();
-        if (name) {
-          const curr = defectMap.get(name) || { qty: 0, report: r, defectObj: d };
-          curr.qty += Number(d.defectQuantity) || 1;
-          defectMap.set(name, curr);
+        const resolved = resolveDefectAccurate(d);
+        const rawLabel = (resolved.standardDefectName || d.originalDefectName || '').trim();
+        if (!rawLabel) return;
+        const key = rawLabel.toLowerCase();
+        const existing = map.get(key);
+        const qty = Number(d.defectQuantity) || 1;
+        const repairedDefect = {
+          ...d,
+          standardDefectName: resolved.standardDefectName,
+          defectGroupId: resolved.defectGroupId,
+        };
+        if (existing) {
+          existing.qty += qty;
+          existing.reportIds.add(r.id);
+          if (r.orderNumber) existing.orderNumbers.add(r.orderNumber);
+        } else {
+          const orderSet = new Set<string>();
+          if (r.orderNumber) orderSet.add(r.orderNumber);
+          map.set(key, {
+            displayName: rawLabel,
+            qty,
+            reportIds: new Set([r.id]),
+            orderNumbers: orderSet,
+            latestReport: r,
+            defectObj: repairedDefect,
+          });
         }
       });
     });
 
-    let addedCount = 0;
-    const sorted = Array.from(defectMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
+    return map;
+  }, [reports]);
 
-    sorted.forEach(([name, info]) => {
-      if (!existingDefectNames.has(name.toLowerCase())) {
+  // Consolidate & sync ALL defects across 10/50/100+ uploaded reports into CAPA
+  const handleSyncDefectsFromReports = () => {
+    if (aggregatedReportDefects.size === 0) {
+      addNotification('info', 'Upload factory inspection PDF reports first to extract defects into CAPA.');
+      return;
+    }
+
+    // Group existing CAPAs by normalized defectName to avoid duplicates and sum properly
+    const existingByName = new Map<string, CAPARecord[]>();
+    capas.forEach((c) => {
+      const key = (c.defectName || '').trim().toLowerCase();
+      if (!key) return;
+      const list = existingByName.get(key) || [];
+      list.push(c);
+      existingByName.set(key, list);
+    });
+
+    let addedCount = 0;
+    let updatedCount = 0;
+    const sorted = Array.from(aggregatedReportDefects.entries()).sort((a, b) => b[1].qty - a[1].qty);
+
+    sorted.forEach(([key, info]) => {
+      const orderArr = Array.from(info.orderNumbers);
+      const orderSummary =
+        orderArr.length > 1
+          ? `${orderArr[0]} (+${orderArr.length - 1} orders)`
+          : orderArr[0] || info.latestReport.orderNumber;
+      const reportSummary =
+        info.reportIds.size > 1
+          ? `${info.reportIds.size} Reports Combined`
+          : info.latestReport.reportNumber;
+
+      const existingList = existingByName.get(key);
+      if (existingList && existingList.length > 0) {
+        const primary = existingList[0];
+        // Clean up any duplicate rows for the exact same defect
+        for (let i = 1; i < existingList.length; i++) {
+          deleteCapa(existingList[i].id);
+        }
+        if (
+          primary.defectQuantity !== info.qty ||
+          primary.reportNumber !== reportSummary ||
+          primary.orderNumber !== orderSummary
+        ) {
+          updateCapa(primary.id, {
+            defectQuantity: info.qty,
+            reportNumber: reportSummary,
+            orderNumber: orderSummary,
+            defectGroup: resolveDefectGroupLabel(info.defectObj.defectGroupId),
+          });
+          updatedCount++;
+        }
+      } else {
         addCapa({
           capaId: `CAPA-${new Date().getFullYear()}-${String(capas.length + addedCount + 1).padStart(3, '0')}`,
-          inspectionReportId: info.report.id,
-          reportNumber: info.report.reportNumber,
-          orderNumber: info.report.orderNumber,
-          styleNumber: info.report.styleNumber,
-          buyer: info.report.buyer,
-          defectName: name,
-          defectGroup: info.defectObj.defectGroupId ? `Group ${info.defectObj.defectGroupId}` : 'Cleanliness & Workmanship',
+          inspectionReportId: info.latestReport.id,
+          reportNumber: reportSummary,
+          orderNumber: orderSummary,
+          styleNumber: info.latestReport.styleNumber,
+          buyer: info.latestReport.buyer,
+          defectName: info.displayName,
+          defectGroup: resolveDefectGroupLabel(info.defectObj.defectGroupId),
           defectSeverity: (info.defectObj.severity as any) || 'Major',
           defectQuantity: info.qty,
           rootCause: '',
@@ -82,19 +169,20 @@ export const CapaView: React.FC = () => {
           monitoringMethod: 'Daily 50 garments random end-line audit',
           capaStatus: 'Open',
           effectivenessStatus: 'Under Monitoring',
-          showOnDashboard: true, // Default to showing on dashboard
+          showOnDashboard: false, // User explicitly pushes selected items to Dashboard
           isDemo: false,
         });
         addedCount++;
       }
     });
 
-    if (addedCount > 0) {
-      addNotification('success', `Created ${addedCount} CAPA action plan slots from highest reported defects (pushed to Dashboard).`);
-    } else if (defectMap.size === 0) {
-      addNotification('info', 'Upload factory inspection PDF reports first to extract defects into CAPA.');
+    if (addedCount > 0 || updatedCount > 0) {
+      addNotification(
+        'success',
+        `Consolidated ${reports.length} reports: ${addedCount} new CAPAs added, ${updatedCount} totals updated (sorted highest first).`
+      );
     } else {
-      addNotification('info', 'All defects from current reports already exist in the CAPA log.');
+      addNotification('info', 'All consolidated defect totals are already up to date.');
     }
   };
 
@@ -141,21 +229,35 @@ export const CapaView: React.FC = () => {
     (c) => c.targetCompletionDate < todayStr && c.capaStatus !== 'Closed' && c.capaStatus !== 'Effective'
   ).length;
 
-  // Filtered CAPA records
-  const filteredCapas = capas.filter((c) => {
-    if (statusFilter !== 'ALL' && c.capaStatus !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const match =
-        c.capaId.toLowerCase().includes(q) ||
-        c.defectName.toLowerCase().includes(q) ||
-        c.responsiblePerson.toLowerCase().includes(q) ||
-        c.orderNumber.toLowerCase().includes(q) ||
-        c.reportNumber.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    return true;
-  });
+  // Filtered & Sorted CAPA records
+  const filteredCapas = useMemo(() => {
+    const list = capas.filter((c) => {
+      if (statusFilter !== 'ALL' && c.capaStatus !== statusFilter) return false;
+      if (dashFilter === 'DASHBOARD' && c.showOnDashboard !== true) return false;
+      if (dashFilter === 'CAPA_ONLY' && c.showOnDashboard === true) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const match =
+          c.capaId.toLowerCase().includes(q) ||
+          c.defectName.toLowerCase().includes(q) ||
+          c.responsiblePerson.toLowerCase().includes(q) ||
+          c.orderNumber.toLowerCase().includes(q) ||
+          c.reportNumber.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    return [...list].sort((a, b) => {
+      if (sortBy === 'qty_desc') {
+        return (Number(b.defectQuantity) || 0) - (Number(a.defectQuantity) || 0);
+      }
+      if (sortBy === 'qty_asc') {
+        return (Number(a.defectQuantity) || 0) - (Number(b.defectQuantity) || 0);
+      }
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }, [capas, statusFilter, dashFilter, search, sortBy]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,6 +290,7 @@ export const CapaView: React.FC = () => {
       monitoringMethod: formData.monitoringMethod,
       effectivenessStatus: formData.effectivenessStatus,
       capaStatus: formData.capaStatus,
+      showOnDashboard: false,
       isDemo: false,
     });
     setShowCreateModal(false);
@@ -211,10 +314,10 @@ export const CapaView: React.FC = () => {
             <button
               onClick={handleSyncDefectsFromReports}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              title="Automatically scan inspection reports and generate CAPA rows for the highest frequency defects"
+              title="Consolidate and sum identical defects across all uploaded inspection reports (10/50/100+) and sort highest first"
             >
               <Zap className="w-3.5 h-3.5" />
-              Auto-Sync Highest Defects
+              Auto-Sync &amp; Aggregate ({reports.length} Reports)
             </button>
           )}
           <button
@@ -279,34 +382,70 @@ export const CapaView: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters & Search */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-        <div className="relative w-72">
+      {/* Filters, Dashboard Filter & Sorting */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+        <div className="relative w-64">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search CAPA ID, defect, responsible..."
+            placeholder="Search CAPA ID, defect, order..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-sky-500"
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500"
           />
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-slate-400 font-semibold mr-1">Status:</span>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 font-semibold mr-0.5">Placement:</span>
+          {[
+            { id: 'ALL', label: `All (${capas.length})` },
+            { id: 'DASHBOARD', label: `On Dashboard (${capas.filter((c) => c.showOnDashboard === true).length})` },
+            { id: 'CAPA_ONLY', label: `CAPA Only (${capas.filter((c) => c.showOnDashboard !== true).length})` },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setDashFilter(opt.id as any)}
+              className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                dashFilter === opt.id
+                  ? 'bg-emerald-700 text-white font-bold'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 font-semibold mr-0.5">Status:</span>
           {['ALL', 'Open', 'In Progress', 'Pending Verification', 'Effective', 'Closed'].map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+              className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
                 statusFilter === s
                   ? 'bg-slate-900 text-white font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
               }`}
             >
               {s}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs">
+          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+          >
+            <option value="qty_desc">Highest Defects First</option>
+            <option value="qty_asc">Lowest Defects First</option>
+            <option value="newest">Newest Added</option>
+          </select>
         </div>
       </div>
 
@@ -344,7 +483,14 @@ export const CapaView: React.FC = () => {
 
                       <td className="py-2.5 px-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100">{c.defectName}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{c.defectGroup} &bull; Qty: {c.defectQuantity}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                          <span>{c.defectGroup}</span>
+                          <span>&bull;</span>
+                          <span className="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 font-black">
+                            Total Qty: {c.defectQuantity}
+                          </span>
+                          {c.reportNumber && <span>&bull; {c.reportNumber}</span>}
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3">
@@ -386,18 +532,33 @@ export const CapaView: React.FC = () => {
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Push to Dashboard Toggle Switch */}
-                          <button
-                            onClick={() => updateCapa(c.id, { showOnDashboard: c.showOnDashboard === false ? true : !c.showOnDashboard })}
-                            className={`px-2 py-1 rounded-md text-[10px] font-bold border inline-flex items-center gap-1 cursor-pointer transition-colors ${
-                              c.showOnDashboard !== false
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300'
-                                : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                            }`}
-                            title={c.showOnDashboard !== false ? 'Shown on Dashboard. Click to remove.' : 'Click to push this CAPA item to the Main Dashboard'}
-                          >
-                            {c.showOnDashboard !== false ? '✓ On Dashboard' : '+ Push to Dash'}
-                          </button>
+                          {/* Two-Way Push (+) / Pull (-) Dashboard Toggle */}
+                          {c.showOnDashboard === true ? (
+                            <div className="inline-flex items-center gap-1">
+                              <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300">
+                                ✓ On Dashboard
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateCapa(c.id, { showOnDashboard: false })}
+                                className="px-2 py-1 rounded-md text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 inline-flex items-center gap-0.5 cursor-pointer transition-colors"
+                                title="Pull off Main Dashboard (keeps this record in RCA & CAPA)"
+                              >
+                                <Minus className="w-3 h-3" />
+                                Pull
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => updateCapa(c.id, { showOnDashboard: true })}
+                              className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950/50 dark:text-sky-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Push this CAPA item to the Main Dashboard"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Push to Dashboard
+                            </button>
+                          )}
 
                           {canManageData && (
                             <button
@@ -851,7 +1012,7 @@ export const CapaView: React.FC = () => {
                 </div>
                 <input
                   type="checkbox"
-                  checked={editingCapa.showOnDashboard !== false}
+                  checked={editingCapa.showOnDashboard === true}
                   onChange={(e) => setEditingCapa({ ...editingCapa, showOnDashboard: e.target.checked })}
                   className="w-5 h-5 accent-emerald-600 rounded cursor-pointer"
                 />

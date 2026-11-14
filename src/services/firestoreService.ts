@@ -15,6 +15,9 @@ import {
   MonitoringRecord,
 } from '../types';
 
+import { sanitizeForFirestore } from '../utils/firestoreSanitizer';
+export { sanitizeForFirestore };
+
 export const firestoreService = {
   // --- Inspection Reports ---
   async fetchReports(): Promise<InspectionReport[]> {
@@ -35,7 +38,7 @@ export const firestoreService = {
   async saveReport(report: InspectionReport): Promise<void> {
     const path = `reports/${report.id}`;
     try {
-      await setDoc(doc(db, 'reports', report.id), report);
+      await setDoc(doc(db, 'reports', report.id), sanitizeForFirestore(report));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -50,7 +53,10 @@ export const firestoreService = {
     }
   },
 
-  subscribeReports(onUpdate: (reports: InspectionReport[]) => void): () => void {
+  subscribeReports(
+    onUpdate: (reports: InspectionReport[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
     const path = 'reports';
     return onSnapshot(
       collection(db, path),
@@ -59,10 +65,15 @@ export const firestoreService = {
         snap.forEach((d) => {
           list.push({ id: d.id, ...(d.data() as Omit<InspectionReport, 'id'>) });
         });
+        list.sort((a, b) => (b.createdAt || b.inspectionDate || '').localeCompare(a.createdAt || a.inspectionDate || ''));
         onUpdate(list);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.GET, path);
+        if (onError) {
+          onError(err);
+        } else {
+          handleFirestoreError(err, OperationType.GET, path);
+        }
       }
     );
   },
@@ -86,7 +97,7 @@ export const firestoreService = {
   async saveDefectGroup(group: DefectGroup): Promise<void> {
     const path = `defect_groups/${group.id}`;
     try {
-      await setDoc(doc(db, 'defect_groups', group.id), group);
+      await setDoc(doc(db, 'defect_groups', group.id), sanitizeForFirestore(group));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -120,7 +131,7 @@ export const firestoreService = {
   async saveDefectMasterItem(item: DefectMasterItem): Promise<void> {
     const path = `defect_master/${item.id}`;
     try {
-      await setDoc(doc(db, 'defect_master', item.id), item);
+      await setDoc(doc(db, 'defect_master', item.id), sanitizeForFirestore(item));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -154,7 +165,7 @@ export const firestoreService = {
   async saveCapa(capa: CAPARecord): Promise<void> {
     const path = `capas/${capa.id}`;
     try {
-      await setDoc(doc(db, 'capas', capa.id), capa);
+      await setDoc(doc(db, 'capas', capa.id), sanitizeForFirestore(capa));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -167,6 +178,31 @@ export const firestoreService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
+  },
+
+  subscribeCapas(
+    onUpdate: (capas: CAPARecord[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
+    const path = 'capas';
+    return onSnapshot(
+      collection(db, path),
+      (snap) => {
+        const list: CAPARecord[] = [];
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...(d.data() as Omit<CAPARecord, 'id'>) });
+        });
+        list.sort((a, b) => (Number(b.defectQuantity) || 0) - (Number(a.defectQuantity) || 0));
+        onUpdate(list);
+      },
+      (err) => {
+        if (onError) {
+          onError(err);
+        } else {
+          handleFirestoreError(err, OperationType.GET, path);
+        }
+      }
+    );
   },
 
   // --- Monitoring Records ---
@@ -188,7 +224,7 @@ export const firestoreService = {
   async saveMonitoring(record: MonitoringRecord): Promise<void> {
     const path = `monitoring/${record.id}`;
     try {
-      await setDoc(doc(db, 'monitoring', record.id), record);
+      await setDoc(doc(db, 'monitoring', record.id), sanitizeForFirestore(record));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
     }
@@ -201,5 +237,29 @@ export const firestoreService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
+  },
+
+  subscribeMonitoring(
+    onUpdate: (records: MonitoringRecord[]) => void,
+    onError?: (err: unknown) => void
+  ): () => void {
+    const path = 'monitoring';
+    return onSnapshot(
+      collection(db, path),
+      (snap) => {
+        const list: MonitoringRecord[] = [];
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...(d.data() as Omit<MonitoringRecord, 'id'>) });
+        });
+        onUpdate(list);
+      },
+      (err) => {
+        if (onError) {
+          onError(err);
+        } else {
+          handleFirestoreError(err, OperationType.GET, path);
+        }
+      }
+    );
   },
 };
