@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
@@ -259,6 +260,47 @@ export const firestoreService = {
         } else {
           handleFirestoreError(err, OperationType.GET, path);
         }
+      }
+    );
+  },
+
+  // --- Live App Release Broadcast (Push Update Notifications to All Users) ---
+  async publishAppReleaseIfNewer(hostId: string, version: string, builtAt: string): Promise<void> {
+    if (!hostId || !version || !builtAt) return;
+    const safeHost = hostId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || 'default_host';
+    const docRef = doc(db, 'app_releases', safeHost);
+    try {
+      const snap = await getDoc(docRef);
+      const existing = snap.exists() ? (snap.data() as { version?: string; builtAt?: string }) : null;
+      if (!existing || !existing.builtAt || builtAt > existing.builtAt) {
+        await setDoc(docRef, {
+          version: version.slice(0, 64),
+          builtAt: builtAt.slice(0, 64),
+          host: safeHost,
+        });
+      }
+    } catch {
+      // Non-fatal: version.json polling and Service Worker remain active fallbacks
+    }
+  },
+
+  subscribeAppRelease(
+    hostId: string,
+    onUpdate: (release: { version: string; builtAt: string; host: string }) => void
+  ): () => void {
+    const safeHost = hostId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || 'default_host';
+    const docRef = doc(db, 'app_releases', safeHost);
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() as { version?: string; builtAt?: string; host?: string };
+        if (data?.version && data?.builtAt && data?.host) {
+          onUpdate({ version: data.version, builtAt: data.builtAt, host: data.host });
+        }
+      },
+      () => {
+        // Ignore transient offline/permission issues for release feed
       }
     );
   },

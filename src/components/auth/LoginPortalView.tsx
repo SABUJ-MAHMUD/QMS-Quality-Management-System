@@ -319,7 +319,7 @@ export const LoginPortalView: React.FC = () => {
         <div
           className="absolute right-0 top-0 bottom-0 w-full lg:w-3/5 bg-cover bg-center opacity-20 mix-blend-luminosity"
           style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?q=80&w=1600&auto=format&fit=crop')`,
+            backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?q=55&w=800&auto=format&fit=crop')`,
             backgroundPosition: 'center',
           }}
         />
@@ -732,7 +732,7 @@ export const LoginPortalView: React.FC = () => {
                         <option value="Admin">Quality Admin (Full System Control)</option>
                         <option value="QMS Manager">QMS Manager (Audit &amp; CAPA Approval)</option>
                         <option value="QMS Executive">QMS Executive (Inspector / Data Entry)</option>
-                        <option value="Viewer">Viewer (Read-only Reports)</option>
+                        <option value="Viewer">Viewer / Reviewer (Read-only Reports)</option>
                       </select>
                     </div>
 

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -5,11 +6,12 @@ import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const appBuildId = process.env.VITE_APP_BUILD_ID || Date.now().toString();
+const appBuiltAt = new Date().toISOString();
 
-function versionManifestPlugin(buildId: string): Plugin {
+function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
   const payload = JSON.stringify({
     version: buildId,
-    builtAt: new Date().toISOString(),
+    builtAt,
   });
 
   return {
@@ -38,17 +40,31 @@ function versionManifestPlugin(buildId: string): Plugin {
   };
 }
 
+function excludeAiStudioAssetsPlugin(): Plugin {
+  return {
+    name: 'qms-exclude-aistudio-assets',
+    closeBundle() {
+      const aistudioOutDir = path.resolve('dist/assets/aistudio');
+      if (fs.existsSync(aistudioOutDir)) {
+        fs.rmSync(aistudioOutDir, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
     define: {
       __APP_BUILD_ID__: JSON.stringify(appBuildId),
+      __APP_BUILT_AT__: JSON.stringify(appBuiltAt),
     },
     plugins: [
       react(),
       tailwindcss(),
-      versionManifestPlugin(appBuildId),
+      versionManifestPlugin(appBuildId, appBuiltAt),
+      excludeAiStudioAssetsPlugin(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
@@ -84,7 +100,6 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          skipWaiting: true,
           clientsClaim: true,
           navigateFallbackDenylist: [
             /^\/pdf\.worker/,
@@ -92,14 +107,19 @@ export default defineConfig(() => {
             /^\/version\.json/,
             /^\/api\//,
           ],
-          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
-          globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg,woff,woff2}'],
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
           globIgnores: [
             '**/assets/aistudio/**',
             '**/version.json',
             '**/pdf.worker*',
             '**/assets/pdf.worker*',
             '**/tesseract-worker*',
+            '**/vendor-pdfjs*',
+            '**/vendor-xlsx*',
+            '**/vendor-pptx*',
+            '**/UploadView*',
+            '**/ReportsView*',
           ],
           cleanupOutdatedCaches: true,
           runtimeCaching: [
@@ -127,7 +147,7 @@ export default defineConfig(() => {
               options: {
                 cacheName: 'images-cache',
                 expiration: {
-                  maxEntries: 50,
+                  maxEntries: 30,
                   maxAgeSeconds: 60 * 60 * 24 * 30,
                 },
               },

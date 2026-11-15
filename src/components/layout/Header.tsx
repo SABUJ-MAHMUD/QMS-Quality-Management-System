@@ -73,6 +73,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
     logout,
     theme,
     toggleTheme,
+    canSwitchRole,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -521,23 +522,32 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
                     Role: {currentUserRole}
                   </p>
                 </div>
-                {roles.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => {
-                      setCurrentUserRole(r);
-                      setShowRoleMenu(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
-                      currentUserRole === r
-                        ? 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 font-bold'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <span>{r}</span>
-                    {currentUserRole === r && <Shield className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
-                  </button>
-                ))}
+                {canSwitchRole ? (
+                  roles.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => {
+                        setCurrentUserRole(r);
+                        setShowRoleMenu(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
+                        currentUserRole === r
+                          ? 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 font-bold'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <span>{r}</span>
+                      {currentUserRole === r && <Shield className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/70 text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                    <span>Access Scope</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                      {currentUserRole === 'Viewer' ? 'Read-Only Reviewer' : currentUserRole}
+                    </span>
+                  </div>
+                )}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[11px]">
                   <span className="text-slate-400 dark:text-slate-500">Northern Fashions QMS</span>
                   <button

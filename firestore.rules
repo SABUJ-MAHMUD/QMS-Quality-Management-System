@@ -50,5 +50,21 @@ service cloud.firestore {
       allow list: if true;
       allow create, update, delete: if isValidId(monitoringId);
     }
+
+    function isValidAppRelease(data) {
+      return data.keys().hasAll(['version', 'builtAt', 'host']) &&
+        data.keys().hasOnly(['version', 'builtAt', 'host']) &&
+        data.version is string && data.version.size() > 0 && data.version.size() <= 64 &&
+        data.builtAt is string && data.builtAt.size() > 0 && data.builtAt.size() <= 64 &&
+        data.host is string && data.host.size() > 0 && data.host.size() <= 128;
+    }
+
+    // 6. Live App Release Manifest (real-time update alerts across users)
+    match /app_releases/{hostId} {
+      allow get: if isValidId(hostId);
+      allow list: if false;
+      allow create, update: if isValidId(hostId) && isValidAppRelease(incoming());
+      allow delete: if false;
+    }
   }
 }

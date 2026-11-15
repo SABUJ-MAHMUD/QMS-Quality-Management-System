@@ -20,12 +20,12 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
-  const { activeTab, setActiveTab, reports, logout, theme, toggleTheme } = useApp();
+  const { activeTab, setActiveTab, reports, logout, theme, toggleTheme, currentUserRole, canUpload } = useApp();
 
-  const navItems = [
+  const allNavItems = [
     {
       id: 'dashboard',
-      label: 'Dashbord',
+      label: 'Dashboard',
       icon: LayoutDashboard,
       badge: null,
     },
@@ -67,6 +67,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
       badge: null,
     },
   ];
+
+  const navItems = allNavItems.filter((item) => {
+    if (item.id === 'upload' && !canUpload) return false;
+    if (item.id === 'settings' && currentUserRole === 'Viewer') return false;
+    return true;
+  });
 
   return (
     <aside

@@ -57,13 +57,16 @@ const ViewLoadingFallback: React.FC = () => (
 );
 
 const MainLayout: React.FC = () => {
-  const { activeTab, isAuthenticated } = useApp();
+  const { activeTab, isAuthenticated, canUpload, currentUserRole } = useApp();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // If user is not signed in, show the exact screenshot Portal view!
   if (!isAuthenticated) {
     return <LoginPortalView />;
   }
+
+  const isRestrictedForViewer =
+    currentUserRole === 'Viewer' && (activeTab === 'upload' || activeTab === 'settings');
 
   return (
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans antialiased overflow-hidden transition-colors">
@@ -84,9 +87,9 @@ const MainLayout: React.FC = () => {
         {/* Scrollable Viewport */}
         <main className="flex-1 overflow-y-auto bg-slate-50/70 dark:bg-slate-950/80 focus:outline-none">
           <Suspense fallback={<ViewLoadingFallback />}>
-            {activeTab === 'dashboard' && <DashboardView />}
+            {(activeTab === 'dashboard' || isRestrictedForViewer) && <DashboardView />}
             {activeTab === 'inspection_summary' && <InspectionSummaryView />}
-            {activeTab === 'upload' && <UploadView />}
+            {activeTab === 'upload' && canUpload && <UploadView />}
             {activeTab === 'database' && <DatabaseView />}
             {activeTab === 'oql_analytics' && <OqlAnalyticsView />}
             {activeTab === 'defect_analytics' && <DefectAnalyticsView />}
@@ -94,7 +97,7 @@ const MainLayout: React.FC = () => {
             {activeTab === 'capa' && <CapaView />}
             {activeTab === 'monitoring' && <MonitoringView />}
             {activeTab === 'reports' && <ReportsView />}
-            {activeTab === 'settings' && <SettingsView />}
+            {activeTab === 'settings' && currentUserRole !== 'Viewer' && <SettingsView />}
           </Suspense>
         </main>
 

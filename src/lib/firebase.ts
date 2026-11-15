@@ -69,5 +69,3 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-// Initial connection check on module import
-testConnection();

@@ -11,7 +11,6 @@ import {
   AppSettings,
 } from '../types';
 import { INITIAL_DEFECT_GROUPS, INITIAL_DEFECT_MASTER } from '../data/defectMasterData';
-import { INITIAL_DEMO_REPORTS, INITIAL_DEMO_CAPA, INITIAL_DEMO_MONITORING } from '../data/demoData';
 import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource } from '../utils/oqlCalculator';
 import { findDuplicateReportIds } from '../utils/dashboardAnalytics';
 import { firestoreService } from '../services/firestoreService';
@@ -137,6 +136,7 @@ interface AppContextType {
   canManageData: boolean;
   canUpload: boolean;
   canManageSettings: boolean;
+  canSwitchRole: boolean;
 }
 
 // Clear legacy cached demo or test data on module startup
@@ -211,7 +211,7 @@ const DEFAULT_FILTERS: GlobalFilterState = {
   searchQuery: '',
 };
 
-const scheduleStorageWrite = (key: string, value: unknown): (() => void) => {
+const scheduleStorageWrite = (key: string, value: unknown, delayMs: number = 0): (() => void) => {
   const write = () => {
     try {
       const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -220,12 +220,26 @@ const scheduleStorageWrite = (key: string, value: unknown): (() => void) => {
       // ignore storage quota errors
     }
   };
-  if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
-    const id = (window as any).requestIdleCallback(write, { timeout: 600 });
-    return () => (window as any).cancelIdleCallback?.(id);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let idleId: number | null = null;
+  const runIdle = () => {
+    if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+      idleId = (window as any).requestIdleCallback(write, { timeout: 800 });
+    } else {
+      timer = setTimeout(write, 0);
+    }
+  };
+  if (delayMs > 0) {
+    timer = setTimeout(runIdle, delayMs);
+  } else {
+    runIdle();
   }
-  const timer = setTimeout(write, 0);
-  return () => clearTimeout(timer);
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+    if (idleId !== null && typeof window !== 'undefined') {
+      (window as any).cancelIdleCallback?.(idleId);
+    }
+  };
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -241,6 +255,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     quantity?: number;
   } | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
+    return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
+  });
+
+  const [accountRole, setAccountRole] = useState<UserRole>(() => {
+    const saved = localStorage.getItem('NFL_QMS_ACCOUNT_ROLE') as UserRole | null;
+    if (saved) return saved;
     return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
   });
 
@@ -308,11 +328,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const effectiveName = userProfile.name || (isSuperAdmin ? 'Quality Engineer (Admin)' : 'QMS Officer');
 
       setCurrentUserRole(effectiveRole);
+      setAccountRole(effectiveRole);
       setCurrentUserEmail(userProfile.email);
       setCurrentUserName(effectiveName);
 
       try {
         localStorage.setItem(STORAGE_KEYS.USER_ROLE, effectiveRole);
+        localStorage.setItem('NFL_QMS_ACCOUNT_ROLE', effectiveRole);
         localStorage.setItem('NFL_QMS_USER_EMAIL', userProfile.email);
         localStorage.setItem('NFL_QMS_USER_NAME', effectiveName);
       } catch {
@@ -320,8 +342,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    const effectiveNextRole = userProfile
+      ? userProfile.email.toLowerCase().trim() === 'quality.engineer.bd@gmail.com'
+        ? 'Admin'
+        : userProfile.role || 'QMS Manager'
+      : currentUserRole;
+
     if (targetTab) {
-      setActiveTab(targetTab);
+      if (effectiveNextRole === 'Viewer' && (targetTab === 'upload' || targetTab === 'settings')) {
+        setActiveTab('dashboard');
+      } else {
+        setActiveTab(targetTab);
+      }
     }
     addNotification('success', `Signed in to Northern Fashions QMS Workspace as ${userProfile?.email || currentUserEmail}.`);
   };
@@ -398,8 +430,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
-  // Initial Firestore synchronization & real-time multi-user listeners
+  // Initial Firestore synchronization & real-time multi-user listeners (active only once signed in)
   useEffect(() => {
+    if (!isAuthenticated) return;
     let isMounted = true;
     let unsubReports: (() => void) | null = null;
     let unsubCapas: (() => void) | null = null;
@@ -453,7 +486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubCapas?.();
       unsubMonitoring?.();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
@@ -464,12 +497,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  // Sync state to localStorage asynchronously during browser idle frames so UI never stalls
-  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.REPORTS, reports), [reports]);
-  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_GROUPS, defectGroups), [defectGroups]);
-  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_MASTER, defectMaster), [defectMaster]);
-  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.CAPA, capas), [capas]);
-  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.MONITORING, monitoringRecords), [monitoringRecords]);
+  // Listen for live App Update alerts and push them to every user's notification bell
+  useEffect(() => {
+    const onAppUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ version?: string }>).detail;
+      const buildTag = detail?.version ? ` (#${String(detail.version).slice(-6)})` : '';
+      addNotification(
+        'info',
+        `New QMS App update available${buildTag}. Please click "Update Now" in the popup to load the latest version.`
+      );
+    };
+    window.addEventListener('qms:app-update-available', onAppUpdate);
+    return () => window.removeEventListener('qms:app-update-available', onAppUpdate);
+  }, []);
+
+  // Sync state to localStorage asynchronously with debounce so UI & main thread stay fast
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.REPORTS, reports, 1200), [reports]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_GROUPS, defectGroups, 500), [defectGroups]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.DEFECT_MASTER, defectMaster, 500), [defectMaster]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.CAPA, capas, 1000), [capas]);
+  useEffect(() => scheduleStorageWrite(STORAGE_KEYS.MONITORING, monitoringRecords, 1000), [monitoringRecords]);
   useEffect(() => scheduleStorageWrite(STORAGE_KEYS.SETTINGS, settings), [settings]);
   useEffect(() => scheduleStorageWrite(STORAGE_KEYS.USER_ROLE, currentUserRole), [currentUserRole]);
   useEffect(() => {
@@ -496,10 +543,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications([]);
   };
 
-  // Permission logic - upload is always enabled so any user can test and upload inspection reports
-  const canManageData = true;
-  const canUpload = true;
-  const canManageSettings = true;
+  // Role-Based Access Control (RBAC): Viewer (Reviewer) is strictly read-only without PDF Upload or Settings access
+  const isViewer = currentUserRole === 'Viewer';
+  const canManageData = !isViewer;
+  const canUpload = !isViewer;
+  const canManageSettings = currentUserRole === 'Admin' || currentUserRole === 'QMS Manager';
+  const canSwitchRole =
+    currentUserEmail.toLowerCase().trim() === 'quality.engineer.bd@gmail.com' ||
+    accountRole === 'Admin';
+
+  const guardedSetActiveTab = useCallback(
+    (tab: string) => {
+      if (currentUserRole === 'Viewer' && (tab === 'upload' || tab === 'settings')) {
+        setActiveTab('dashboard');
+        return;
+      }
+      setActiveTab(tab);
+    },
+    [currentUserRole]
+  );
+
+  // Redirect Viewer away from restricted routes automatically
+  useEffect(() => {
+    if (currentUserRole === 'Viewer' && (activeTab === 'upload' || activeTab === 'settings')) {
+      setActiveTab('dashboard');
+    }
+  }, [currentUserRole, activeTab]);
 
   // Demo data management
   const hasDemoData = useMemo(() => {
@@ -516,8 +585,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addNotification('info', 'Demonstration data cleared. Only actual user inspection records remain.');
   };
 
-  const restoreDemoData = () => {
-    // Preserve any user uploaded non-demo records
+  const restoreDemoData = async () => {
+    // Lazy-load demo dataset only if explicitly requested
+    const { INITIAL_DEMO_REPORTS, INITIAL_DEMO_CAPA, INITIAL_DEMO_MONITORING } = await import('../data/demoData');
     const userReports = reports.filter((r) => !r.isDemo);
     const userCapas = capas.filter((c) => !c.isDemo);
     const userMon = monitoringRecords.filter((m) => !m.isDemo);
@@ -854,7 +924,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const contextValue = useMemo<AppContextType>(
     () => ({
       activeTab,
-      setActiveTab,
+      setActiveTab: guardedSetActiveTab,
       currentUserRole,
       setCurrentUserRole,
       currentUserEmail,
@@ -908,11 +978,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       canManageData,
       canUpload,
       canManageSettings,
+      canSwitchRole,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       activeTab,
+      guardedSetActiveTab,
       currentUserRole,
+      accountRole,
       currentUserEmail,
       currentUserName,
       isAuthenticated,

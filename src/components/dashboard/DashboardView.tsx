@@ -70,6 +70,7 @@ export const DashboardView: React.FC = () => {
     filteredReports,
     kpiMetrics,
     settings,
+    canManageData,
   } = useApp();
 
   const [showFloorMenu, setShowFloorMenu] = useState(false);
@@ -327,7 +328,7 @@ export const DashboardView: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans shrink-0">
-              Dashbord
+              Dashboard
             </h1>
 
             {/* BSQC vs AQC Report Classification Toggle */}
@@ -1238,14 +1239,16 @@ export const DashboardView: React.FC = () => {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                             {row.status}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => updateCapa(row.id, { showOnDashboard: false })}
-                            title="Pull off Dashboard (keeps in RCA & CAPA)"
-                            className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
-                          >
-                            &minus;
-                          </button>
+                          {canManageData && (
+                            <button
+                              type="button"
+                              onClick={() => updateCapa(row.id, { showOnDashboard: false })}
+                              title="Pull off Dashboard (keeps in RCA & CAPA)"
+                              className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
+                            >
+                              &minus;
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

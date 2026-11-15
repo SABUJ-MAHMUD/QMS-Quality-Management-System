@@ -95,6 +95,17 @@
         "remarks": { "type": "string", "description": "Additional notes" }
       },
       "required": ["capaId", "capaCode", "checkDate", "checkedBy", "effectivenessStatus"]
+    },
+    "AppRelease": {
+      "title": "AppRelease",
+      "description": "Published live application build metadata per host for pushing update notifications to all connected users",
+      "type": "object",
+      "properties": {
+        "version": { "type": "string", "description": "Unique build identifier", "maxLength": 64 },
+        "builtAt": { "type": "string", "description": "ISO build timestamp", "maxLength": 64 },
+        "host": { "type": "string", "description": "Sanitized host identifier", "maxLength": 128 }
+      },
+      "required": ["version", "builtAt", "host"]
     }
   },
   "firestore": {
@@ -117,6 +128,10 @@
     "/monitoring/{monitoringId}": {
       "schema": { "$ref": "#/entities/MonitoringRecord" },
       "description": "Effectiveness audit records"
+    },
+    "/app_releases/{hostId}": {
+      "schema": { "$ref": "#/entities/AppRelease" },
+      "description": "Live application build version manifest per deployment host"
     }
   }
 }

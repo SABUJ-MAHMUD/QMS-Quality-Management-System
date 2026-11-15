@@ -347,7 +347,7 @@ export const DefectAnalyticsView: React.FC = () => {
                   <th className="p-2.5">Category &amp; Individual Defect Details</th>
                   <th className="p-2.5 text-center w-28">Inspections</th>
                   <th className="p-2.5 text-center w-28">Qty Affected</th>
-                  <th className="p-2.5 text-center w-36">Link to Dashbord</th>
+                  <th className="p-2.5 text-center w-36">Link to Dashboard</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -415,7 +415,7 @@ export const DefectAnalyticsView: React.FC = () => {
                             title={`Filter Dashboard for ${cat.name}`}
                           >
                             <ExternalLink className="w-3 h-3" />
-                            Link to Dashbord
+                            Link to Dashboard
                           </button>
                         </td>
                       </tr>

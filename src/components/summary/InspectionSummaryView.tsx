@@ -36,7 +36,7 @@ import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 import { formatPctText } from '../../utils/dashboardAnalytics';
 
 export const InspectionSummaryView: React.FC = () => {
-  const { filteredReports, settings, setActiveTab, defectGroups, kpiMetrics } = useApp();
+  const { filteredReports, settings, setActiveTab, defectGroups, kpiMetrics, canUpload } = useApp();
 
   const [selectedDrilldownGroup, setSelectedDrilldownGroup] = useState<string | null>(null);
   const [selectedReportModal, setSelectedReportModal] = useState<InspectionReport | null>(null);
@@ -144,13 +144,15 @@ export const InspectionSummaryView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setActiveTab('upload')}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
-        >
-          <Sparkles className="w-4 h-4" />
-          Upload PDF Report
-        </button>
+        {canUpload && (
+          <button
+            onClick={() => setActiveTab('upload')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
+          >
+            <Sparkles className="w-4 h-4" />
+            Upload PDF Report
+          </button>
+        )}
       </div>
 
       {/* When no inspection reports exist (fresh clean database) */}
@@ -165,15 +167,17 @@ export const InspectionSummaryView: React.FC = () => {
               All demo and previous test data have been completely cleared. Upload your factory inspection PDF reports (or screenshots) to generate real-time defect rankings and charts.
             </p>
           </div>
-          <div className="pt-2 flex justify-center gap-3">
-            <button
-              onClick={() => setActiveTab('upload')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors"
-            >
-              <FileUp className="w-4 h-4" />
-              Upload PDF Report Now
-            </button>
-          </div>
+          {canUpload && (
+            <div className="pt-2 flex justify-center gap-3">
+              <button
+                onClick={() => setActiveTab('upload')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors"
+              >
+                <FileUp className="w-4 h-4" />
+                Upload PDF Report Now
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -368,13 +372,15 @@ export const InspectionSummaryView: React.FC = () => {
                   Each inspection report retains its inspector name, PDF file, after-slash quantities, and calculated individual OQL.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('upload')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Upload New PDF
-              </button>
+              {canUpload && (
+                <button
+                  onClick={() => setActiveTab('upload')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Upload New PDF
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
