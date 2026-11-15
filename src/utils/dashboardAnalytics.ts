@@ -1,5 +1,6 @@
 import { InspectionReport } from '../types';
 import { getCanonicalDefectInfo } from '../data/defectMasterData';
+import { getFiscalWeekInfo, normalizeFloorName } from './oqlCalculator';
 
 export interface TopSingleDefectBar {
   code: string;
@@ -31,13 +32,36 @@ export interface MonthToMonthComparisonResult {
   prevMonthLabel: string;
   currTotalDefects: number;
   prevTotalDefects: number;
+  currInspectedQty: number;
+  prevInspectedQty: number;
   items: MonthComparisonDefectItem[];
+}
+
+export interface WeeklyOqlPoint {
+  weekKey: string;
+  weekLabel: string; // e.g. "W32", "W44"
+  fiscalYear: string;
+  fyOrder: number;
+  weekStartDate: string;
+  weekEndDate: string;
+  inspected: number;
+  defects: number;
+  reportCount: number;
+  oql: number;
+}
+
+export interface FloorSummaryItem {
+  floor: string;
+  reportCount: number;
+  styleCount: number;
+  inspectedQty: number;
 }
 
 export function formatPctText(pct: number): string {
   if (!Number.isFinite(pct) || pct <= 0) return '0%';
-  const rounded = Number(pct.toFixed(1));
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+  const rounded = Number(pct.toFixed(2));
+  if (rounded === 0) return '0%';
+  return `${rounded.toFixed(2)}%`;
 }
 
 export function formatQtyAndPct(qty: number, pct: number): string {
@@ -75,7 +99,8 @@ function getReportMonthKey(report: InspectionReport): string {
 }
 
 /**
- * Computes Top N single defects (NEVER groups) across reports with exact PDF Code, Name, Qty & % Share.
+ * Computes Top N single defects (NEVER groups) across reports with exact PDF Code, Name, Qty
+ * and Rate (%) calculated strictly as: (Single Defect Qty / Total Inspected Qty) * 100.
  */
 export function computeTopSingleDefects(
   reports: InspectionReport[],
@@ -92,16 +117,16 @@ export function computeTopSingleDefects(
     }
   >();
 
-  let totalDefectSum = 0;
+  let totalInspectedQty = 0;
 
   reports.forEach((r) => {
+    totalInspectedQty += Number(r.inspectedQuantity) || 0;
     (r.defects || []).forEach((d) => {
       const qty = Number(d.defectQuantity) || 0;
       if (qty <= 0) return;
 
       const info = getCanonicalDefectInfo(d);
       const key = `${info.code}::${info.name.toLowerCase()}`;
-      totalDefectSum += qty;
 
       const existing = map.get(key);
       if (existing) {
@@ -118,13 +143,13 @@ export function computeTopSingleDefects(
     });
   });
 
-  if (map.size === 0 || totalDefectSum === 0) {
+  if (map.size === 0) {
     return [];
   }
 
   return Array.from(map.values())
     .map((entry) => {
-      const percentage = Number(((entry.count / totalDefectSum) * 100).toFixed(1));
+      const percentage = totalInspectedQty > 0 ? Number(((entry.count / totalInspectedQty) * 100).toFixed(2)) : 0;
       return {
         code: entry.code,
         name: entry.name,
@@ -142,7 +167,7 @@ export function computeTopSingleDefects(
 
 /**
  * Computes Month-to-Month comparison by single defect (e.g. Nov 2026 vs Oct 2026),
- * returning both quantity and percentage share within each month.
+ * returning quantity and defect rate (%) = (Month Defect Qty / Month Inspected Qty) * 100.
  */
 export function computeMonthToMonthTopDefects(
   reports: InspectionReport[],
@@ -171,12 +196,14 @@ export function computeMonthToMonthTopDefects(
   const collectMonthSingleDefects = (monthKey: string) => {
     const map = new Map<string, { code: string; name: string; count: number }>();
     let monthTotal = 0;
+    let monthInspected = 0;
 
-    if (!monthKey) return { map, monthTotal };
+    if (!monthKey) return { map, monthTotal, monthInspected };
 
     reports
       .filter((r) => getReportMonthKey(r) === monthKey)
       .forEach((r) => {
+        monthInspected += Number(r.inspectedQuantity) || 0;
         (r.defects || []).forEach((d) => {
           const qty = Number(d.defectQuantity) || 0;
           if (qty <= 0) return;
@@ -194,7 +221,7 @@ export function computeMonthToMonthTopDefects(
         });
       });
 
-    return { map, monthTotal };
+    return { map, monthTotal, monthInspected };
   };
 
   const currRes = collectMonthSingleDefects(currMonthKey);
@@ -212,6 +239,8 @@ export function computeMonthToMonthTopDefects(
       prevMonthLabel,
       currTotalDefects: 0,
       prevTotalDefects: 0,
+      currInspectedQty: currRes.monthInspected,
+      prevInspectedQty: prevRes.monthInspected,
       items: [],
     };
   }
@@ -224,8 +253,10 @@ export function computeMonthToMonthTopDefects(
       const name = cEntry?.name || pEntry?.name || 'Unspecified Defect';
       const current = cEntry?.count || 0;
       const previous = pEntry?.count || 0;
-      const currentPct = currRes.monthTotal > 0 ? Number(((current / currRes.monthTotal) * 100).toFixed(1)) : 0;
-      const previousPct = prevRes.monthTotal > 0 ? Number(((previous / prevRes.monthTotal) * 100).toFixed(1)) : 0;
+      const currentPct =
+        currRes.monthInspected > 0 ? Number(((current / currRes.monthInspected) * 100).toFixed(2)) : 0;
+      const previousPct =
+        prevRes.monthInspected > 0 ? Number(((previous / prevRes.monthInspected) * 100).toFixed(2)) : 0;
 
       return {
         code,
@@ -251,8 +282,151 @@ export function computeMonthToMonthTopDefects(
     prevMonthLabel,
     currTotalDefects: currRes.monthTotal,
     prevTotalDefects: prevRes.monthTotal,
+    currInspectedQty: currRes.monthInspected,
+    prevInspectedQty: prevRes.monthInspected,
     items,
   };
+}
+
+/**
+ * Computes Weekly OQL Trend sorted chronologically in BESTSELLER's FY order (August = W32 .. W52 -> W01 .. W31).
+ */
+export function computeWeeklyOqlTrend(
+  reports: InspectionReport[],
+  fyStartMonth: number = 8
+): WeeklyOqlPoint[] {
+  const fySet = new Set<string>();
+  const weekMap = new Map<
+    string,
+    {
+      weekLabel: string;
+      fiscalYear: string;
+      fyOrder: number;
+      weekStartDate: string;
+      weekEndDate: string;
+      inspected: number;
+      defects: number;
+      reportCount: number;
+    }
+  >();
+
+  reports.forEach((r) => {
+    if (!r.inspectionDate) return;
+    const info = getFiscalWeekInfo(r.inspectionDate, fyStartMonth);
+    fySet.add(info.fiscalYear);
+    const key = `${info.fiscalYear}::${String(info.fyOrder).padStart(2, '0')}`;
+    const curr = weekMap.get(key) || {
+      weekLabel: info.weekLabel,
+      fiscalYear: info.fiscalYear,
+      fyOrder: info.fyOrder,
+      weekStartDate: info.weekStartDate,
+      weekEndDate: info.weekEndDate,
+      inspected: 0,
+      defects: 0,
+      reportCount: 0,
+    };
+    curr.inspected += Number(r.inspectedQuantity) || 0;
+    curr.defects += Number(r.totalDefectQuantity) || 0;
+    curr.reportCount += 1;
+    weekMap.set(key, curr);
+  });
+
+  const multiFy = fySet.size > 1;
+
+  return Array.from(weekMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([weekKey, w]) => ({
+      weekKey,
+      weekLabel: multiFy ? `${w.weekLabel} (${w.fiscalYear.replace('FY', '')})` : w.weekLabel,
+      fiscalYear: w.fiscalYear,
+      fyOrder: w.fyOrder,
+      weekStartDate: w.weekStartDate,
+      weekEndDate: w.weekEndDate,
+      inspected: w.inspected,
+      defects: w.defects,
+      reportCount: w.reportCount,
+      oql: w.inspected > 0 ? Number(((w.defects / w.inspected) * 100).toFixed(2)) : 0,
+    }));
+}
+
+/**
+ * Computes report counts and distinct inspected style counts per sewing floor.
+ */
+export function computeFloorStats(reports: InspectionReport[]): {
+  distinctStyleCount: number;
+  byFloor: FloorSummaryItem[];
+} {
+  const allStyles = new Set<string>();
+  const floorMap = new Map<string, { reportCount: number; styles: Set<string>; inspectedQty: number }>();
+
+  ['SEW-1', 'SEW-2', 'SEW-3'].forEach((fl) => {
+    floorMap.set(fl, { reportCount: 0, styles: new Set(), inspectedQty: 0 });
+  });
+
+  reports.forEach((r) => {
+    const style = (r.styleNumber || '').trim();
+    if (style) allStyles.add(style);
+    const fl = normalizeFloorName(r.floor || r.section);
+    const entry = floorMap.get(fl) || { reportCount: 0, styles: new Set<string>(), inspectedQty: 0 };
+    entry.reportCount += 1;
+    if (style) entry.styles.add(style);
+    entry.inspectedQty += Number(r.inspectedQuantity) || 0;
+    floorMap.set(fl, entry);
+  });
+
+  const byFloor: FloorSummaryItem[] = Array.from(floorMap.entries()).map(([floor, data]) => ({
+    floor,
+    reportCount: data.reportCount,
+    styleCount: data.styles.size,
+    inspectedQty: data.inspectedQty,
+  }));
+
+  return {
+    distinctStyleCount: allStyles.size,
+    byFloor,
+  };
+}
+
+/**
+ * Identifies accidental duplicate report records sharing identical canonical order tokens, style, date,
+ * stage, inspected quantity, and defect count — while preserving legitimate repeat Inline/Final inspections
+ * of the same style across different lots, dates, or audit outcomes.
+ */
+export function findDuplicateReportIds(reports: InspectionReport[]): string[] {
+  const seen = new Map<string, string>();
+  const duplicateIds: string[] = [];
+
+  const ordered = [...reports].sort((a, b) =>
+    (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
+  );
+
+  for (const r of ordered) {
+    const canonicalOrder = (r.orderNumber || '')
+      .split(/[+,/]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join('+');
+
+    const key = [
+      (r.reportNumber || '').trim().toLowerCase(),
+      canonicalOrder || (r.orderNumber || '').trim().toLowerCase(),
+      (r.styleNumber || '').trim().toLowerCase(),
+      (r.inspectionDate || '').trim(),
+      (r.inspectionType || 'Final').trim().toLowerCase(),
+      String(Number(r.inspectedQuantity) || 0),
+      String(Number(r.totalDefectQuantity) || 0),
+    ].join('::');
+
+    if (!key.replace(/[:0]/g, '')) continue;
+    if (seen.has(key)) {
+      duplicateIds.push(r.id);
+    } else {
+      seen.set(key, r.id);
+    }
+  }
+
+  return duplicateIds;
 }
 
 /**

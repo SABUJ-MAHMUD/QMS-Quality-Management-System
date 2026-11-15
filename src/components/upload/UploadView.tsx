@@ -24,6 +24,7 @@ import {
   ExtractedInspectionDraft,
 } from '../../utils/pdfParser';
 import { InspectionReport } from '../../types';
+import { getReportSource } from '../../utils/oqlCalculator';
 import { ValidationModal } from './ValidationModal';
 
 export const UploadView: React.FC = () => {
@@ -382,6 +383,15 @@ export const UploadView: React.FC = () => {
                             <FileCheck2 className="w-4 h-4" />
                           </div>
                           <div className="flex items-center gap-1 flex-wrap justify-end">
+                            <span
+                              className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
+                                getReportSource(r) === 'AQC'
+                                  ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                  : 'bg-teal-100 text-teal-800 border-teal-200'
+                              }`}
+                            >
+                              {getReportSource(r)}
+                            </span>
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
                               {r.inspectionType || 'Final'}
                             </span>

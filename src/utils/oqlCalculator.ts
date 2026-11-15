@@ -1,4 +1,4 @@
-import { InspectionReport, DefectGroup, InspectionDefect } from '../types';
+import { InspectionReport, DefectGroup, ReportSource } from '../types';
 import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../data/defectMasterData';
 
 /**
@@ -72,6 +72,54 @@ export function calculateReductionPercentage(
 }
 
 /**
+ * Normalizes floor identifiers (e.g., "SEW-01", "sew 1", "SEW1" -> "SEW-1").
+ */
+export function normalizeFloorName(rawFloor?: string): string {
+  const clean = (rawFloor || '').trim().toUpperCase().replace(/[_\s]+/g, '-');
+  if (!clean) return 'SEW-1';
+  const sewMatch = clean.match(/^SEW-?0*(\d+)([A-Z]*)$/);
+  if (sewMatch) {
+    return `SEW-${sewMatch[1]}${sewMatch[2] || ''}`;
+  }
+  return clean;
+}
+
+/**
+ * Detects whether a report belongs to AQC (Factory Self-Audit: "Inspection report, AQC Final:" / "AQC Inline:")
+ * or BSQC (BESTSELLER Buyer QC: "Inspection report, Final" / "Inline").
+ */
+export function detectReportSource(
+  text?: string,
+  fileName?: string,
+  explicitSource?: ReportSource
+): ReportSource {
+  if (explicitSource === 'AQC' || explicitSource === 'BSQC') {
+    return explicitSource;
+  }
+  const combined = `${text || ''} ${fileName || ''}`;
+  if (
+    /Inspection\s*report,?\s*AQC\b/i.test(combined) ||
+    /\bAQC\s*(?:Final|Inline|Pre[-\s]?Final|Initial|Mid[-\s]?Line)\b/i.test(combined) ||
+    /\bAQC\b/i.test(combined)
+  ) {
+    return 'AQC';
+  }
+  return 'BSQC';
+}
+
+export function getReportSource(
+  report: Pick<InspectionReport, 'reportSource' | 'reportNumber' | 'pdfFileName' | 'inspectionType' | 'inspectionLevel'>
+): ReportSource {
+  if (report.reportSource === 'AQC' || report.reportSource === 'BSQC') {
+    return report.reportSource;
+  }
+  return detectReportSource(
+    `${report.reportNumber || ''} ${report.inspectionType || ''} ${report.inspectionLevel || ''}`,
+    report.pdfFileName
+  );
+}
+
+/**
  * Determines Financial Year label for a given date string (YYYY-MM-DD)
  * Default financial year begins in August (month index 8) and ends in July.
  * E.g., Date in October 2026 -> FY26/27 (Aug 2026 - Jul 2027)
@@ -79,11 +127,19 @@ export function calculateReductionPercentage(
  */
 export function getFinancialYear(dateStr: string, startMonth: number = 8): string {
   if (!dateStr) return 'FY26/27';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return 'FY26/27';
+  const isoMatch = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let year: number;
+  let month: number;
 
-  const month = d.getMonth() + 1; // 1 to 12
-  const year = d.getFullYear();
+  if (isoMatch) {
+    year = Number(isoMatch[1]);
+    month = Number(isoMatch[2]);
+  } else {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'FY26/27';
+    year = d.getFullYear();
+    month = d.getMonth() + 1;
+  }
 
   if (month >= startMonth) {
     const y1 = year % 100;
@@ -94,6 +150,65 @@ export function getFinancialYear(dateStr: string, startMonth: number = 8): strin
     const y2 = year % 100;
     return `FY${y1.toString().padStart(2, '0')}/${y2.toString().padStart(2, '0')}`;
   }
+}
+
+export interface FiscalWeekInfo {
+  fiscalYear: string;
+  weekNumber: number;
+  weekLabel: string; // e.g. "W32" .. "W52", "W01" .. "W31"
+  fyOrder: number; // 0 .. 51 chronological position inside the FY
+  weekStartDate: string; // YYYY-MM-DD
+  weekEndDate: string; // YYYY-MM-DD
+}
+
+/**
+ * Maps any inspection date into BESTSELLER's International Week cycle starting in August as Week 32 (W32).
+ * Chronological order within an FY: W32 -> W52 -> W01 -> W31.
+ */
+export function getFiscalWeekInfo(dateStr: string, fyStartMonth: number = 8): FiscalWeekInfo {
+  let year = 2026;
+  let month = 8;
+  let day = 1;
+
+  const isoMatch = (dateStr || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    year = Number(isoMatch[1]);
+    month = Number(isoMatch[2]);
+    day = Number(isoMatch[3]);
+  } else if (dateStr) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      year = d.getFullYear();
+      month = d.getMonth() + 1;
+      day = d.getDate();
+    }
+  }
+
+  const fyStartYear = month >= fyStartMonth ? year : year - 1;
+  const fyStartUtc = Date.UTC(fyStartYear, fyStartMonth - 1, 1);
+  const dateUtc = Date.UTC(year, month - 1, day);
+  const diffDays = Math.max(0, Math.floor((dateUtc - fyStartUtc) / 86400000));
+  const clampedOrder = Math.min(51, Math.floor(diffDays / 7));
+
+  const startWeek = fyStartMonth === 8 ? 32 : 1;
+  const rawWeek = startWeek + clampedOrder;
+  const weekNumber = rawWeek <= 52 ? rawWeek : rawWeek - 52;
+  const weekLabel = `W${String(weekNumber).padStart(2, '0')}`;
+
+  const weekStartUtc = fyStartUtc + clampedOrder * 7 * 86400000;
+  const weekEndUtc =
+    clampedOrder === 51
+      ? Date.UTC(fyStartYear + 1, fyStartMonth - 1, 0)
+      : weekStartUtc + 6 * 86400000;
+
+  return {
+    fiscalYear: getFinancialYear(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, fyStartMonth),
+    weekNumber,
+    weekLabel,
+    fyOrder: clampedOrder,
+    weekStartDate: new Date(weekStartUtc).toISOString().slice(0, 10),
+    weekEndDate: new Date(weekEndUtc).toISOString().slice(0, 10),
+  };
 }
 
 /**
@@ -155,7 +270,9 @@ export function filterReports(
   reports: InspectionReport[],
   filters: {
     buyer?: string | string[];
-    financialYear?: string;
+    financialYear?: string | string[];
+    floors?: string[];
+    reportSource?: 'ALL' | ReportSource;
     month?: string;
     dateFrom?: string;
     dateTo?: string;
@@ -179,9 +296,24 @@ export function filterReports(
       return false;
     }
 
-    if (filters.financialYear && filters.financialYear !== 'ALL') {
+    if (Array.isArray(filters.financialYear)) {
+      if (filters.financialYear.length > 0 && !filters.financialYear.includes('ALL')) {
+        const repFy = getFinancialYear(report.inspectionDate, fyStartMonth);
+        if (!filters.financialYear.includes(repFy)) return false;
+      }
+    } else if (filters.financialYear && filters.financialYear !== 'ALL') {
       const repFy = getFinancialYear(report.inspectionDate, fyStartMonth);
       if (repFy !== filters.financialYear) return false;
+    }
+
+    if (Array.isArray(filters.floors) && filters.floors.length > 0 && !filters.floors.includes('ALL')) {
+      const repFloor = normalizeFloorName(report.floor || report.section);
+      const floorMatched = filters.floors.some((f) => normalizeFloorName(f) === repFloor);
+      if (!floorMatched) return false;
+    }
+
+    if (filters.reportSource && filters.reportSource !== 'ALL') {
+      if (getReportSource(report) !== filters.reportSource) return false;
     }
 
     if (filters.month && filters.month !== 'ALL') {

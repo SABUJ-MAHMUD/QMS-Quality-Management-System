@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ExtractedInspectionDraft, resolveBrandFromStyle } from '../../utils/pdfParser';
-import { calculateReportOql } from '../../utils/oqlCalculator';
+import { calculateReportOql, detectReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -17,7 +17,7 @@ import {
   Check,
   XCircle,
 } from 'lucide-react';
-import { DefectSeverity, InspectionResult } from '../../types';
+import { DefectSeverity, InspectionResult, ReportSource } from '../../types';
 
 interface ValidationModalProps {
   draft: ExtractedInspectionDraft;
@@ -30,7 +30,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   onClose,
   onApproveSuccess,
 }) => {
-  const { defectGroups, defectMaster, addInspectionReport, updateInspectionReport, reports, settings } = useApp();
+  const { defectGroups, defectMaster, addInspectionReport, updateInspectionReport, settings } = useApp();
 
   // Editable form states initialized from extracted draft
   const initialBrand = resolveBrandFromStyle(draft.styleNumber, draft.buyer || 'ONLY&SONS');
@@ -38,6 +38,10 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   const [factory, setFactory] = useState(draft.factory || 'NORTHERN FASHION LTD.');
   const [reportNumber, setReportNumber] = useState(draft.reportNumber);
   const [inspectionType, setInspectionType] = useState(draft.inspectionType || 'Final');
+  const [reportSource, setReportSource] = useState<ReportSource>(
+    detectReportSource(draft.rawText, draft.pdfFileName, draft.reportSource)
+  );
+  const [floor, setFloor] = useState<string>(normalizeFloorName(draft.floor || draft.section));
   const [inspectionDate, setInspectionDate] = useState(draft.inspectionDate);
   const [orderNumber, setOrderNumber] = useState(draft.orderNumber);
   const [styleNumber, setStyleNumber] = useState(draft.styleNumber);
@@ -112,9 +116,6 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
   if (defects.some((d) => !d.defectQuantity || d.defectQuantity <= 0)) {
     warnings.push('One or more defect rows have zero quantity.');
   }
-  if (reports.some((r) => r.id !== draft.existingReportId && r.reportNumber.toLowerCase() === reportNumber.toLowerCase())) {
-    warnings.push(`Report number (${reportNumber}) already exists in the database.`);
-  }
   if (!orderNumber || !orderNumber.toUpperCase().includes('NOF')) {
     warnings.push('Order number does not include a standard NOF serial prefix.');
   }
@@ -154,7 +155,10 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       defectGroupId: d.defectGroupId,
       severity: d.severity,
       defectQuantity: Number(d.defectQuantity),
-      defectPercentage: totalDefects > 0 ? Number(((Number(d.defectQuantity) / totalDefects) * 100).toFixed(1)) : 0,
+      defectPercentage:
+        inspectedQuantity > 0
+          ? Number(((Number(d.defectQuantity) / inspectedQuantity) * 100).toFixed(2))
+          : 0,
       classificationStatus: 'User-Verified' as const,
       remarks: d.remarks || '',
       createdAt: new Date().toISOString(),
@@ -166,6 +170,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       factory,
       reportNumber,
       inspectionType,
+      reportSource,
       inspectionDate,
       targetMonth: inspectionDate ? inspectionDate.slice(0, 7) : draft.targetMonth,
       orderNumber,
@@ -174,8 +179,8 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       inspectorConclusion,
       styleNumber,
       styleName: productDescription,
-      floor: draft.floor || 'SEW-1',
-      section: draft.section || 'SEW-1',
+      floor,
+      section: floor,
       color,
       productDescription,
       orderQuantity: Number(orderQuantity),
@@ -229,6 +234,18 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 )}
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
                   {inspectionType} Inspection
+                </span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                    reportSource === 'AQC'
+                      ? 'bg-indigo-500/30 text-indigo-200 border-indigo-400/40'
+                      : 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
+                  }`}
+                >
+                  {reportSource}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-200 border border-slate-500/40">
+                  {floor}
                 </span>
               </div>
               <p className="text-xs text-sky-200 mt-0.5">
@@ -476,7 +493,33 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 </select>
               </div>
 
-              <div className="col-span-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 font-medium mb-1">Report Source</label>
+                  <select
+                    value={reportSource}
+                    onChange={(e) => setReportSource(e.target.value as ReportSource)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+                  >
+                    <option value="BSQC">BSQC</option>
+                    <option value="AQC">AQC</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-medium mb-1">Sewing Floor</label>
+                  <select
+                    value={floor}
+                    onChange={(e) => setFloor(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+                  >
+                    <option value="SEW-1">SEW-1</option>
+                    <option value="SEW-2">SEW-2</option>
+                    <option value="SEW-3">SEW-3</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-slate-500 font-medium mb-1">Inspection Sampling Method</label>
                 <input
                   type="text"

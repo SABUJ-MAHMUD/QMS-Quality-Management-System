@@ -33,6 +33,7 @@ import {
   LabelList,
 } from 'recharts';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
+import { formatPctText } from '../../utils/dashboardAnalytics';
 
 export const InspectionSummaryView: React.FC = () => {
   const { filteredReports, settings, setActiveTab, defectGroups, kpiMetrics } = useApp();
@@ -100,14 +101,17 @@ export const InspectionSummaryView: React.FC = () => {
     });
   });
 
+  const totalInspectedQty = filteredReports.reduce((s, r) => s + (Number(r.inspectedQuantity) || 0), 0);
+
   const sortedGroupData = Array.from(groupDefectMap.entries())
     .map(([groupName, data], index) => {
-      const percentage = grandTotalDefects > 0 ? ((data.totalQty / grandTotalDefects) * 100).toFixed(1) : '0';
+      const pct = totalInspectedQty > 0 ? (data.totalQty / totalInspectedQty) * 100 : 0;
+      const percentage = formatPctText(pct);
       return {
         groupName,
         totalQty: data.totalQty,
-        percentage: `${percentage}%`,
-        displayLabel: `${data.totalQty} (${percentage}%)`,
+        percentage,
+        displayLabel: `${data.totalQty} (${percentage})`,
         critical: data.critical,
         major: data.major,
         minor: data.minor,

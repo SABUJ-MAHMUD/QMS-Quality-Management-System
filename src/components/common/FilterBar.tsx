@@ -22,7 +22,11 @@ export const FilterBar: React.FC = () => {
 
   const hasActiveFilters =
     hasBuyerFilter ||
-    filters.financialYear !== 'ALL' ||
+    (Array.isArray(filters.floors) && filters.floors.length > 0) ||
+    (filters.reportSource !== undefined && filters.reportSource !== 'ALL') ||
+    (Array.isArray(filters.financialYear)
+      ? filters.financialYear.length > 0 && !filters.financialYear.includes('ALL')
+      : filters.financialYear !== 'ALL') ||
     filters.month !== 'ALL' ||
     filters.dateFrom !== '' ||
     filters.dateTo !== '' ||

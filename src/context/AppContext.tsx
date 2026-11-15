@@ -12,7 +12,8 @@ import {
 } from '../types';
 import { INITIAL_DEFECT_GROUPS, INITIAL_DEFECT_MASTER } from '../data/defectMasterData';
 import { INITIAL_DEMO_REPORTS, INITIAL_DEMO_CAPA, INITIAL_DEMO_MONITORING } from '../data/demoData';
-import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear } from '../utils/oqlCalculator';
+import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource } from '../utils/oqlCalculator';
+import { findDuplicateReportIds } from '../utils/dashboardAnalytics';
 import { firestoreService } from '../services/firestoreService';
 import { testConnection } from '../lib/firebase';
 
@@ -61,6 +62,7 @@ interface AppContextType {
   addInspectionReport: (report: Omit<InspectionReport, 'id' | 'createdAt' | 'updatedAt'>) => InspectionReport;
   updateInspectionReport: (id: string, updates: Partial<InspectionReport>) => void;
   deleteInspectionReport: (id: string) => boolean;
+  removeDuplicateReports: () => Promise<number>;
 
   // Defect Master & Groups
   defectGroups: DefectGroup[];
@@ -162,7 +164,28 @@ const STORAGE_KEYS = {
   USER_ROLE: 'gqa_qms_role_v3',
   AUTH: 'gqa_qms_auth_v3',
   THEME: 'gqa_qms_theme_v1',
+  SELECTED_FY: 'gqa_qms_selected_fy_v1',
 };
+
+const VALID_FY_OPTIONS = ['FY26/27', 'FY25/26'];
+
+function loadSavedFinancialYears(): string[] {
+  try {
+    if (typeof window === 'undefined') return ['FY26/27'];
+    const raw = localStorage.getItem(STORAGE_KEYS.SELECTED_FY);
+    if (!raw) return ['FY26/27'];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const valid = parsed.filter((fy): fy is string => typeof fy === 'string' && VALID_FY_OPTIONS.includes(fy));
+      if (valid.length > 0) return valid;
+    } else if (typeof parsed === 'string' && VALID_FY_OPTIONS.includes(parsed)) {
+      return [parsed];
+    }
+  } catch {
+    // ignore
+  }
+  return ['FY26/27'];
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   targetOql: 4.5,
@@ -174,7 +197,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const DEFAULT_FILTERS: GlobalFilterState = {
   buyer: 'ALL',
-  financialYear: 'ALL',
+  financialYear: ['FY26/27'],
+  floors: [],
+  reportSource: 'ALL',
   month: 'ALL',
   dateFrom: '',
   dateTo: '',
@@ -320,7 +345,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [filters, setFilters] = useState<GlobalFilterState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<GlobalFilterState>(() => ({
+    ...DEFAULT_FILTERS,
+    financialYear: loadSavedFinancialYears(),
+  }));
 
   // Core Data States - Initialized completely FRESH with 0 demo data
   const [reports, setReports] = useState<InspectionReport[]>(() => {
@@ -383,29 +411,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (isMounted) setIsFirebaseConnected(isHealthy);
         if (!isHealthy) return;
 
-        // Subscribe to real-time updates so 10-15+ colleagues see each other's uploads immediately
-        let initialReportsChecked = false;
+        // Subscribe to real-time updates so colleagues stay 100% synced with Firestore (no stale localStorage resurrection)
         unsubReports = firestoreService.subscribeReports(
           (remoteReports) => {
             if (!isMounted) return;
             setIsFirebaseConnected(true);
-            setReports((localPrev) => {
-              // On first snapshot, push any local-only non-demo reports up to Firestore so nothing is lost
-              if (!initialReportsChecked) {
-                initialReportsChecked = true;
-                const remoteIds = new Set(remoteReports.map((r) => r.id));
-                const unsyncedLocal = localPrev.filter((r) => !r.isDemo && !remoteIds.has(r.id));
-                unsyncedLocal.forEach((r) => {
-                  firestoreService.saveReport(r).catch((err) => {
-                    console.warn('Backfill local report to Firestore note:', err);
-                  });
-                });
-                if (unsyncedLocal.length > 0) {
-                  return [...unsyncedLocal, ...remoteReports];
-                }
-              }
-              return remoteReports;
-            });
+            setReports(remoteReports);
           },
           (err) => {
             console.warn('Firestore reports listener note:', err);
@@ -413,24 +424,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         );
 
-        let initialCapasChecked = false;
         unsubCapas = firestoreService.subscribeCapas(
           (remoteCapas) => {
             if (!isMounted) return;
-            setCapas((localPrev) => {
-              if (!initialCapasChecked) {
-                initialCapasChecked = true;
-                const remoteIds = new Set(remoteCapas.map((c) => c.id));
-                const unsynced = localPrev.filter((c) => !c.isDemo && !remoteIds.has(c.id));
-                unsynced.forEach((c) => {
-                  firestoreService.saveCapa(c).catch((err) => console.warn('Backfill CAPA note:', err));
-                });
-                if (unsynced.length > 0) {
-                  return [...unsynced, ...remoteCapas];
-                }
-              }
-              return remoteCapas;
-            });
+            setCapas(remoteCapas);
           },
           (err) => console.warn('Firestore capas listener note:', err)
         );
@@ -475,6 +472,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => scheduleStorageWrite(STORAGE_KEYS.MONITORING, monitoringRecords), [monitoringRecords]);
   useEffect(() => scheduleStorageWrite(STORAGE_KEYS.SETTINGS, settings), [settings]);
   useEffect(() => scheduleStorageWrite(STORAGE_KEYS.USER_ROLE, currentUserRole), [currentUserRole]);
+  useEffect(() => {
+    const fyArr = Array.isArray(filters.financialYear)
+      ? filters.financialYear.filter((fy) => VALID_FY_OPTIONS.includes(fy))
+      : VALID_FY_OPTIONS.includes(filters.financialYear)
+      ? [filters.financialYear]
+      : ['FY26/27'];
+    return scheduleStorageWrite(STORAGE_KEYS.SELECTED_FY, fyArr.length > 0 ? fyArr : ['FY26/27']);
+  }, [filters.financialYear]);
 
   // Notification helper
   const addNotification = (type: NotificationItem['type'], message: string) => {
@@ -564,7 +569,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
+    setFilters((prev) => ({
+      ...DEFAULT_FILTERS,
+      financialYear: prev.financialYear,
+    }));
   };
 
   // Filtered reports
@@ -614,12 +622,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [filteredReports, settings]);
 
-  // Inspection report CRUD with Cloud Firestore persistence
+  // Inspection report CRUD with Cloud Firestore persistence (supports unlimited repeat Inline/Final uploads per style)
   const addInspectionReport = (data: Omit<InspectionReport, 'id' | 'createdAt' | 'updatedAt'>): InspectionReport => {
-    const id = `rep-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const now = new Date().toISOString();
+    const normalizedFloor = normalizeFloorName(data.floor || data.section);
+    const resolvedSource = getReportSource(data);
+
+    const id = `rep-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     const newReport: InspectionReport = {
       ...data,
+      floor: normalizedFloor,
+      section: normalizedFloor,
+      reportSource: resolvedSource,
       id,
       createdAt: now,
       updatedAt: now,
@@ -628,7 +642,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: now,
           user: `${currentUserRole}`,
           action: 'Created & Approved',
-          details: `Report ${data.reportNumber} created with OQL ${data.oql}%`,
+          details: `Report ${data.reportNumber} (${data.inspectionType || 'Final'} • ${resolvedSource}) created with OQL ${data.oql}%`,
         },
       ],
     };
@@ -692,6 +706,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     addNotification('warning', `Inspection report deleted.`);
     return true;
+  };
+
+  const removeDuplicateReports = async (): Promise<number> => {
+    const dupIds = findDuplicateReportIds(reports);
+    if (dupIds.length === 0) return 0;
+    const dupSet = new Set(dupIds);
+    setReports((prev) => prev.filter((r) => !dupSet.has(r.id)));
+    for (const dupId of dupIds) {
+      await firestoreService.deleteReport(dupId).catch((err) => {
+        console.warn('Firestore duplicate cleanup note:', err);
+      });
+    }
+    addNotification('info', `Removed ${dupIds.length} duplicate inspection report(s).`);
+    return dupIds.length;
   };
 
   // Defect Group CRUD
@@ -851,6 +879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addInspectionReport,
       updateInspectionReport,
       deleteInspectionReport,
+      removeDuplicateReports,
       defectGroups,
       defectMaster,
       addDefectGroup,

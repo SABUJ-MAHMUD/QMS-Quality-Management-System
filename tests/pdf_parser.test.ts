@@ -337,3 +337,58 @@ test('reportToDraft maps saved InspectionReport into full ValidationModal draft 
   assert.equal(draft.defects.length, 1);
   assert.equal(draft.defects[0].defectGroupId, 'dg-cle');
 });
+
+test('Auto-detects AQC ("Inspection report, AQC Final/Inline:") vs BSQC ("Inspection report, Final/Inline:")', () => {
+  const aqcFinalText = `
+Inspection report, AQC Final: NOF4779100 | BESTSELLER
+22031973: ONSCONNOR LIFE STRAIGHT PANTS
+Inspector | Rifat Chowdhury | Inspection Date | Oct 15, 2026
+Planned Sample Qty/Inspected | 125/50 | Order Qty/Available | 1500/1500
+TOTAL | 0 | 1 | 0
+  `;
+  const aqcFinal = extractDataFromText(
+    aqcFinalText,
+    'NOF4779100 - 22031973 - SEW-2.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-10'
+  );
+  assert.equal(aqcFinal.reportSource, 'AQC');
+  assert.equal(aqcFinal.inspectionType, 'Final');
+  assert.equal(aqcFinal.floor, 'SEW-2');
+
+  const aqcInlineText = `
+Inspection report, AQC Inline: NOF4779101 | BESTSELLER
+13255895: NMFBELINA 3P SS TOP PB
+Inspector | Salah Uddin | Inspection Date | Oct 18, 2026
+Planned Sample Qty/Inspected | 125/50 | Order Qty/Available | 1000/1000
+  `;
+  const aqcInline = extractDataFromText(
+    aqcInlineText,
+    'NOF4779101 - 13255895 - SEW-3.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-10'
+  );
+  assert.equal(aqcInline.reportSource, 'AQC');
+  assert.equal(aqcInline.inspectionType, 'Inline');
+  assert.equal(aqcInline.floor, 'SEW-3');
+
+  const bsqcFinalText = `
+Inspection report, Final: NOF4779102 | BESTSELLER
+15381667: ONLY TEE
+Inspector | Rifat Chowdhury | Inspection Date | Oct 20, 2026
+Planned Sample Qty/Inspected | 125/50 | Order Qty/Available | 1000/1000
+  `;
+  const bsqcFinal = extractDataFromText(
+    bsqcFinalText,
+    'NOF4779102 - 15381667 - SEW-1.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-10'
+  );
+  assert.equal(bsqcFinal.reportSource, 'BSQC');
+  assert.equal(bsqcFinal.inspectionType, 'Final');
+  assert.equal(bsqcFinal.floor, 'SEW-1');
+});
+

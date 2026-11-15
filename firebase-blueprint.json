@@ -7,6 +7,9 @@
       "properties": {
         "id": { "type": "string", "description": "Unique report record ID" },
         "reportNumber": { "type": "string", "description": "Report number or NOF serial" },
+        "reportSource": { "type": "string", "description": "BSQC or AQC report classification" },
+        "inspectionType": { "type": "string", "description": "Final, Inline, Pre-Final, etc." },
+        "floor": { "type": "string", "description": "Production sewing floor e.g. SEW-1, SEW-2, SEW-3" },
         "inspectionDate": { "type": "string", "description": "Date of inspection (YYYY-MM-DD)" },
         "buyer": { "type": "string", "description": "Buyer name, e.g., BESTSELLER" },
         "factory": { "type": "string", "description": "Factory name, Northern Fashions Ltd." },

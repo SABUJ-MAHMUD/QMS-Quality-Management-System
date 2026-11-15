@@ -78,8 +78,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showBuyerMenu, setShowBuyerMenu] = useState(false);
+  const [showFyMenu, setShowFyMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const buyerMenuRef = useRef<HTMLDivElement>(null);
+  const fyMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -88,14 +90,20 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
   }, []);
 
   useEffect(() => {
-    if (!showBuyerMenu) return;
+    if (!showBuyerMenu && !showFyMenu) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (buyerMenuRef.current && !buyerMenuRef.current.contains(e.target as Node)) {
         setShowBuyerMenu(false);
       }
+      if (fyMenuRef.current && !fyMenuRef.current.contains(e.target as Node)) {
+        setShowFyMenu(false);
+      }
     };
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowBuyerMenu(false);
+      if (e.key === 'Escape') {
+        setShowBuyerMenu(false);
+        setShowFyMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEsc);
@@ -103,7 +111,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEsc);
     };
-  }, [showBuyerMenu]);
+  }, [showBuyerMenu, showFyMenu]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -150,6 +158,38 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
       : selectedBuyers.length === 1
       ? selectedBuyers[0]
       : `${selectedBuyers.slice(0, 2).join(', ')}${selectedBuyers.length > 2 ? ` +${selectedBuyers.length - 2}` : ''}`;
+
+  const FY_OPTIONS = [
+    { value: 'FY25/26', label: 'FY 25/26 (Aug 25 - Jul 26)' },
+    { value: 'FY26/27', label: 'FY 26/27 (Aug 26 - Jul 27)' },
+  ];
+
+  const selectedFYs = useMemo(() => {
+    if (Array.isArray(filters.financialYear)) {
+      const valid = filters.financialYear.filter((fy) => fy === 'FY25/26' || fy === 'FY26/27');
+      return valid.length > 0 ? valid : ['FY26/27'];
+    }
+    if (filters.financialYear === 'FY25/26' || filters.financialYear === 'FY26/27') {
+      return [filters.financialYear];
+    }
+    return ['FY26/27'];
+  }, [filters.financialYear]);
+
+  const toggleFySelection = (fyValue: string) => {
+    const exists = selectedFYs.includes(fyValue);
+    if (exists && selectedFYs.length === 1) {
+      // Always keep at least one FY selected (no "All FYs" option)
+      return;
+    }
+    const next = exists ? selectedFYs.filter((f) => f !== fyValue) : [...selectedFYs, fyValue];
+    setFilters((prev) => ({
+      ...prev,
+      financialYear: next,
+    }));
+  };
+
+  const fyButtonLabel =
+    selectedFYs.length === 1 ? selectedFYs[0] : selectedFYs.join(', ');
 
   const roles: UserRole[] = ['Admin', 'QMS Manager', 'QMS Executive', 'Viewer'];
 
@@ -304,18 +344,66 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
             )}
           </div>
 
-          {/* Financial Year Selector */}
-          <div className="flex items-center bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shrink-0">
-            <span className="text-slate-400 dark:text-slate-500 font-medium mr-1">FY:</span>
-            <select
-              value={filters.financialYear}
-              onChange={(e) => setFilters((prev) => ({ ...prev, financialYear: e.target.value }))}
-              className="bg-transparent font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-[76px] min-w-0 truncate"
+          {/* Multi-Select Financial Year Checkbox Selector (No "All FYs") */}
+          <div className="relative shrink-0" ref={fyMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowFyMenu((prev) => !prev)}
+              aria-expanded={showFyMenu}
+              aria-haspopup="listbox"
+              aria-label="Filter by Financial Year"
+              className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-sky-400 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 cursor-pointer transition-colors whitespace-nowrap"
             >
-              <option value="ALL" className="dark:bg-slate-800">All FYs</option>
-              <option value="FY26/27" className="dark:bg-slate-800">FY26/27 (Aug 26 - Jul 27)</option>
-              <option value="FY25/26" className="dark:bg-slate-800">FY25/26 (Aug 25 - Jul 26)</option>
-            </select>
+              <span className="text-slate-400 dark:text-slate-500 font-medium">FY:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-100 max-w-[110px] truncate">
+                {fyButtonLabel}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            </button>
+
+            {showFyMenu && (
+              <div
+                role="listbox"
+                aria-multiselectable="true"
+                className="absolute right-0 sm:left-0 mt-1.5 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 space-y-1"
+              >
+                <div className="px-2 py-1 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Financial Year (Aug - Jul)
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    Saved
+                  </span>
+                </div>
+
+                <div className="space-y-0.5 pt-1">
+                  {FY_OPTIONS.map((fy) => {
+                    const isChecked = selectedFYs.includes(fy.value);
+                    return (
+                      <label
+                        key={fy.value}
+                        className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                          isChecked
+                            ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-800 dark:text-sky-200 font-bold'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleFySelection(fy.value)}
+                            className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                          />
+                          <span>{fy.label}</span>
+                        </span>
+                        {isChecked && <Check className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

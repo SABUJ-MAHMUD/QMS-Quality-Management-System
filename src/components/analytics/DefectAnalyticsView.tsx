@@ -25,6 +25,7 @@ import {
   LabelList,
 } from 'recharts';
 import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect, resolveDefectAccurate } from '../../data/defectMasterData';
+import { formatPctText } from '../../utils/dashboardAnalytics';
 
 export const DefectAnalyticsView: React.FC = () => {
   const { filteredReports, setFilters, setActiveTab, addNotification, setPendingCapaDefect } = useApp();
@@ -272,6 +273,7 @@ export const DefectAnalyticsView: React.FC = () => {
   }, [categoryStats]);
 
   const totalDefectSum = chartData.reduce((s, c) => s + c.count, 0);
+  const totalInspectedQty = filteredReports.reduce((s, r) => s + (Number(r.inspectedQuantity) || 0), 0);
 
   return (
     <div className="p-4 space-y-4 max-w-[1700px] mx-auto text-slate-800 dark:text-slate-100">
@@ -529,7 +531,7 @@ export const DefectAnalyticsView: React.FC = () => {
           <div className="p-4 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                Paralleled live volume &amp; percentage with left table counting
+                Paralleled live volume &amp; defect rate (% of {totalInspectedQty.toLocaleString()} inspected pcs)
               </p>
               <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800">
                 <Zap className="w-3 h-3 text-emerald-600" />
@@ -564,10 +566,11 @@ export const DefectAnalyticsView: React.FC = () => {
                     />
                     <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
                     <Tooltip
-                      formatter={(val: any) => [
-                        `${val} defects (${totalDefectSum > 0 ? ((Number(val) / totalDefectSum) * 100).toFixed(1) : 0}%)`,
-                        'Count',
-                      ]}
+                      formatter={(val: any) => {
+                        const num = Number(val) || 0;
+                        const pct = totalInspectedQty > 0 ? (num / totalInspectedQty) * 100 : 0;
+                        return [`${num} defects (${formatPctText(pct)} of inspected)`, 'Count'];
+                      }}
                     />
                     <Bar dataKey="count" isAnimationActive={false} radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, index) => (
@@ -578,8 +581,8 @@ export const DefectAnalyticsView: React.FC = () => {
                         position="top"
                         formatter={(val: any) => {
                           const num = Number(val) || 0;
-                          const pct = totalDefectSum > 0 ? Math.round((num / totalDefectSum) * 100) : 0;
-                          return `${num} (${pct}%)`;
+                          const pct = totalInspectedQty > 0 ? (num / totalInspectedQty) * 100 : 0;
+                          return `${num} (${formatPctText(pct)})`;
                         }}
                         style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
                       />
@@ -596,7 +599,7 @@ export const DefectAnalyticsView: React.FC = () => {
                   Parallel Category Breakdown ({chartData.length} Active Groups)
                 </div>
                 {chartData.map((entry) => {
-                  const pct = totalDefectSum > 0 ? ((entry.count / totalDefectSum) * 100).toFixed(1) : '0.0';
+                  const pct = totalInspectedQty > 0 ? (entry.count / totalInspectedQty) * 100 : 0;
                   return (
                     <div
                       key={entry.code}
@@ -614,7 +617,7 @@ export const DefectAnalyticsView: React.FC = () => {
                         </span>
                       </div>
                       <span className="font-black text-slate-900 dark:text-white shrink-0 ml-2">
-                        {entry.count} <span className="text-[10px] font-semibold text-slate-500">({pct}%)</span>
+                        {entry.count} <span className="text-[10px] font-semibold text-slate-500">({formatPctText(pct)})</span>
                       </span>
                     </div>
                   );

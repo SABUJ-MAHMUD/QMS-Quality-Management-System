@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { InspectionReport } from '../../types';
 import {
@@ -18,12 +18,17 @@ import {
   Calendar,
 } from 'lucide-react';
 import { exportReportsToExcel } from '../../utils/exportUtils';
+import { findDuplicateReportIds } from '../../utils/dashboardAnalytics';
+import { getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
+import { ReportSource } from '../../types';
 
 export const DatabaseView: React.FC = () => {
   const {
+    reports,
     filteredReports,
     deleteInspectionReport,
     updateInspectionReport,
+    removeDuplicateReports,
     clearAllData,
     canManageData,
     settings,
@@ -39,13 +44,43 @@ export const DatabaseView: React.FC = () => {
   const [editingReport, setEditingReport] = useState<InspectionReport | null>(null);
   const [previewPdfReport, setPreviewPdfReport] = useState<InspectionReport | null>(null);
   const [floorFilter, setFloorFilter] = useState<string>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | ReportSource>('ALL');
+  const [uploadDateFilter, setUploadDateFilter] = useState<string>('ALL');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<InspectionReport | null>(null);
   const [showWipeConfirm, setShowWipeConfirm] = useState<boolean>(false);
 
   const handleWipeAll = async () => {
     await clearAllData();
+    setSelectedIds([]);
     setShowWipeConfirm(false);
   };
+
+  // Breakdown counts inside the active filteredReports slice
+  const duplicateIds = findDuplicateReportIds(reports);
+  const distinctStyleCount = useMemo(
+    () => new Set(filteredReports.map((r) => (r.styleNumber || '').trim()).filter(Boolean)).size,
+    [filteredReports]
+  );
+  const finalCount = filteredReports.filter((r) => (r.inspectionType || 'Final').toLowerCase() === 'final').length;
+  const inlineCount = filteredReports.filter((r) => (r.inspectionType || '').toLowerCase() === 'inline').length;
+  const bsqcCount = filteredReports.filter((r) => getReportSource(r) === 'BSQC').length;
+  const aqcCount = filteredReports.filter((r) => getReportSource(r) === 'AQC').length;
+
+  const uploadBatchDates = useMemo(() => {
+    const counts = new Map<string, number>();
+    filteredReports.forEach((r) => {
+      const day = (r.createdAt || r.updatedAt || '').slice(0, 10);
+      if (day) counts.set(day, (counts.get(day) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredReports]);
+
+  useEffect(() => {
+    if (uploadDateFilter !== 'ALL' && !uploadBatchDates.some(([day]) => day === uploadDateFilter)) {
+      setUploadDateFilter('ALL');
+    }
+  }, [uploadDateFilter, uploadBatchDates]);
 
   // Sorting
   const sortedReports = [...filteredReports].sort((a, b) => {
@@ -61,12 +96,44 @@ export const DatabaseView: React.FC = () => {
       : (Number(bVal) || 0) - (Number(aVal) || 0);
   });
 
-  // Filtered by Floor (SEW-1, SEW-2, SEW-3)
+  // Filtered by Floor (SEW-1, SEW-2, SEW-3), Report Source (BSQC / AQC), and Upload Batch Date
   const displayReports = sortedReports.filter((r) => {
-    if (floorFilter === 'ALL') return true;
-    const f = r.floor || r.section || 'SEW-1';
-    return f.toUpperCase() === floorFilter.toUpperCase();
+    if (floorFilter !== 'ALL') {
+      const f = normalizeFloorName(r.floor || r.section);
+      if (f !== floorFilter.toUpperCase()) return false;
+    }
+    if (sourceFilter !== 'ALL' && getReportSource(r) !== sourceFilter) {
+      return false;
+    }
+    if (uploadDateFilter !== 'ALL') {
+      const day = (r.createdAt || r.updatedAt || '').slice(0, 10);
+      if (day !== uploadDateFilter) return false;
+    }
+    return true;
   });
+
+  const allDisplayedSelected =
+    displayReports.length > 0 && displayReports.every((r) => selectedIds.includes(r.id));
+
+  const toggleSelectAllDisplayed = () => {
+    if (allDisplayedSelected) {
+      const displaySet = new Set(displayReports.map((r) => r.id));
+      setSelectedIds((prev) => prev.filter((id) => !displaySet.has(id)));
+    } else {
+      const merged = new Set([...selectedIds, ...displayReports.map((r) => r.id)]);
+      setSelectedIds(Array.from(merged));
+    }
+  };
+
+  const toggleRowSelected = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0 || !canManageData) return;
+    selectedIds.forEach((id) => deleteInspectionReport(id));
+    setSelectedIds([]);
+  };
 
   const handleSort = (field: keyof InspectionReport) => {
     if (sortField === field) {
@@ -89,10 +156,35 @@ export const DatabaseView: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex flex-wrap items-center gap-2">
             Inspection Database
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              {filteredReports.length} Records
+            <span
+              data-testid="db-total-badge"
+              className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700"
+            >
+              Reports: {filteredReports.length}
+            </span>
+            <span
+              data-testid="db-styles-badge"
+              className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              title="Distinct style numbers (one style can have multiple Inline/Final inspections)"
+            >
+              Styles: {distinctStyleCount}
+            </span>
+            <span
+              data-testid="db-final-badge"
+              className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+            >
+              Final: {finalCount}
+            </span>
+            <span
+              data-testid="db-inline-badge"
+              className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/70 text-violet-800 dark:text-violet-300 border border-violet-200 dark:border-violet-800"
+            >
+              Inline: {inlineCount}
+            </span>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              BSQC: {bsqcCount} &bull; AQC: {aqcCount}
             </span>
             {isFirebaseConnected && (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
@@ -102,16 +194,55 @@ export const DatabaseView: React.FC = () => {
             )}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Central repository of approved buyer OQL inspection reports, defect breakdowns, and audit trails.
+            Central repository of approved buyer OQL inspection reports, defect breakdowns, and audit trails. Same style can be uploaded multiple times (Inline / Final).
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Upload Batch Date Filter (helps spot & clean older upload batches) */}
+          {uploadBatchDates.length > 1 && (
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 bg-white dark:bg-slate-800 text-xs font-semibold">
+              <span className="text-slate-400">Uploaded:</span>
+              <select
+                value={uploadDateFilter}
+                onChange={(e) => setUploadDateFilter(e.target.value)}
+                aria-label="Filter by Upload Date"
+                className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">All Batches ({filteredReports.length})</option>
+                {uploadBatchDates.map(([day, cnt]) => (
+                  <option key={day} value={day}>
+                    {day} ({cnt})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* BSQC / AQC Source Filter */}
+          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
+            {(['ALL', 'BSQC', 'AQC'] as const).map((src) => (
+              <button
+                key={src}
+                type="button"
+                onClick={() => setSourceFilter(src)}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  sourceFilter === src
+                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                {src === 'ALL' ? 'All Sources' : src}
+              </button>
+            ))}
+          </div>
+
           {/* Floor / Section Filter */}
           <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
             {['ALL', 'SEW-1', 'SEW-2', 'SEW-3'].map((fl) => (
               <button
                 key={fl}
+                type="button"
                 onClick={() => setFloorFilter(fl)}
                 className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                   floorFilter === fl
@@ -123,6 +254,29 @@ export const DatabaseView: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {selectedIds.length > 0 && canManageData && (
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Selected ({selectedIds.length})
+            </button>
+          )}
+
+          {duplicateIds.length > 0 && canManageData && (
+            <button
+              type="button"
+              onClick={removeDuplicateReports}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+              title="Remove exact accidental duplicate inspection reports while keeping different repeat inspections"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              Clean {duplicateIds.length} Duplicates
+            </button>
+          )}
 
           {filteredReports.length > 0 && (
             <button
@@ -157,12 +311,21 @@ export const DatabaseView: React.FC = () => {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 select-none">
               <tr>
+                <th className="py-3 px-2.5 text-center w-8">
+                  <input
+                    type="checkbox"
+                    checked={allDisplayedSelected}
+                    onChange={toggleSelectAllDisplayed}
+                    aria-label="Select all visible reports"
+                    className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                  />
+                </th>
                 <th
                   onClick={() => handleSort('inspectionDate')}
                   className="py-3 px-3 cursor-pointer hover:bg-slate-100/60"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Date</span>
+                    <span>Date / Uploaded</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
@@ -175,6 +338,7 @@ export const DatabaseView: React.FC = () => {
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
+                <th className="py-3 px-3">Stage / Source</th>
                 <th className="py-3 px-3">Floor / Section</th>
                 <th className="py-3 px-3">Brand</th>
                 <th className="py-3 px-3">Order / PO No</th>
@@ -225,7 +389,7 @@ export const DatabaseView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {displayReports.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center">
+                  <td colSpan={17} className="py-12 text-center">
                     <div className="max-w-md mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 border border-sky-200 flex items-center justify-center mx-auto shadow-2xs">
                         <FileText className="w-6 h-6" />
@@ -252,9 +416,28 @@ export const DatabaseView: React.FC = () => {
                 </tr>
               ) : (
                 displayReports.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                  <tr
+                    key={r.id}
+                    className={`hover:bg-slate-50/70 transition-colors ${
+                      selectedIds.includes(r.id) ? 'bg-rose-50/50' : ''
+                    }`}
+                  >
+                    <td className="py-2.5 px-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(r.id)}
+                        onChange={() => toggleRowSelected(r.id)}
+                        aria-label={`Select report ${r.reportNumber}`}
+                        className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-2.5 px-3 font-medium text-slate-700 whitespace-nowrap">
-                      {r.inspectionDate}
+                      <div>{r.inspectionDate}</div>
+                      {r.createdAt && (
+                        <div className="text-[10px] text-slate-400">
+                          Up: {r.createdAt.slice(0, 10)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-3 font-bold text-sky-800 whitespace-nowrap">
@@ -269,8 +452,25 @@ export const DatabaseView: React.FC = () => {
                     </td>
 
                     <td className="py-2.5 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-slate-800 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px]">
+                          {r.inspectionType || 'Final'}
+                        </span>
+                        <span
+                          className={`font-black px-1.5 py-0.5 rounded text-[10px] border ${
+                            getReportSource(r) === 'AQC'
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {getReportSource(r)}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="py-2.5 px-3 whitespace-nowrap">
                       <span className="font-bold text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs">
-                        {r.floor || r.section || 'SEW-1'}
+                        {normalizeFloorName(r.floor || r.section)}
                       </span>
                     </td>
 
@@ -589,6 +789,61 @@ export const DatabaseView: React.FC = () => {
                   }
                   className="w-full border rounded-lg p-2"
                 />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-slate-500 mb-1">Report Source</label>
+                  <select
+                    value={getReportSource(editingReport)}
+                    onChange={(e) =>
+                      setEditingReport({
+                        ...editingReport,
+                        reportSource: e.target.value as ReportSource,
+                      })
+                    }
+                    className="w-full border rounded-lg p-2 font-bold"
+                  >
+                    <option value="BSQC">BSQC</option>
+                    <option value="AQC">AQC</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Stage</label>
+                  <select
+                    value={editingReport.inspectionType || 'Final'}
+                    onChange={(e) =>
+                      setEditingReport({
+                        ...editingReport,
+                        inspectionType: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-lg p-2 font-bold"
+                  >
+                    <option value="Final">Final</option>
+                    <option value="Inline">Inline</option>
+                    <option value="Pre-Final">Pre-Final</option>
+                    <option value="Initial">Initial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Floor</label>
+                  <select
+                    value={normalizeFloorName(editingReport.floor || editingReport.section)}
+                    onChange={(e) =>
+                      setEditingReport({
+                        ...editingReport,
+                        floor: e.target.value,
+                        section: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-lg p-2 font-bold"
+                  >
+                    <option value="SEW-1">SEW-1</option>
+                    <option value="SEW-2">SEW-2</option>
+                    <option value="SEW-3">SEW-3</option>
+                  </select>
+                </div>
               </div>
 
               <div>

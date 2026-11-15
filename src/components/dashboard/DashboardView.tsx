@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   FileText,
@@ -15,6 +15,8 @@ import {
   Save,
   FileSpreadsheet,
   Download,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -29,15 +31,20 @@ import {
   Legend,
   Cell,
   LabelList,
+  ReferenceLine,
 } from 'recharts';
 import { SpeedometerGauge } from '../common/SpeedometerGauge';
 import { DefectAxisTick } from '../common/DefectAxisTick';
 import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
-import { filterReports } from '../../utils/oqlCalculator';
+import { filterReports, getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
 import {
   computeTopSingleDefects,
   computeMonthToMonthTopDefects,
+  computeWeeklyOqlTrend,
+  computeFloorStats,
+  formatPctText,
 } from '../../utils/dashboardAnalytics';
+import { ReportSource } from '../../types';
 
 interface InlineCapaRow {
   serial: number;
@@ -64,6 +71,29 @@ export const DashboardView: React.FC = () => {
     kpiMetrics,
     settings,
   } = useApp();
+
+  const [showFloorMenu, setShowFloorMenu] = useState(false);
+  const floorMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showFloorMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (floorMenuRef.current && !floorMenuRef.current.contains(e.target as Node)) {
+        setShowFloorMenu(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowFloorMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showFloorMenu]);
 
   // Dynamic Months list from uploaded reports
   const availableMonths = useMemo(() => {
@@ -100,19 +130,94 @@ export const DashboardView: React.FC = () => {
     return Array.from(set).sort();
   }, [reports]);
 
+  // Dynamic Floors list (always includes SEW-1, SEW-2, SEW-3)
+  const availableFloors = useMemo(() => {
+    const base = ['SEW-1', 'SEW-2', 'SEW-3'];
+    const set = new Set<string>(base);
+    reports.forEach((r) => {
+      const fl = normalizeFloorName(r.floor || r.section);
+      if (fl) set.add(fl);
+    });
+    return Array.from(set);
+  }, [reports]);
+
+  const selectedFloors = useMemo(() => {
+    if (!Array.isArray(filters.floors)) return [];
+    return filters.floors.filter((f) => f && f !== 'ALL').map((f) => normalizeFloorName(f));
+  }, [filters.floors]);
+
+  const toggleFloorSelection = (floorName: string) => {
+    const norm = normalizeFloorName(floorName);
+    const exists = selectedFloors.includes(norm);
+    const next = exists ? selectedFloors.filter((f) => f !== norm) : [...selectedFloors, norm];
+    setFilters((prev) => ({
+      ...prev,
+      floors: next,
+    }));
+  };
+
+  const floorButtonLabel =
+    selectedFloors.length === 0
+      ? 'All Floors'
+      : selectedFloors.length === 1
+      ? selectedFloors[0]
+      : `${selectedFloors.slice(0, 2).join(', ')}${selectedFloors.length > 2 ? ` +${selectedFloors.length - 2}` : ''}`;
+
+  // Reports matching all filters EXCEPT floors (used to show floor report & style counts inside the dropdown)
+  const nonFloorReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { ...filters, floors: [] },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters, settings.financialYearStartMonth]
+  );
+
+  const nonFloorStats = useMemo(() => computeFloorStats(nonFloorReports), [nonFloorReports]);
+
+  // Reports matching all filters EXCEPT reportSource (used for BSQC/AQC live toggle counts)
+  const nonSourceReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { ...filters, reportSource: 'ALL' },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters, settings.financialYearStartMonth]
+  );
+
+  const sourceCounts = useMemo(() => {
+    let bsqc = 0;
+    let aqc = 0;
+    nonSourceReports.forEach((r) => {
+      if (getReportSource(r) === 'AQC') aqc += 1;
+      else bsqc += 1;
+    });
+    return {
+      all: nonSourceReports.length,
+      bsqc,
+      aqc,
+    };
+  }, [nonSourceReports]);
+
+  const activeReportSource: 'ALL' | ReportSource = filters.reportSource || 'ALL';
+
   const hasBuyerFilter = Array.isArray(filters.buyer)
     ? filters.buyer.length > 0 && !filters.buyer.includes('ALL')
     : filters.buyer !== 'ALL';
 
   const hasActiveFilters =
     hasBuyerFilter ||
+    selectedFloors.length > 0 ||
+    activeReportSource !== 'ALL' ||
     filters.month !== 'ALL' ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
     filters.defectGroup !== 'ALL' ||
     filters.inspectionResult !== 'ALL';
 
-  // Top 8 KPI calculations
+  // Top 9 KPI calculations
   const totalReports = filteredReports.length;
   const totalOrderQty = filteredReports.reduce((sum, r) => sum + (r.orderQuantity || 0), 0);
   const totalInspectedQty = filteredReports.reduce((sum, r) => sum + (r.inspectedQuantity || 0), 0);
@@ -121,56 +226,49 @@ export const DashboardView: React.FC = () => {
   const totalMinor = filteredReports.reduce((sum, r) => sum + (r.minorDefectQuantity || 0), 0);
   const totalDefects = totalCritical + totalMajor + totalMinor;
 
+  // Defect percentages strictly against Total Inspected Qty: (Defect Qty / Inspected Qty) * 100
+  const criticalPct = totalInspectedQty > 0 ? (totalCritical / totalInspectedQty) * 100 : 0;
+  const majorPct = totalInspectedQty > 0 ? (totalMajor / totalInspectedQty) * 100 : 0;
+  const minorPct = totalInspectedQty > 0 ? (totalMinor / totalInspectedQty) * 100 : 0;
+
   // Observed Quality Level (OQL) %: (Total Defects ÷ Inspected Qty) × 100
   const calculatedOql = totalInspectedQty > 0 ? (totalDefects / totalInspectedQty) * 100 : 0;
 
-  // Last Week OQL Calculation (Sun to Sat cycle)
-  const lastWeekOql = useMemo(() => {
-    if (reports.length === 0) return 0;
-    // Calculate week range for last completed week or latest week in records
-    // Baseline sample is 8.5% if in sample preview, or dynamic calculation
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 is Sunday
-    // Previous Sunday
-    const prevSunday = new Date(now);
-    prevSunday.setDate(now.getDate() - dayOfWeek - 7);
-    prevSunday.setHours(0, 0, 0, 0);
+  // Active floor & distinct style breakdown for INSPECTION REPORTS card
+  const floorStats = useMemo(() => computeFloorStats(filteredReports), [filteredReports]);
 
-    const prevSaturday = new Date(prevSunday);
-    prevSaturday.setDate(prevSunday.getDate() + 6);
-    prevSaturday.setHours(23, 59, 59, 999);
+  // Non-month filtered slice (respects FY, Floor, Buyer, ReportSource, Style, Order, Group, Result, Search)
+  const nonMonthFilteredReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { ...filters, month: 'ALL', dateFrom: '', dateTo: '' },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters, settings.financialYearStartMonth]
+  );
 
-    const prevSundayStr = prevSunday.toISOString().slice(0, 10);
-    const prevSaturdayStr = prevSaturday.toISOString().slice(0, 10);
-
-    const lastWeekReports = reports.filter((r) => {
-      const d = r.inspectionDate || '';
-      return d >= prevSundayStr && d <= prevSaturdayStr;
-    });
-
-    if (lastWeekReports.length > 0) {
-      const ins = lastWeekReports.reduce((s, r) => s + (r.inspectedQuantity || 0), 0);
-      const def = lastWeekReports.reduce((s, r) => s + (r.totalDefectQuantity || 0), 0);
-      return ins > 0 ? (def / ins) * 100 : 0;
-    }
-
-    // If active month is filtered and has OQL, return calculated or 0
-    return calculatedOql > 0 ? calculatedOql : 0;
-  }, [reports, calculatedOql]);
-
-  // Middle Left: Highest Single Defects column chart data (max 5, single defects with official PDF code & %)
+  // Middle Left: Highest Single Defects column chart data (max 5, single defects with official PDF code & % of Inspected Qty)
   const highestDefectsData = useMemo(
     () => computeTopSingleDefects(filteredReports, 5),
     [filteredReports]
   );
 
+  // Middle Center: Weekly OQL Trend (BESTSELLER FY: August = W32 .. W52 -> W01 .. W31)
+  const weeklyOqlTrendData = useMemo(
+    () => computeWeeklyOqlTrend(nonMonthFilteredReports, settings.financialYearStartMonth),
+    [nonMonthFilteredReports, settings.financialYearStartMonth]
+  );
+
+  const latestWeekPoint =
+    weeklyOqlTrendData.length > 0 ? weeklyOqlTrendData[weeklyOqlTrendData.length - 1] : null;
+
   // Middle Right: Month wise OQL Performance (OBH Only)
-  // 100% Dynamic calculation from actual uploaded monthly reports!
+  // Dynamic calculation respecting active FY, Floor, Buyer & BSQC/AQC filters
   const monthlyPerformanceData = useMemo(() => {
     const monthMap = new Map<string, { inspected: number; defects: number; name: string }>();
 
-    // Group actual reports by month from database
-    reports.forEach((r) => {
+    nonMonthFilteredReports.forEach((r) => {
       const ym = r.targetMonth || (r.inspectionDate ? r.inspectionDate.slice(0, 7) : '');
       if (ym && ym.length === 7) {
         const curr = monthMap.get(ym) || { inspected: 0, defects: 0, name: '' };
@@ -195,19 +293,7 @@ export const DashboardView: React.FC = () => {
         month: data.name,
         oql: data.inspected > 0 ? Number(((data.defects / data.inspected) * 100).toFixed(2)) : 0,
       }));
-  }, [reports]);
-
-  // Bottom Left: Month-to-Month TOP Single Defects Comparison (e.g. Nov 2026 vs Oct 2026)
-  // Respects non-month filters (Buyer, Style, Order, Group, Severity, Result) while comparing across consecutive calendar months
-  const nonMonthFilteredReports = useMemo(
-    () =>
-      filterReports(
-        reports,
-        { ...filters, month: 'ALL', dateFrom: '', dateTo: '' },
-        settings.financialYearStartMonth
-      ),
-    [reports, filters, settings.financialYearStartMonth]
-  );
+  }, [nonMonthFilteredReports]);
 
   const monthComparison = useMemo(
     () => computeMonthToMonthTopDefects(nonMonthFilteredReports, filters.month, new Date(), 5),
@@ -236,160 +322,325 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="p-4 space-y-4 max-w-[1700px] mx-auto text-slate-800 dark:text-slate-100">
-      {/* Top Header Banner matching Excel Mockup with Integrated Filters */}
-      <div className="bg-[#c6e0b4] dark:bg-emerald-950/70 border border-[#a9d08e] dark:border-emerald-800 px-3.5 py-2 rounded-t-md flex flex-wrap items-center justify-between gap-2.5 shadow-xs">
-        <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans shrink-0">
-          Dashbord
-        </h1>
+      {/* Top Header Banner with BSQC / AQC Toggle + Integrated Filters */}
+      <div className="bg-[#c6e0b4] dark:bg-emerald-950/70 border border-[#a9d08e] dark:border-emerald-800 px-3.5 py-2.5 rounded-t-md flex flex-col gap-2 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-black text-[#dc2626] dark:text-red-500 tracking-wide font-sans shrink-0">
+              Dashbord
+            </h1>
 
-        {/* Integrated Filter Suite matching user request */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-bold mr-0.5 shrink-0">
-            <Filter className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" />
-            <span>Filters:</span>
+            {/* BSQC vs AQC Report Classification Toggle */}
+            <div
+              role="group"
+              aria-label="Report Source Toggle"
+              className="inline-flex items-center bg-white/90 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-0.5 text-[11px] font-bold shadow-2xs"
+            >
+              {(
+                [
+                  { id: 'ALL', label: 'All Reports', count: sourceCounts.all },
+                  { id: 'BSQC', label: 'BSQC', count: sourceCounts.bsqc },
+                  { id: 'AQC', label: 'AQC', count: sourceCounts.aqc },
+                ] as Array<{ id: 'ALL' | ReportSource; label: string; count: number }>
+              ).map((opt) => {
+                const isActive = activeReportSource === opt.id;
+                const activeClass =
+                  opt.id === 'AQC'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : opt.id === 'BSQC'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'bg-sky-700 text-white shadow-xs';
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, reportSource: opt.id }))}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                      isActive
+                        ? activeClass
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                      }`}
+                    >
+                      {opt.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Month Filter */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Month:</span>
-            <select
-              value={filters.month}
-              onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
-              className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Months</option>
-              {availableMonths.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Integrated Filter Suite (6 Filter Controls + Export + Reset) */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-bold mr-0.5 shrink-0">
+              <Filter className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" />
+              <span>Filters:</span>
+            </div>
 
-          {/* Style No Filter */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Style No:</span>
-            <select
-              value={filters.styleNumber}
-              onChange={(e) => setFilters((prev) => ({ ...prev, styleNumber: e.target.value }))}
-              className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[130px] truncate"
-            >
-              <option value="">All Styles</option>
-              {availableStyles.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Order / PO No Filter */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Order / PO No:</span>
-            <select
-              value={filters.orderNumber}
-              onChange={(e) => setFilters((prev) => ({ ...prev, orderNumber: e.target.value }))}
-              className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[150px] truncate"
-            >
-              <option value="">All Orders / POs</option>
-              {availableOrders.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Defect Group & Sub-Defects Filter */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Group / Defect:</span>
-            <select
-              value={filters.defectGroup}
-              onChange={(e) => setFilters((prev) => ({ ...prev, defectGroup: e.target.value }))}
-              className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[170px] truncate"
-              title="Filter dashboard metrics and charts by Master Defect Category or Individual Defect"
-            >
-              <option value="ALL">All Defect Groups</option>
-
-              {/* 23 Master Defect Categories */}
-              <optgroup label="── 23 Master Defect Groups ──">
-                {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
-                  <option key={cat.code} value={cat.name}>
-                    [{cat.code}] {cat.name}
+            {/* 1. Month Filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Month:</span>
+              <select
+                value={filters.month}
+                onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">All Months</option>
+                {availableMonths.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
                   </option>
                 ))}
-              </optgroup>
+              </select>
+            </div>
 
-              {/* Sub-defects for top categories */}
-              {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
-                <optgroup key={`opt-${cat.code}`} label={`── ${cat.name} Defects ──`}>
-                  {cat.subDefects.map((sub) => (
-                    <option key={sub.code} value={sub.name}>
-                      {sub.code}: {sub.name}
+            {/* 2. Multi-Select All Floors Checkbox Filter (SEW-1, SEW-2, SEW-3) */}
+            <div className="relative" ref={floorMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowFloorMenu((prev) => !prev)}
+                aria-expanded={showFloorMenu}
+                aria-haspopup="listbox"
+                aria-label="Filter by Floor"
+                className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-sky-500 rounded px-2 py-1 shadow-2xs cursor-pointer transition-colors"
+              >
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">Floor:</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 max-w-[100px] truncate">
+                  {floorButtonLabel}
+                </span>
+                {selectedFloors.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-sky-600 text-white text-[10px] font-black">
+                    {selectedFloors.length}
+                  </span>
+                )}
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </button>
+
+              {showFloorMenu && (
+                <div
+                  role="listbox"
+                  aria-multiselectable="true"
+                  className="absolute left-0 mt-1.5 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 space-y-1"
+                >
+                  <div className="px-2 py-1 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Select Floors (Multi)
+                    </span>
+                    {selectedFloors.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFilters((prev) => ({ ...prev, floors: [] }))}
+                        className="text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  {/* All Floors checkbox */}
+                  <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedFloors.length === 0}
+                        onChange={() => setFilters((prev) => ({ ...prev, floors: [] }))}
+                        className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                      />
+                      <span
+                        className={`font-bold ${
+                          selectedFloors.length === 0
+                            ? 'text-sky-700 dark:text-sky-300'
+                            : 'text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        All Floors
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      {nonFloorReports.length} rpts
+                    </span>
+                  </label>
+
+                  <div className="border-t border-slate-100 dark:border-slate-700 pt-1 space-y-0.5 max-h-52 overflow-y-auto">
+                    {availableFloors.map((fl) => {
+                      const isChecked = selectedFloors.includes(fl);
+                      const stat = nonFloorStats.byFloor.find((item) => item.floor === fl);
+                      return (
+                        <label
+                          key={fl}
+                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                            isChecked
+                              ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-800 dark:text-sky-200 font-bold'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleFloorSelection(fl)}
+                              className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer"
+                            />
+                            <span>{fl}</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                            <span>
+                              {stat?.reportCount || 0}r &bull; {stat?.styleCount || 0}s
+                            </span>
+                            {isChecked && <Check className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Style No Filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Style No:</span>
+              <select
+                value={filters.styleNumber}
+                onChange={(e) => setFilters((prev) => ({ ...prev, styleNumber: e.target.value }))}
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[130px] truncate"
+              >
+                <option value="">All Styles</option>
+                {availableStyles.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. Order / PO No Filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Order / PO No:</span>
+              <select
+                value={filters.orderNumber}
+                onChange={(e) => setFilters((prev) => ({ ...prev, orderNumber: e.target.value }))}
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[150px] truncate"
+              >
+                <option value="">All Orders / POs</option>
+                {availableOrders.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 5. Defect Group & Sub-Defects Filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Group / Defect:</span>
+              <select
+                value={filters.defectGroup}
+                onChange={(e) => setFilters((prev) => ({ ...prev, defectGroup: e.target.value }))}
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[170px] truncate"
+                title="Filter dashboard metrics and charts by Master Defect Category or Individual Defect"
+              >
+                <option value="ALL">All Defect Groups</option>
+
+                {/* 23 Master Defect Categories */}
+                <optgroup label="── 23 Master Defect Groups ──">
+                  {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+                    <option key={cat.code} value={cat.name}>
+                      [{cat.code}] {cat.name}
                     </option>
                   ))}
                 </optgroup>
-              ))}
-            </select>
-          </div>
 
-          {/* Inspection Result Filter */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Result:</span>
-            <select
-              value={filters.inspectionResult}
-              onChange={(e) => setFilters((prev) => ({ ...prev, inspectionResult: e.target.value }))}
-              className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Results</option>
-              <option value="PASSED">Passed</option>
-              <option value="FAILED">Failed</option>
-            </select>
-          </div>
+                {/* Sub-defects for top categories */}
+                {MASTER_DEFECT_23_CATEGORIES.map((cat) => (
+                  <optgroup key={`opt-${cat.code}`} label={`── ${cat.name} Defects ──`}>
+                    {cat.subDefects.map((sub) => (
+                      <option key={sub.code} value={sub.name}>
+                        {sub.code}: {sub.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
 
-          {/* Export PPT Presentation Button */}
-          <button
-            onClick={async () => {
-              const { exportDashboardToPptx } = await import('../../utils/exportUtils');
-              await exportDashboardToPptx(
-                filteredReports,
-                capas,
-                filters.month !== 'ALL' ? filters.month : undefined
-              );
-            }}
-            title="Download full quality audit PowerPoint (.pptx) presentation"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-orange-600 hover:bg-orange-700 text-white font-bold border border-orange-700 shadow-xs cursor-pointer transition-colors shrink-0"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Export PPT</span>
-          </button>
+            {/* 6. Inspection Result Filter */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Result:</span>
+              <select
+                value={filters.inspectionResult}
+                onChange={(e) => setFilters((prev) => ({ ...prev, inspectionResult: e.target.value }))}
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">All Results</option>
+                <option value="PASSED">Passed</option>
+                <option value="FAILED">Failed</option>
+              </select>
+            </div>
 
-          {/* Reset Filters Button */}
-          {hasActiveFilters && (
+            {/* Export PPT Presentation Button */}
             <button
-              onClick={resetFilters}
-              title="Reset all filters to defaults"
-              className="flex items-center gap-1 px-2 py-1 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold border border-rose-300 dark:border-rose-800 hover:bg-rose-200 cursor-pointer transition-colors shrink-0"
+              onClick={async () => {
+                const { exportDashboardToPptx } = await import('../../utils/exportUtils');
+                await exportDashboardToPptx(
+                  filteredReports,
+                  capas,
+                  filters.month !== 'ALL' ? filters.month : undefined
+                );
+              }}
+              title="Download full quality audit PowerPoint (.pptx) presentation"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-orange-600 hover:bg-orange-700 text-white font-bold border border-orange-700 shadow-xs cursor-pointer transition-colors shrink-0"
             >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset</span>
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Export PPT</span>
             </button>
-          )}
+
+            {/* Reset Filters Button */}
+            {hasActiveFilters && (
+              <button
+                onClick={resetFilters}
+                title="Reset all filters to defaults (FY selection is preserved)"
+                className="flex items-center gap-1 px-2 py-1 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold border border-rose-300 dark:border-rose-800 hover:bg-rose-200 cursor-pointer transition-colors shrink-0"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* TOP ROW: 9 KPI Cards including OQL & PASS RATE Speedometer Gauges */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5">
-        {/* 1. INSPECTION REPORTS */}
-        <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
+        {/* 1. INSPECTION REPORTS (shows Report Count + Distinct Styles Inspected + Floor Count) */}
+        <div
+          data-testid="kpi-inspection-reports-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs"
+        >
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
             INSPECTION REPORTS
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white my-1">
-            {totalReports}
+          <div className="my-0.5">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+              {totalReports}
+            </div>
+            <div className="text-[10px] font-extrabold text-sky-800 dark:text-sky-300 mt-0.5">
+              {floorStats.distinctStyleCount} Styles Inspected
+            </div>
           </div>
-          <div className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-            Reports in slice
+          <div className="text-[9.5px] font-bold text-slate-600 dark:text-slate-400 leading-tight">
+            {floorStats.byFloor
+              .filter((fl) => selectedFloors.length === 0 || selectedFloors.includes(fl.floor))
+              .slice(0, 3)
+              .map((fl) => `${fl.floor}:${fl.reportCount}`)
+              .join(' • ')}
           </div>
         </div>
 
@@ -469,56 +720,80 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* 6. CRITICAL */}
-        <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
+        {/* 7. CRITICAL (Count + % of Inspected Qty) */}
+        <div
+          data-testid="kpi-critical-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs"
+        >
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
             CRITICAL
           </div>
-          <div className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 my-1">
-            {totalCritical}
+          <div className="my-0.5">
+            <div className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 leading-tight">
+              {totalCritical}
+            </div>
+            <div className="text-[11px] font-extrabold text-red-700 dark:text-red-300">
+              ({formatPctText(criticalPct)})
+            </div>
           </div>
           <div className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-            Defects
+            % of Inspected
           </div>
         </div>
 
-        {/* 7. MAJOR */}
-        <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
+        {/* 8. MAJOR (Count + % of Inspected Qty) */}
+        <div
+          data-testid="kpi-major-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs"
+        >
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
             MAJOR
           </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 my-1">
-            {totalMajor}
+          <div className="my-0.5">
+            <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 leading-tight">
+              {totalMajor}
+            </div>
+            <div className="text-[11px] font-extrabold text-amber-700 dark:text-amber-300">
+              ({formatPctText(majorPct)})
+            </div>
           </div>
           <div className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-            Defects
+            % of Inspected
           </div>
         </div>
 
-        {/* 8. MINOR */}
-        <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs">
+        {/* 9. MINOR (Count + % of Inspected Qty) */}
+        <div
+          data-testid="kpi-minor-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2.5 flex flex-col justify-between items-center text-center shadow-xs"
+        >
           <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
             MINOR
           </div>
-          <div className="text-xl sm:text-2xl font-black text-sky-600 dark:text-sky-400 my-1">
-            {totalMinor}
+          <div className="my-0.5">
+            <div className="text-xl sm:text-2xl font-black text-sky-600 dark:text-sky-400 leading-tight">
+              {totalMinor}
+            </div>
+            <div className="text-[11px] font-extrabold text-sky-700 dark:text-sky-300">
+              ({formatPctText(minorPct)})
+            </div>
           </div>
           <div className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-            Defects
+            % of Inspected
           </div>
         </div>
       </div>
 
-      {/* MIDDLE ROW: Highest Defects Column Chart | Last Week OQL Gauge | Month Wise OQL Performance */}
+      {/* MIDDLE ROW: Highest Defects Column Chart | Weekly OQL Trend (W32 start) | Month Wise OQL Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-        {/* Left (5 cols): HIGHEST DEFECTS CATEGORY (Top 5 Single Defects with Code, Name, Qty & %) */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
+        {/* Left (4 cols): HIGHEST DEFECTS CATEGORY (Top 5 Single Defects with Code, Name, Qty & % of Inspected) */}
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
           <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider">
             HIGHEST DEFECTS CATEGORY
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mb-1 font-semibold">
-              Top 5 Single Defects &mdash; Defect Quantity &amp; Percentage Share
+              Top 5 Single Defects &mdash; Defect Qty &amp; Rate (% of Inspected Qty)
             </p>
             <div className="h-64 w-full">
               {highestDefectsData.length === 0 ? (
@@ -540,13 +815,13 @@ export const DashboardView: React.FC = () => {
                     <XAxis
                       dataKey="codeAndName"
                       interval={0}
-                      tick={<DefectAxisTick maxCharsPerLine={15} maxNameLines={2} />}
+                      tick={<DefectAxisTick maxCharsPerLine={13} maxNameLines={2} />}
                       height={58}
                     />
                     <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
                     <Tooltip
                       formatter={(val: any, _name: any, item: any) => [
-                        `${val} defects (${item?.payload?.percentage ?? 0}%)`,
+                        `${val} defects (${formatPctText(item?.payload?.percentage ?? 0)} of inspected)`,
                         item?.payload?.codeAndName || 'Single Defect',
                       ]}
                     />
@@ -558,7 +833,7 @@ export const DashboardView: React.FC = () => {
                       <LabelList
                         dataKey="barLabel"
                         position="top"
-                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
+                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#0f172a' }}
                       />
                     </Bar>
                   </BarChart>
@@ -596,21 +871,114 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Center (3 cols): LAST WEEK OQL (Speedometer Gauge) */}
-        <div className="lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col items-center">
+        {/* Center (4 cols): WEEKLY OQL TREND (BESTSELLER International Week starting Aug = W32) */}
+        <div
+          data-testid="weekly-oql-trend-card"
+          className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
           <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider w-full">
-            LAST WEEK OQL
+            WEEKLY OQL TREND (LAST WEEK OQL)
           </div>
-          <div className="p-4 flex-1 flex flex-col items-center justify-center">
-            <SpeedometerGauge
-              value={lastWeekOql}
-              target={4.5}
-              max={12.0}
-              size="lg"
-              subLabel="Week Cycle: Sun - Sat"
-            />
-            <div className="mt-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
-              International ISO Apparel Standard (OBH)
+          <div className="p-3 flex-1 flex flex-col">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200">
+                BESTSELLER FY (Aug = W32 &rarr; Jul = W31)
+              </h4>
+              {latestWeekPoint && (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0">
+                  Latest {latestWeekPoint.weekLabel}: {latestWeekPoint.oql.toFixed(2)}%
+                </span>
+              )}
+            </div>
+            <div className="h-72 w-full">
+              {weeklyOqlTrendData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    No Weekly OQL Data in Current FY Slice
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                    Upload inspection reports to track weekly OQL progression starting Week 32 (August).
+                  </p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weeklyOqlTrendData} margin={{ top: 24, right: 18, left: -6, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis
+                      dataKey="weekLabel"
+                      interval={0}
+                      padding={{ left: 16, right: 16 }}
+                      angle={weeklyOqlTrendData.length > 8 ? -35 : 0}
+                      textAnchor={weeklyOqlTrendData.length > 8 ? 'end' : 'middle'}
+                      height={weeklyOqlTrendData.length > 8 ? 36 : 24}
+                      tick={{ fontSize: 9, fontWeight: 'bold' }}
+                    />
+                    <YAxis
+                      domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
+                      tickCount={4}
+                      tickFormatter={(v) => `${v}%`}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <ReferenceLine
+                      y={settings.targetOql || 4.5}
+                      stroke="#16a34a"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: `Target ${settings.targetOql || 4.5}%`,
+                        position: 'insideTopRight',
+                        fill: '#15803d',
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(val: any) => [`${Number(val).toFixed(2)}%`, 'Weekly OQL']}
+                      labelFormatter={(label: any, payload: any) => {
+                        const row = payload?.[0]?.payload;
+                        if (!row) return String(label);
+                        return `${label} (${row.weekStartDate} to ${row.weekEndDate}) • ${row.reportCount} rpt(s)`;
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="oql"
+                      isAnimationActive={false}
+                      stroke="#0284c7"
+                      strokeWidth={2.5}
+                      dot={{ r: 4, fill: '#dc2626', stroke: '#0284c7', strokeWidth: 2 }}
+                      activeDot={{ r: 6 }}
+                    >
+                      <LabelList
+                        dataKey="oql"
+                        content={(props: any) => {
+                          const { x, y, value, index } = props;
+                          if (x == null || y == null || value == null) return null;
+                          const dense = weeklyOqlTrendData.length > 7;
+                          const dy = dense && index % 2 === 1 ? 15 : -9;
+                          return (
+                            <text
+                              x={x}
+                              y={y + dy}
+                              textAnchor="middle"
+                              fontSize={dense ? 8.5 : 10}
+                              fontWeight="bold"
+                              fill="#0369a1"
+                              stroke="#ffffff"
+                              strokeWidth={2.5}
+                              paintOrder="stroke"
+                            >
+                              {`${Number(value).toFixed(2)}%`}
+                            </text>
+                          );
+                        }}
+                      />
+                    </Line>
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>
@@ -647,9 +1015,15 @@ export const DashboardView: React.FC = () => {
                       tick={{ fontSize: 10, fontWeight: 'bold' }}
                     />
                     <YAxis
-                      domain={[3.5, 9.0]}
-                      ticks={[3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.0]}
+                      domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
+                      tickCount={4}
+                      tickFormatter={(v) => `${v}%`}
                       tick={{ fontSize: 10 }}
+                    />
+                    <ReferenceLine
+                      y={settings.targetOql || 4.5}
+                      stroke="#16a34a"
+                      strokeDasharray="4 4"
                     />
                     <Tooltip formatter={(val: any) => [`${val}%`, 'Observed OQL']} />
                     <Line
@@ -685,7 +1059,7 @@ export const DashboardView: React.FC = () => {
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <p className="text-[11px] font-bold text-center text-red-600 dark:text-red-400 mb-1">
-              {monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel} &mdash; Single Defect Qty &amp; % Share
+              {monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel} &mdash; Single Defect Qty &amp; Rate (% of Inspected Qty)
             </p>
             <div className="h-64 w-full">
               {monthComparison.items.length === 0 ? (
@@ -715,7 +1089,7 @@ export const DashboardView: React.FC = () => {
                       formatter={(val: any, name: any, item: any) => {
                         const isCurr = String(name).includes(monthComparison.currMonthLabel);
                         const pct = isCurr ? item?.payload?.currentPct : item?.payload?.previousPct;
-                        return [`${val} defects (${pct ?? 0}%)`, name];
+                        return [`${val} defects (${formatPctText(pct ?? 0)} of inspected)`, name];
                       }}
                     />
                     <Legend
@@ -772,10 +1146,10 @@ export const DashboardView: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2 shrink-0 font-bold">
                       <span className="text-pink-600 dark:text-pink-400">
-                        {monthComparison.currMonthLabel.split(' ')[0]}: {item.current} ({item.currentPct}%)
+                        {monthComparison.currMonthLabel.split(' ')[0]}: {item.current} ({formatPctText(item.currentPct)})
                       </span>
                       <span className="text-amber-700 dark:text-amber-400">
-                        {monthComparison.prevMonthLabel.split(' ')[0]}: {item.previous} ({item.previousPct}%)
+                        {monthComparison.prevMonthLabel.split(' ')[0]}: {item.previous} ({formatPctText(item.previousPct)})
                       </span>
                     </div>
                   </div>

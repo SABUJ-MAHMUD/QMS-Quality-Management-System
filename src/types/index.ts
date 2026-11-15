@@ -8,6 +8,8 @@ export type ExtractionStatus = 'Pending' | 'Extracting' | 'Extracted' | 'Failed'
 
 export type ValidationStatus = 'Draft' | 'Validated' | 'Approved' | 'Rejected';
 
+export type ReportSource = 'BSQC' | 'AQC';
+
 export type CapaStatus = 'Open' | 'In Progress' | 'Pending Verification' | 'Effective' | 'Ineffective' | 'Closed';
 
 export type EffectivenessStatus = 'Effective' | 'Ineffective' | 'Pending Verification' | 'Under Monitoring' | 'Not Applicable';
@@ -52,6 +54,7 @@ export interface InspectionReport {
   brand?: string;
   factory: string;
   reportNumber: string;
+  reportSource?: ReportSource; // "BSQC" (default Inspection report, Final/Inline) vs "AQC" (Inspection report, AQC Final/Inline)
   inspectionType?: string; // e.g. "Final", "Inline", "Pre-Final"
   inspectionDate: string; // YYYY-MM-DD
   orderNumber: string;
@@ -152,7 +155,9 @@ export interface MonitoringRecord {
 
 export interface GlobalFilterState {
   buyer: string | string[];
-  financialYear: string;
+  financialYear: string | string[];
+  floors: string[];
+  reportSource: 'ALL' | ReportSource;
   month: string;
   dateFrom: string;
   dateTo: string;

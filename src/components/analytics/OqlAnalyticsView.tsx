@@ -36,7 +36,7 @@ import {
 } from 'recharts';
 import { getFinancialYear } from '../../utils/oqlCalculator';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
-import { formatQtyAndPct } from '../../utils/dashboardAnalytics';
+import { formatQtyAndPct, formatPctText } from '../../utils/dashboardAnalytics';
 import { DefectAxisTick } from '../common/DefectAxisTick';
 
 const SEVERITY_COLORS = {
@@ -78,7 +78,7 @@ export const OqlAnalyticsView: React.FC = () => {
       }));
   }, [filteredReports, settings.targetOql]);
 
-  // Defect-wise column chart data with canonical PDF Code, Name, Qty & %
+  // Defect-wise column chart data with canonical PDF Code, Name, Qty & Rate (% of Inspected Qty)
   const defectWiseData = useMemo(() => {
     const map = new Map<
       string,
@@ -91,9 +91,10 @@ export const OqlAnalyticsView: React.FC = () => {
         group: string;
       }
     >();
-    let totalD = 0;
+    let totalInspected = 0;
 
     filteredReports.forEach((r) => {
+      totalInspected += Number(r.inspectedQuantity) || 0;
       r.defects?.forEach((d) => {
         const qty = Number(d.defectQuantity) || 0;
         if (qty <= 0) return;
@@ -108,14 +109,13 @@ export const OqlAnalyticsView: React.FC = () => {
           group: info.categoryName,
         };
         cur.quantity += qty;
-        totalD += qty;
         map.set(key, cur);
       });
     });
 
     return Array.from(map.values())
       .map((d) => {
-        const percentage = totalD > 0 ? Number(((d.quantity / totalD) * 100).toFixed(1)) : 0;
+        const percentage = totalInspected > 0 ? Number(((d.quantity / totalInspected) * 100).toFixed(2)) : 0;
         return {
           ...d,
           percentage,
@@ -313,10 +313,10 @@ export const OqlAnalyticsView: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-sky-600" />
-                Defect-wise Column Chart &amp; Share (%)
+                Defect-wise Column Chart &amp; Rate (% of Inspected Qty)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Frequency and percentage share of individual defects across all inspected orders.
+                Frequency and defect rate ((Defect Qty &divide; Total Inspected Qty) &times; 100) across active reports.
               </p>
             </div>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
@@ -337,7 +337,7 @@ export const OqlAnalyticsView: React.FC = () => {
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} width={34} />
                 <Tooltip
                   formatter={(val: any, _name: any, item: any) => [
-                    `${val} defects (${item.payload.percentage}%)`,
+                    `${val} defects (${formatPctText(item.payload.percentage)} of inspected)`,
                     item.payload.codeAndName,
                   ]}
                   contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }}

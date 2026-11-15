@@ -266,13 +266,13 @@ export async function exportDashboardToPptx(
         { text: 'Rank', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
         { text: 'Defect Description', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
         { text: 'Quantity Affected', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
-        { text: '% Share of Defects', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
+        { text: 'Defect Rate (% of Inspected)', options: { bold: true, fill: { color: '0284C7' }, color: 'FFFFFF' } },
       ],
       ...topDefects.map(([name, count], i) => [
         `#${i + 1}`,
         name,
         `${count} pcs`,
-        totalDefects > 0 ? `${((count / totalDefects) * 100).toFixed(1)}%` : '0%',
+        totalInspected > 0 ? `${((count / totalInspected) * 100).toFixed(2)}%` : '0.00%',
       ]),
     ];
     slide3.addTable(defectRows, {

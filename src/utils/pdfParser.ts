@@ -1,5 +1,5 @@
-import { InspectionReport, InspectionDefect, DefectMasterItem, DefectGroup, DefectSeverity } from '../types';
-import { calculateReportOql } from './oqlCalculator';
+import { InspectionReport, DefectMasterItem, DefectGroup, DefectSeverity, ReportSource } from '../types';
+import { calculateReportOql, detectReportSource, getReportSource, normalizeFloorName } from './oqlCalculator';
 import { classifyRawDefect } from '../data/defectMasterData';
 
 const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -12,6 +12,7 @@ export interface ExtractedInspectionDraft {
   inspector?: string;
   inspectorConclusion?: 'Approved' | 'Rejected' | 'Pending';
   reportNumber: string;
+  reportSource?: ReportSource;
   inspectionType?: string;
   inspectionDate: string;
   orderNumber: string; // NOF Serial
@@ -723,12 +724,16 @@ function createDraftFromReportTemplate(
   const brand = resolveBrandFromStyle(match.styleNumber, match.brand || 'ONLY&SONS');
   const derivedMonth = match.date ? match.date.slice(0, 7) : targetMonth || match.targetMonth;
 
+  const floorMatch = fileName.match(/\b(SEW[-_\s]?\d+)\b/i);
   return {
     buyer: brand,
     brand: brand,
     factory: match.factory,
     reportNumber: fileName.replace(/\.(pdf|png|jpg|jpeg)$/i, '').trim(),
+    reportSource: 'BSQC',
     inspectionType: 'Final',
+    floor: normalizeFloorName(floorMatch?.[1] || 'SEW-1'),
+    section: normalizeFloorName(floorMatch?.[1] || 'SEW-1'),
     inspectionDate: match.date,
     targetMonth: derivedMonth,
     orderNumber: match.orderNumber,
@@ -1028,11 +1033,15 @@ export function extractDataFromText(
     .filter((l) => l.length > 0 && l.length <= 320)
     .slice(0, 1500);
 
-  // 0. Inspection Type (Inline / Final / Pre-Final)
+  // 0. Report Source (BSQC vs AQC) & Inspection Type (Inline / Final / Pre-Final)
+  const reportSource: ReportSource = detectReportSource(bodyText, fileName);
+
   let inspectionType = 'Final';
   const typeMatch =
-    combinedSearch.match(/Inspection\s*report,?\s*(Inline|Final|Pre[-\s]?Final|Initial|Mid[-\s]?Line)\b/i) ||
-    combinedSearch.match(/\b(Inline|Final|Pre[-\s]?Final)\s+Inspection\b/i);
+    combinedSearch.match(
+      /Inspection\s*report,?\s*(?:AQC\s+|BSQC\s+)?(Inline|Final|Pre[-\s]?Final|Initial|Mid[-\s]?Line)\b/i
+    ) ||
+    combinedSearch.match(/\b(?:AQC\s+|BSQC\s+)?(Inline|Final|Pre[-\s]?Final)\s+Inspection\b/i);
   if (typeMatch?.[1]) {
     const rawType = typeMatch[1].toLowerCase().replace(/\s+/g, '-');
     inspectionType =
@@ -1064,7 +1073,7 @@ export function extractDataFromText(
   } else {
     const reportHeaderMatch =
       combinedSearch.match(
-        /Inspection\s*report,?\s*(?:Inline|Final|Pre[-\s]?Final)?\s*[:.\-]?\s*([^\r\n|]+)/i
+        /Inspection\s*report,?\s*(?:AQC\s+|BSQC\s+)?(?:Inline|Final|Pre[-\s]?Final)?\s*[:.\-]?\s*([^\r\n|]+)/i
       ) ||
       combinedSearch.match(/Order\s*(?:Number|No\.?)\s*(?:\([^)]*\))?\s*[:.\-]?\s*([^\r\n|]+)/i) ||
       combinedSearch.match(/PO\s*(?:Number|No\.?)\s*[:.\-]?\s*([A-Za-z0-9+\-_/ ]{3,40})/i);
@@ -1396,13 +1405,13 @@ export function extractDataFromText(
   const min = defects.filter((d) => d.severity === 'Minor').reduce((s, d) => s + d.defectQuantity, 0);
   const total = crit + maj + min;
 
-  // Extract floor / section (e.g. SEW-1, SEW-2, SEW-3)
+  // Extract floor / section (normalized to SEW-1, SEW-2, SEW-3)
   let floor = 'SEW-1';
   const floorMatch =
     fileName.match(/\b(SEW[-_\s]?[0-9A-Za-z]+)\b/i) ||
     combinedSearch.match(/\b(SEW[-_\s]?[0-9A-Za-z]+)\b/i);
   if (floorMatch) {
-    floor = floorMatch[1].toUpperCase().replace(/\s+/g, '-');
+    floor = normalizeFloorName(floorMatch[1]);
   }
 
   return {
@@ -1412,6 +1421,7 @@ export function extractDataFromText(
     inspector: inspector || '',
     inspectorConclusion,
     reportNumber,
+    reportSource,
     inspectionType,
     inspectionDate,
     targetMonth: dateInfo.fromDocument ? inspectionDate.slice(0, 7) : targetMonth || inspectionDate.slice(0, 7),
@@ -1449,6 +1459,7 @@ export function reportToDraft(report: InspectionReport): ExtractedInspectionDraf
     report.inspectorConclusion || (report.inspectionResult === 'FAILED' ? 'Rejected' : 'Approved');
   const derivedMonth =
     report.targetMonth || (report.inspectionDate ? report.inspectionDate.slice(0, 7) : '');
+  const normalizedFloor = normalizeFloorName(report.floor || report.section || 'SEW-1');
 
   return {
     existingReportId: report.id,
@@ -1458,11 +1469,12 @@ export function reportToDraft(report: InspectionReport): ExtractedInspectionDraf
     inspector: report.inspector || '',
     inspectorConclusion,
     reportNumber: report.reportNumber || '',
+    reportSource: getReportSource(report),
     inspectionType: report.inspectionType || 'Final',
     inspectionDate: report.inspectionDate || '',
     targetMonth: derivedMonth,
-    floor: report.floor || 'SEW-1',
-    section: report.section || report.floor || 'SEW-1',
+    floor: normalizedFloor,
+    section: normalizedFloor,
     orderNumber,
     poNumber: report.poNumber || orderNumber,
     nofSerialDetected: orderNumber.toUpperCase().includes('NOF'),
