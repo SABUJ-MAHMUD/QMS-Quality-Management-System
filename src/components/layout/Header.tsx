@@ -194,10 +194,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
   const roles: UserRole[] = ['Admin', 'QMS Manager', 'QMS Executive', 'Viewer'];
 
   return (
-    <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-sky-100 dark:border-slate-800 shadow-xs transition-colors">
-      <div className="px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
+    <header className="@container sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-sky-100 dark:border-slate-800 shadow-xs transition-colors">
+      <div className="px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         {/* Left Section: 3-Dots Sidebar Toggle + Brand Title with Clean Green Quality Mark */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 order-1">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
@@ -236,10 +236,10 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
           </div>
         </div>
 
-        {/* Global Controls & Filters in Header */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-center overflow-visible">
+        {/* Global Controls & Filters in Header — wraps cleanly onto 2nd bar until header is wide enough for a single line */}
+        <div className="order-3 @[1160px]:order-2 w-full @[1160px]:w-auto @[1160px]:flex-1 flex flex-wrap items-center gap-1.5 @[1160px]:justify-center pt-1.5 @[1160px]:pt-0 border-t border-slate-100 dark:border-slate-800 @[1160px]:border-t-0">
           {/* Global Search */}
-          <div className="relative flex-1 min-w-[120px] max-w-[190px]">
+          <div className="relative flex-1 min-w-[140px] max-w-[240px] @[1160px]:max-w-[190px]">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
@@ -408,7 +408,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
         </div>
 
         {/* Right Section: Live Clock, Fullscreen, Day/Night Switch, Notifications, User Profile */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 order-2 @[1160px]:order-3">
           {/* Live Clock & Date */}
           <LiveClock />
 
