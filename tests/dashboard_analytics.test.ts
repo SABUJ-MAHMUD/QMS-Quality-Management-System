@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { InspectionReport, InspectionDefect } from '../src/types';
+import { CAPARecord, InspectionReport, InspectionDefect } from '../src/types';
 import {
   computeTopSingleDefects,
   computeMonthToMonthTopDefects,
@@ -8,6 +8,8 @@ import {
   computeFloorStats,
   findDuplicateReportIds,
   buildDefaultCapaGuidance,
+  computeDynamicCapaRows,
+  selectDashboardCapaRows,
   formatQtyAndPct,
 } from '../src/utils/dashboardAnalytics';
 import { getFiscalWeekInfo, filterReports } from '../src/utils/oqlCalculator';
@@ -345,5 +347,125 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
     );
     assert.equal(sew2Aqc.length, 1);
     assert.equal(sew2Aqc[0].id, 'fy26-aqc');
+  });
+
+  it('computeDynamicCapaRows & selectDashboardCapaRows dynamically rank highest defect first per filter slice while preserving saved CAPA guidance', () => {
+    const reports: InspectionReport[] = [
+      makeReport({
+        id: 'r-sew1-oct',
+        reportNumber: 'R-SEW1-OCT',
+        orderNumber: 'NOF101',
+        styleNumber: 'ST-A',
+        floor: 'SEW-1',
+        reportSource: 'BSQC',
+        inspectionDate: '2026-10-10',
+        targetMonth: '2026-10',
+        defects: [
+          makeDefect({
+            id: 'd1',
+            originalDefectName: 'Cle-1: Spot, stain, and soil marks',
+            standardDefectName: 'Spot, stain, and soil marks',
+            defectQuantity: 5,
+          }),
+          makeDefect({
+            id: 'd2',
+            originalDefectName: 'Se-2: Skipped stitch',
+            standardDefectName: 'Skipped stitch',
+            defectQuantity: 2,
+          }),
+        ],
+      }),
+      makeReport({
+        id: 'r-sew2-nov-aqc',
+        reportNumber: 'R-SEW2-NOV',
+        orderNumber: 'NOF202',
+        styleNumber: 'ST-B',
+        floor: 'SEW-2',
+        reportSource: 'AQC',
+        inspectionDate: '2026-11-05',
+        targetMonth: '2026-11',
+        defects: [
+          makeDefect({
+            id: 'd3',
+            originalDefectName: 'Ne-1: Incorrect Neckline and half-moon shape',
+            standardDefectName: 'Incorrect Neckline and half-moon shape',
+            defectQuantity: 4,
+          }),
+          makeDefect({
+            id: 'd4',
+            originalDefectName: 'Cle-1: Spot, stain, and soil marks',
+            standardDefectName: 'Spot, stain, and soil marks',
+            defectQuantity: 1,
+          }),
+        ],
+      }),
+    ];
+
+    const savedCapas: CAPARecord[] = [
+      {
+        id: 'saved-cle1',
+        capaId: 'CAPA-2026-001',
+        inspectionReportId: 'r-sew1-oct',
+        reportNumber: '99 Reports Combined',
+        orderNumber: 'NOF999',
+        styleNumber: 'OLD',
+        buyer: 'BESTSELLER',
+        defectName: 'Cle-1: Spot, stain, and soil marks',
+        defectGroup: 'Cleanliness',
+        defectSeverity: 'Major',
+        defectQuantity: 26, // stale global snapshot qty
+        rootCause: 'Custom engineer oil shield root cause',
+        fiveWhyAnalysis: { why1: 'W1', why2: 'W2', why3: 'W3', why4: 'W4', why5: 'W5' },
+        correction: 'Clean lot',
+        correctiveAction: 'Custom CA for Cle-1',
+        preventiveAction: 'Custom PA for Cle-1',
+        responsiblePerson: 'Md. Salah Uddin',
+        responsibleDepartment: 'Finishing',
+        targetCompletionDate: '2026-11-30',
+        monitoringFrequency: 'Daily',
+        monitoringMethod: 'Audit',
+        capaStatus: 'In Progress',
+        effectivenessStatus: 'Effective',
+        showOnDashboard: true,
+        isDemo: false,
+        createdAt: '2026-10-01T00:00:00Z',
+        updatedAt: '2026-10-01T00:00:00Z',
+      },
+    ];
+
+    // 1. All reports: Cle-1 (5+1=6) > Ne-1 (4) > Se-2 (2)
+    const allDynamic = computeDynamicCapaRows(reports, savedCapas);
+    assert.equal(allDynamic[0].code, 'Cle-1');
+    assert.equal(allDynamic[0].capaRecord.defectQuantity, 6);
+    assert.equal(allDynamic[0].capaRecord.rootCause, 'Custom engineer oil shield root cause');
+    assert.equal(allDynamic[0].capaRecord.capaStatus, 'In Progress');
+    assert.equal(allDynamic[0].capaRecord.reportNumber, '2 Reports Combined');
+
+    const allDash = selectDashboardCapaRows(allDynamic, 5);
+    assert.equal(allDash.length, 3);
+    assert.equal(allDash[0].code, 'Cle-1');
+
+    // 2. Slice by Floor=SEW-2 & AQC & Month=2026-11 & Style=ST-B -> Ne-1 (Qty 4) MUST become SL #1 above Cle-1 (Qty 1)!
+    const sew2Slice = filterReports(
+      reports,
+      { floors: ['SEW-2'], reportSource: 'AQC', month: '2026-11', styleNumber: 'ST-B' },
+      8
+    );
+    const sew2Dynamic = computeDynamicCapaRows(sew2Slice, savedCapas);
+    assert.equal(sew2Dynamic.length, 2);
+    assert.equal(sew2Dynamic[0].code, 'Ne-1', 'Ne-1 must auto-rank at SL #1 for SEW-2 slice');
+    assert.equal(sew2Dynamic[0].capaRecord.defectQuantity, 4);
+    assert.equal(sew2Dynamic[0].isVirtual, true);
+    assert.equal(sew2Dynamic[1].code, 'Cle-1');
+    assert.equal(sew2Dynamic[1].capaRecord.defectQuantity, 1, 'Cle-1 quantity must recalculate to slice count 1, not global 26');
+
+    const sew2Dash = selectDashboardCapaRows(sew2Dynamic, 5);
+    assert.equal(sew2Dash[0].code, 'Ne-1', 'Dashboard RCA & CAPA SL #1 must auto-promote Ne-1');
+    assert.equal(sew2Dash[0].capaRecord.defectQuantity, 4);
+
+    // 3. Empty slice returns [] cleanly when includeUnmatchedSaved is false/omitted
+    const emptyDynamic = computeDynamicCapaRows([], savedCapas, { includeUnmatchedSaved: false });
+    assert.deepEqual(emptyDynamic, []);
+    assert.deepEqual(selectDashboardCapaRows(emptyDynamic, 5), []);
   });
 });

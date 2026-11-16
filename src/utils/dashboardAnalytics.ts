@@ -1,4 +1,4 @@
-import { InspectionReport } from '../types';
+import { CAPARecord, InspectionReport } from '../types';
 import { getCanonicalDefectInfo } from '../data/defectMasterData';
 import { getFiscalWeekInfo, normalizeFloorName } from './oqlCalculator';
 
@@ -510,3 +510,255 @@ export function buildDefaultCapaGuidance(categoryCode: string, defectName: strin
     }
   );
 }
+
+export interface DynamicCapaRow {
+  rowKey: string;
+  existingCapaId?: string;
+  isVirtual: boolean;
+  capaRecord: CAPARecord;
+  code: string;
+  pureName: string;
+  categoryCode: string;
+  categoryName: string;
+  reportCount: number;
+  orderCount: number;
+  isPinnedToDashboard: boolean;
+}
+
+const extractDefectCodeToken = (defectName: string): string => {
+  const m = (defectName || '').trim().match(/^\[?([A-Za-z]{2,4}-\d{1,3})\]?\s*[:\-]/i);
+  return m ? m[1].toLowerCase() : '';
+};
+
+const normalizeDefectNameForMatch = (defectName: string): string => {
+  return (defectName || '')
+    .replace(/^\[?[A-Za-z]{2,4}-?\d{1,3}\]?\s*[:\-]?\s*/, '')
+    .trim()
+    .toLowerCase();
+};
+
+/**
+ * Dynamically aggregates single defects from the active filteredReports slice,
+ * merges them with saved CAPARecord plans (preserving edited 5-Why, actions, owner, status, pin state),
+ * and ranks strictly Highest Defects First so both Dashboard RCA & CAPA and RCA & CAPA page stay synced.
+ */
+export function computeDynamicCapaRows(
+  filteredReports: InspectionReport[],
+  savedCapas: CAPARecord[],
+  options?: { includeUnmatchedSaved?: boolean }
+): DynamicCapaRow[] {
+  const defectMap = new Map<
+    string,
+    {
+      code: string;
+      pureName: string;
+      displayName: string;
+      categoryCode: string;
+      categoryName: string;
+      severity: 'Critical' | 'Major' | 'Minor';
+      qty: number;
+      reportIds: Set<string>;
+      orderNumbers: Set<string>;
+      latestReport: InspectionReport;
+    }
+  >();
+
+  filteredReports.forEach((r) => {
+    (r.defects || []).forEach((d) => {
+      const qty = Number(d.defectQuantity) || 0;
+      if (qty <= 0) return;
+
+      const info = getCanonicalDefectInfo(d);
+      const key = `${info.code.toLowerCase()}::${info.name.toLowerCase()}`;
+      const displayName = info.code && info.code !== 'Gen' ? `${info.code}: ${info.name}` : info.name;
+      const existing = defectMap.get(key);
+
+      if (existing) {
+        existing.qty += qty;
+        existing.reportIds.add(r.id);
+        if (r.orderNumber) existing.orderNumbers.add(r.orderNumber);
+        if (d.severity === 'Critical') existing.severity = 'Critical';
+        else if (d.severity === 'Major' && existing.severity === 'Minor') existing.severity = 'Major';
+      } else {
+        const orderSet = new Set<string>();
+        if (r.orderNumber) orderSet.add(r.orderNumber);
+        defectMap.set(key, {
+          code: info.code,
+          pureName: info.name,
+          displayName,
+          categoryCode: info.categoryCode,
+          categoryName: info.categoryName,
+          severity:
+            d.severity === 'Critical' || d.severity === 'Major' || d.severity === 'Minor'
+              ? d.severity
+              : 'Major',
+          qty,
+          reportIds: new Set([r.id]),
+          orderNumbers: orderSet,
+          latestReport: r,
+        });
+      }
+    });
+  });
+
+  // Index saved CAPAs by defect code and normalized defect name for O(1) matching
+  const capaByCode = new Map<string, CAPARecord>();
+  const capaByName = new Map<string, CAPARecord>();
+  savedCapas.forEach((c) => {
+    const codeTok = extractDefectCodeToken(c.defectName || '');
+    if (codeTok && !capaByCode.has(codeTok)) {
+      capaByCode.set(codeTok, c);
+    }
+    const nameKey = normalizeDefectNameForMatch(c.defectName || '');
+    if (nameKey && !capaByName.has(nameKey)) {
+      capaByName.set(nameKey, c);
+    }
+  });
+
+  const matchedCapaIds = new Set<string>();
+  const rows: DynamicCapaRow[] = [];
+
+  Array.from(defectMap.entries()).forEach(([key, entry], idx) => {
+    const codeKey = entry.code.toLowerCase();
+    const nameKey = entry.pureName.trim().toLowerCase();
+    const matchedCapa =
+      (codeKey && codeKey !== 'gen' ? capaByCode.get(codeKey) : undefined) ||
+      capaByName.get(nameKey);
+
+    if (matchedCapa) {
+      matchedCapaIds.add(matchedCapa.id);
+    }
+
+    const orderArr = Array.from(entry.orderNumbers);
+    const orderSummary =
+      orderArr.length > 1
+        ? `${orderArr[0]} (+${orderArr.length - 1} orders)`
+        : orderArr[0] || entry.latestReport.orderNumber;
+    const reportSummary =
+      entry.reportIds.size > 1
+        ? `${entry.reportIds.size} Reports Combined`
+        : entry.latestReport.reportNumber;
+
+    const guidance = buildDefaultCapaGuidance(entry.categoryCode, entry.displayName);
+
+    const resolvedRecord: CAPARecord = matchedCapa
+      ? {
+          ...matchedCapa,
+          defectName: entry.displayName,
+          defectGroup: entry.categoryName || matchedCapa.defectGroup,
+          defectQuantity: entry.qty,
+          reportNumber: reportSummary,
+          orderNumber: orderSummary,
+          styleNumber: entry.latestReport.styleNumber || matchedCapa.styleNumber,
+          buyer: entry.latestReport.buyer || matchedCapa.buyer,
+        }
+      : {
+          id: `auto-capa-${codeKey}-${idx}`,
+          capaId: `CAPA-AUTO-${entry.code.toUpperCase()}`,
+          inspectionReportId: entry.latestReport.id,
+          reportNumber: reportSummary,
+          orderNumber: orderSummary,
+          styleNumber: entry.latestReport.styleNumber || '',
+          buyer: entry.latestReport.buyer || 'BESTSELLER',
+          defectName: entry.displayName,
+          defectGroup: entry.categoryName,
+          defectSeverity: entry.severity,
+          defectQuantity: entry.qty,
+          rootCause: guidance.rootCause,
+          fiveWhyAnalysis: {
+            why1: guidance.why1,
+            why2: guidance.why2,
+            why3: guidance.why3,
+            why4: guidance.why4,
+            why5: guidance.why5,
+          },
+          correction: guidance.correction,
+          correctiveAction: guidance.correctiveAction,
+          preventiveAction: guidance.preventiveAction,
+          responsiblePerson: 'Quality & Production Lead',
+          responsibleDepartment: 'Sewing & Finishing',
+          targetCompletionDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+          monitoringFrequency: 'Weekly',
+          monitoringMethod: 'Daily 50 garments random end-line audit',
+          capaStatus: 'Open',
+          effectivenessStatus: 'Under Monitoring',
+          showOnDashboard: false,
+          isDemo: false,
+          createdAt: entry.latestReport.createdAt || new Date().toISOString(),
+          updatedAt: entry.latestReport.updatedAt || new Date().toISOString(),
+        };
+
+    rows.push({
+      rowKey: key,
+      existingCapaId: matchedCapa?.id,
+      isVirtual: !matchedCapa,
+      capaRecord: resolvedRecord,
+      code: entry.code,
+      pureName: entry.pureName,
+      categoryCode: entry.categoryCode,
+      categoryName: entry.categoryName,
+      reportCount: entry.reportIds.size,
+      orderCount: orderArr.length,
+      isPinnedToDashboard: matchedCapa?.showOnDashboard === true,
+    });
+  });
+
+  if (options?.includeUnmatchedSaved) {
+    savedCapas.forEach((c) => {
+      if (matchedCapaIds.has(c.id)) return;
+      const info = getCanonicalDefectInfo({
+        originalDefectName: c.defectName,
+        standardDefectName: c.defectName,
+        defectGroupId: c.defectGroup,
+      });
+      const fallbackQty = filteredReports.length === 0 ? Number(c.defectQuantity) || 0 : 0;
+      rows.push({
+        rowKey: `saved::${c.id}`,
+        existingCapaId: c.id,
+        isVirtual: false,
+        capaRecord: {
+          ...c,
+          defectQuantity: fallbackQty,
+        },
+        code: info.code,
+        pureName: info.name,
+        categoryCode: info.categoryCode,
+        categoryName: info.categoryName,
+        reportCount: fallbackQty > 0 ? 1 : 0,
+        orderCount: c.orderNumber ? 1 : 0,
+        isPinnedToDashboard: c.showOnDashboard === true,
+      });
+    });
+  }
+
+  return rows.sort(
+    (a, b) =>
+      (Number(b.capaRecord.defectQuantity) || 0) - (Number(a.capaRecord.defectQuantity) || 0) ||
+      b.reportCount - a.reportCount ||
+      a.capaRecord.defectName.localeCompare(b.capaRecord.defectName)
+  );
+}
+
+/**
+ * Selects the Dashboard RCA & CAPA summary rows:
+ * Automatically includes the Top N Highest Defects for the current filter slice
+ * (plus any explicitly pinned CAPA records present in the slice), always sorted Highest First.
+ */
+export function selectDashboardCapaRows(
+  dynamicRows: DynamicCapaRow[],
+  maxAutoCount: number = 5,
+  dismissedKeys?: Set<string>
+): DynamicCapaRow[] {
+  const activeRows = dynamicRows.filter((r) => (Number(r.capaRecord.defectQuantity) || 0) > 0);
+  return activeRows
+    .filter((row, idx) => {
+      if (dismissedKeys?.has(row.rowKey)) return false;
+      return idx < maxAutoCount || row.isPinnedToDashboard;
+    })
+    .sort(
+      (a, b) =>
+        (Number(b.capaRecord.defectQuantity) || 0) - (Number(a.capaRecord.defectQuantity) || 0) ||
+        b.reportCount - a.reportCount
+    );
+}
+

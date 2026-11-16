@@ -42,6 +42,8 @@ import {
   computeMonthToMonthTopDefects,
   computeWeeklyOqlTrend,
   computeFloorStats,
+  computeDynamicCapaRows,
+  selectDashboardCapaRows,
   formatPctText,
 } from '../../utils/dashboardAnalytics';
 import { ReportSource } from '../../types';
@@ -74,7 +76,12 @@ export const DashboardView: React.FC = () => {
   } = useApp();
 
   const [showFloorMenu, setShowFloorMenu] = useState(false);
+  const [dismissedAutoKeys, setDismissedAutoKeys] = useState<Set<string>>(() => new Set());
   const floorMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDismissedAutoKeys(new Set());
+  }, [filters]);
 
   useEffect(() => {
     if (!showFloorMenu) return;
@@ -302,24 +309,36 @@ export const DashboardView: React.FC = () => {
   );
 
   // Bottom Right: Root Cause Analysis & CAPA Summary Table
-  // User Requirement: Strictly shows ONLY records pushed to Dashboard (showOnDashboard === true).
-  // Pulling a record in RCA & CAPA immediately removes it from here.
+  // Automatically ranks the Top 5 Highest Defects for the active Dashboard filter slice (Month, Floor, BSQC/AQC, Style, Buyer, FY)
+  // plus any explicitly pinned CAPA items present in the current slice, always sorted Highest Defects First.
+  const dynamicCapaRows = useMemo(
+    () => computeDynamicCapaRows(filteredReports, capas),
+    [filteredReports, capas]
+  );
+
   const dashboardCapaList = useMemo(() => {
-    return [...capas]
-      .filter((c) => c.showOnDashboard === true)
-      .sort((a, b) => (Number(b.defectQuantity) || 0) - (Number(a.defectQuantity) || 0))
-      .map((c, index) => ({
-        id: c.id,
-        serial: index + 1,
-        defectName: c.defectName,
-        defectQuantity: Number(c.defectQuantity) || 0,
-        rootCause: c.rootCause || 'Root cause analyzed via 5-Why method in RCA & CAPA module.',
-        correctiveAction: c.correctiveAction || c.correction || 'Immediate containment & lot sorting.',
-        preventiveAction: c.preventiveAction || 'Machine calibration & operator retraining.',
-        responsiblePerson: c.responsiblePerson || 'QA Lead',
-        status: c.capaStatus,
-      }));
-  }, [capas]);
+    return selectDashboardCapaRows(dynamicCapaRows, 5, dismissedAutoKeys).map((row, index) => ({
+      id: row.capaRecord.id,
+      existingCapaId: row.existingCapaId,
+      isVirtual: row.isVirtual,
+      rowKey: row.rowKey,
+      isPinnedToDashboard: row.isPinnedToDashboard,
+      serial: index + 1,
+      defectName: row.capaRecord.defectName,
+      defectQuantity: Number(row.capaRecord.defectQuantity) || 0,
+      reportNumber: row.capaRecord.reportNumber,
+      rootCause:
+        row.capaRecord.rootCause || 'Root cause analyzed via 5-Why method in RCA & CAPA module.',
+      correctiveAction:
+        row.capaRecord.correctiveAction ||
+        row.capaRecord.correction ||
+        'Immediate containment & lot sorting.',
+      preventiveAction:
+        row.capaRecord.preventiveAction || 'Machine calibration & operator retraining.',
+      responsiblePerson: row.capaRecord.responsiblePerson || 'QA Lead',
+      status: row.capaRecord.capaStatus,
+    }));
+  }, [dynamicCapaRows, dismissedAutoKeys]);
 
   return (
     <div className="p-4 space-y-4 max-w-[1700px] mx-auto text-slate-800 dark:text-slate-100">
@@ -1161,15 +1180,34 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Right (7 cols): Root Cause Analysis & CAPA Summary Table */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
-          <div className="bg-emerald-700 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider flex items-center justify-between px-3">
-            <span>Root Cause Analysis &amp; CAPA (RCA &amp; CAPA)</span>
-            <button
-              onClick={() => setActiveTab('capa')}
-              className="text-[10px] bg-white text-emerald-800 font-extrabold px-2.5 py-1 rounded shadow-xs hover:bg-emerald-50 cursor-pointer"
-            >
-              Manage in RCA &amp; CAPA Page &rarr;
-            </button>
+        <div
+          data-testid="dashboard-capa-card"
+          className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          <div className="bg-emerald-700 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider flex flex-wrap items-center justify-between gap-2 px-3">
+            <div className="flex items-center gap-2">
+              <span>Root Cause Analysis &amp; CAPA (RCA &amp; CAPA)</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-100 border border-emerald-500/40 normal-case">
+                Auto Top {dashboardCapaList.length} Highest ({totalReports} Reports)
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {dismissedAutoKeys.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDismissedAutoKeys(new Set())}
+                  className="text-[10px] bg-emerald-800 text-white font-bold px-2 py-1 rounded border border-emerald-500/50 hover:bg-emerald-900 cursor-pointer"
+                >
+                  Restore Hidden ({dismissedAutoKeys.size})
+                </button>
+              )}
+              <button
+                onClick={() => setActiveTab('capa')}
+                className="text-[10px] bg-white text-emerald-800 font-extrabold px-2.5 py-1 rounded shadow-xs hover:bg-emerald-50 cursor-pointer"
+              >
+                Manage in RCA &amp; CAPA Page &rarr;
+              </button>
+            </div>
           </div>
           <div className="p-2 flex-1 overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -1193,10 +1231,10 @@ export const DashboardView: React.FC = () => {
                           <ShieldCheck className="w-5 h-5" />
                         </div>
                         <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          No CAPA Plans Toggled for Dashboard
+                          No Defects Recorded for Current Filter Slice
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          Go to the RCA &amp; CAPA page, review highest defects, and switch "Push to Dashboard" on any plan to display it here.
+                          The selected Month, Floor, BSQC/AQC, or Style slice currently has 0 defects. Adjust filters or open RCA &amp; CAPA to review all plans.
                         </p>
                         <button
                           onClick={() => setActiveTab('capa')}
@@ -1210,7 +1248,7 @@ export const DashboardView: React.FC = () => {
                 ) : (
                   dashboardCapaList.map((row) => (
                     <tr
-                      key={row.id}
+                      key={row.rowKey}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <td className="p-1.5 text-center font-bold text-slate-500">
@@ -1220,6 +1258,11 @@ export const DashboardView: React.FC = () => {
                         <div>{row.defectName}</div>
                         <div className="text-[10px] font-black text-rose-600 dark:text-rose-400">
                           Total Qty: {row.defectQuantity}
+                          {row.reportNumber ? (
+                            <span className="text-slate-400 dark:text-slate-500 font-semibold ml-1">
+                              &bull; {row.reportNumber}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
@@ -1242,8 +1285,17 @@ export const DashboardView: React.FC = () => {
                           {canManageData && (
                             <button
                               type="button"
-                              onClick={() => updateCapa(row.id, { showOnDashboard: false })}
-                              title="Pull off Dashboard (keeps in RCA & CAPA)"
+                              onClick={() => {
+                                if (!row.isVirtual && row.existingCapaId && row.isPinnedToDashboard) {
+                                  updateCapa(row.existingCapaId, { showOnDashboard: false });
+                                }
+                                setDismissedAutoKeys((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(row.rowKey);
+                                  return next;
+                                });
+                              }}
+                              title="Hide from Dashboard for current filter view"
                               className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
                             >
                               &minus;
