@@ -76,12 +76,7 @@ export const DashboardView: React.FC = () => {
   } = useApp();
 
   const [showFloorMenu, setShowFloorMenu] = useState(false);
-  const [dismissedAutoKeys, setDismissedAutoKeys] = useState<Set<string>>(() => new Set());
   const floorMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setDismissedAutoKeys(new Set());
-  }, [filters]);
 
   useEffect(() => {
     if (!showFloorMenu) return;
@@ -309,15 +304,19 @@ export const DashboardView: React.FC = () => {
   );
 
   // Bottom Right: Root Cause Analysis & CAPA Summary Table
-  // Automatically ranks the Top 5 Highest Defects for the active Dashboard filter slice (Month, Floor, BSQC/AQC, Style, Buyer, FY)
-  // plus any explicitly pinned CAPA items present in the current slice, always sorted Highest Defects First.
+  // Shows defects pushed to Dashboard (+ Push to Dashboard) that occur in the active Dashboard filter slice
+  // (Month, Floor, BSQC/AQC, Style, Buyer, FY), dynamically ranked Highest Defects First.
   const dynamicCapaRows = useMemo(
     () => computeDynamicCapaRows(filteredReports, capas),
     [filteredReports, capas]
   );
 
+  const topSliceDefect = dynamicCapaRows.find(
+    (r) => (Number(r.capaRecord.defectQuantity) || 0) > 0
+  );
+
   const dashboardCapaList = useMemo(() => {
-    return selectDashboardCapaRows(dynamicCapaRows, 5, dismissedAutoKeys).map((row, index) => ({
+    return selectDashboardCapaRows(dynamicCapaRows).map((row, index) => ({
       id: row.capaRecord.id,
       existingCapaId: row.existingCapaId,
       isVirtual: row.isVirtual,
@@ -338,7 +337,7 @@ export const DashboardView: React.FC = () => {
       responsiblePerson: row.capaRecord.responsiblePerson || 'QA Lead',
       status: row.capaRecord.capaStatus,
     }));
-  }, [dynamicCapaRows, dismissedAutoKeys]);
+  }, [dynamicCapaRows]);
 
   return (
     <div className="p-4 space-y-4 max-w-[1700px] mx-auto text-slate-800 dark:text-slate-100">
@@ -1188,19 +1187,10 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center gap-2">
               <span>Root Cause Analysis &amp; CAPA (RCA &amp; CAPA)</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-100 border border-emerald-500/40 normal-case">
-                Auto Top {dashboardCapaList.length} Highest ({totalReports} Reports)
+                On Dashboard: {dashboardCapaList.length} ({totalReports} Reports &bull; Highest First)
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              {dismissedAutoKeys.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setDismissedAutoKeys(new Set())}
-                  className="text-[10px] bg-emerald-800 text-white font-bold px-2 py-1 rounded border border-emerald-500/50 hover:bg-emerald-900 cursor-pointer"
-                >
-                  Restore Hidden ({dismissedAutoKeys.size})
-                </button>
-              )}
               <button
                 onClick={() => setActiveTab('capa')}
                 className="text-[10px] bg-white text-emerald-800 font-extrabold px-2.5 py-1 rounded shadow-xs hover:bg-emerald-50 cursor-pointer"
@@ -1231,10 +1221,14 @@ export const DashboardView: React.FC = () => {
                           <ShieldCheck className="w-5 h-5" />
                         </div>
                         <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          No Defects Recorded for Current Filter Slice
+                          {topSliceDefect
+                            ? 'No Pinned CAPA Items in Current Filter Slice'
+                            : 'No Defects Recorded for Current Filter Slice'}
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          The selected Month, Floor, BSQC/AQC, or Style slice currently has 0 defects. Adjust filters or open RCA &amp; CAPA to review all plans.
+                          {topSliceDefect
+                            ? `Highest defect in this slice is "${topSliceDefect.capaRecord.defectName}" (Qty: ${topSliceDefect.capaRecord.defectQuantity}). Use "+ Push to Dashboard" in RCA & CAPA to pin defects here.`
+                            : 'The selected Month, Floor, BSQC/AQC, or Style slice currently has 0 defects.'}
                         </p>
                         <button
                           onClick={() => setActiveTab('capa')}
@@ -1282,20 +1276,11 @@ export const DashboardView: React.FC = () => {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                             {row.status}
                           </span>
-                          {canManageData && (
+                          {canManageData && !row.isVirtual && row.existingCapaId && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (!row.isVirtual && row.existingCapaId && row.isPinnedToDashboard) {
-                                  updateCapa(row.existingCapaId, { showOnDashboard: false });
-                                }
-                                setDismissedAutoKeys((prev) => {
-                                  const next = new Set(prev);
-                                  next.add(row.rowKey);
-                                  return next;
-                                });
-                              }}
-                              title="Hide from Dashboard for current filter view"
+                              onClick={() => updateCapa(row.existingCapaId!, { showOnDashboard: false })}
+                              title="Unpin from Dashboard"
                               className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
                             >
                               &minus;

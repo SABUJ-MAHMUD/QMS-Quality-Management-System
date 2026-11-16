@@ -426,12 +426,11 @@ export const CapaView: React.FC = () => {
     [filteredReports, capas, hasActiveFilters]
   );
 
-  // Track which dynamic rows are displayed on Dashboard (Auto Top 5 Highest + explicitly pinned)
-  const dashboardEligibleRowKeys = useMemo(() => {
+  // Track which dynamic rows are explicitly pinned to Dashboard (+ Push to Dashboard / - Unpin)
+  const pinnedRowKeys = useMemo(() => {
     const set = new Set<string>();
-    const activeOnly = dynamicCapaRows.filter((r) => (Number(r.capaRecord.defectQuantity) || 0) > 0);
-    activeOnly.forEach((r, idx) => {
-      if (idx < 5 || r.isPinnedToDashboard) {
+    dynamicCapaRows.forEach((r) => {
+      if (r.isPinnedToDashboard) {
         set.add(r.rowKey);
       }
     });
@@ -473,7 +472,7 @@ export const CapaView: React.FC = () => {
               c.defectName.toLowerCase().startsWith(catObj.code.toLowerCase() + '-')));
         if (!matchesCat) return false;
       }
-      const isOnDash = dashboardEligibleRowKeys.has(row.rowKey);
+      const isOnDash = pinnedRowKeys.has(row.rowKey);
       if (dashFilter === 'DASHBOARD' && !isOnDash) return false;
       if (dashFilter === 'CAPA_ONLY' && isOnDash) return false;
       if (search) {
@@ -502,7 +501,7 @@ export const CapaView: React.FC = () => {
       }
       return (b.capaRecord.createdAt || '').localeCompare(a.capaRecord.createdAt || '');
     });
-  }, [dynamicCapaRows, dashboardEligibleRowKeys, statusFilter, categoryFilter, dashFilter, search, sortBy]);
+  }, [dynamicCapaRows, pinnedRowKeys, statusFilter, categoryFilter, dashFilter, search, sortBy]);
 
   const filteredCapas = useMemo(
     () => filteredDynamicRows.map((r) => r.capaRecord),
@@ -557,7 +556,7 @@ export const CapaView: React.FC = () => {
                 RCA &amp; CAPA
               </h1>
               <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-white/90 dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 border border-emerald-400/60">
-                Active Slice: {filteredReports.length} of {reports.length} Reports &bull; Auto Highest First
+                Active Slice: {filteredReports.length} of {reports.length} Reports &bull; Highest Defects First
               </span>
             </div>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -761,8 +760,8 @@ export const CapaView: React.FC = () => {
           <span className="text-slate-400 font-semibold mr-0.5">Placement:</span>
           {[
             { id: 'ALL', label: `All (${dynamicCapaRows.length})` },
-            { id: 'DASHBOARD', label: `On Dashboard (${dashboardEligibleRowKeys.size})` },
-            { id: 'CAPA_ONLY', label: `CAPA Only (${Math.max(0, dynamicCapaRows.length - dashboardEligibleRowKeys.size)})` },
+            { id: 'DASHBOARD', label: `On Dashboard (${pinnedRowKeys.size})` },
+            { id: 'CAPA_ONLY', label: `CAPA Only (${Math.max(0, dynamicCapaRows.length - pinnedRowKeys.size)})` },
           ].map((opt) => (
             <button
               key={opt.id}
@@ -862,7 +861,7 @@ export const CapaView: React.FC = () => {
               ) : (
                 filteredDynamicRows.map((row, idx) => {
                   const c = row.capaRecord;
-                  const isOnDash = dashboardEligibleRowKeys.has(row.rowKey);
+                  const isOnDash = pinnedRowKeys.has(row.rowKey);
                   return (
                     <tr key={row.rowKey} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-2.5 px-3 text-center font-bold text-slate-500">
@@ -922,13 +921,13 @@ export const CapaView: React.FC = () => {
 
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Two-Way Push (+) / Pull (-) Dashboard Toggle */}
+                          {/* Strictly two states: (+ Push to Dashboard) OR (✓ On Dashboard & - Unpin) */}
                           {isOnDash ? (
                             <div className="inline-flex items-center gap-1">
                               <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300">
-                                {idx < 5 && !row.isPinnedToDashboard ? '★ Auto Top 5' : '✓ On Dashboard'}
+                                ✓ On Dashboard
                               </span>
-                              {canManageData && !row.isVirtual && row.existingCapaId && row.isPinnedToDashboard && (
+                              {canManageData && !row.isVirtual && row.existingCapaId && (
                                 <button
                                   type="button"
                                   onClick={() => updateCapa(row.existingCapaId!, { showOnDashboard: false })}
@@ -956,12 +955,14 @@ export const CapaView: React.FC = () => {
                                 }
                               }}
                               className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950/50 dark:text-sky-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
-                              title="Pin this CAPA item to the Main Dashboard"
+                              title="Push this CAPA item to the Main Dashboard"
                             >
                               <Plus className="w-3 h-3" />
                               Push to Dashboard
                             </button>
-                          ) : null}
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-semibold">CAPA Only</span>
+                          )}
 
                           {canManageData && (
                             <button

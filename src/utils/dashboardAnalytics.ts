@@ -741,24 +741,19 @@ export function computeDynamicCapaRows(
 
 /**
  * Selects the Dashboard RCA & CAPA summary rows:
- * Automatically includes the Top N Highest Defects for the current filter slice
- * (plus any explicitly pinned CAPA records present in the slice), always sorted Highest First.
+ * Shows defects pushed to Dashboard (showOnDashboard === true) that occur in the active filter slice,
+ * dynamically ranked Highest Defects First (পর্যায়ক্রমে উপর থেকে নীচে).
  */
 export function selectDashboardCapaRows(
-  dynamicRows: DynamicCapaRow[],
-  maxAutoCount: number = 5,
-  dismissedKeys?: Set<string>
+  dynamicRows: DynamicCapaRow[]
 ): DynamicCapaRow[] {
-  const activeRows = dynamicRows.filter((r) => (Number(r.capaRecord.defectQuantity) || 0) > 0);
-  return activeRows
-    .filter((row, idx) => {
-      if (dismissedKeys?.has(row.rowKey)) return false;
-      return idx < maxAutoCount || row.isPinnedToDashboard;
-    })
+  return dynamicRows
+    .filter((r) => (Number(r.capaRecord.defectQuantity) || 0) > 0 && r.isPinnedToDashboard)
     .sort(
       (a, b) =>
         (Number(b.capaRecord.defectQuantity) || 0) - (Number(a.capaRecord.defectQuantity) || 0) ||
-        b.reportCount - a.reportCount
+        b.reportCount - a.reportCount ||
+        a.capaRecord.defectName.localeCompare(b.capaRecord.defectName)
     );
 }
 

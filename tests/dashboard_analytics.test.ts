@@ -433,7 +433,8 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
       },
     ];
 
-    // 1. All reports: Cle-1 (5+1=6) > Ne-1 (4) > Se-2 (2)
+    // 1. All reports: computeDynamicCapaRows ranks Cle-1 (5+1=6) > Ne-1 (4) > Se-2 (2)
+    //    selectDashboardCapaRows shows only pushed/pinned items in the active slice (Cle-1)
     const allDynamic = computeDynamicCapaRows(reports, savedCapas);
     assert.equal(allDynamic[0].code, 'Cle-1');
     assert.equal(allDynamic[0].capaRecord.defectQuantity, 6);
@@ -441,31 +442,49 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
     assert.equal(allDynamic[0].capaRecord.capaStatus, 'In Progress');
     assert.equal(allDynamic[0].capaRecord.reportNumber, '2 Reports Combined');
 
-    const allDash = selectDashboardCapaRows(allDynamic, 5);
-    assert.equal(allDash.length, 3);
+    const allDash = selectDashboardCapaRows(allDynamic);
+    assert.equal(allDash.length, 1);
     assert.equal(allDash[0].code, 'Cle-1');
 
-    // 2. Slice by Floor=SEW-2 & AQC & Month=2026-11 & Style=ST-B -> Ne-1 (Qty 4) MUST become SL #1 above Cle-1 (Qty 1)!
+    // 2. If Ne-1 is also pinned (+ Push to Dashboard), under SEW-2 slice Ne-1 (Qty 4) automatically ranks SL #1 above Cle-1 (Qty 1)
+    const savedWithBothPinned: CAPARecord[] = [
+      ...savedCapas,
+      {
+        ...savedCapas[0],
+        id: 'saved-ne1',
+        capaId: 'CAPA-2026-002',
+        defectName: 'Ne-1: Incorrect Neckline and half-moon shape',
+        defectQuantity: 4,
+        showOnDashboard: true,
+      },
+    ];
+
     const sew2Slice = filterReports(
       reports,
       { floors: ['SEW-2'], reportSource: 'AQC', month: '2026-11', styleNumber: 'ST-B' },
       8
     );
-    const sew2Dynamic = computeDynamicCapaRows(sew2Slice, savedCapas);
+    const sew2Dynamic = computeDynamicCapaRows(sew2Slice, savedWithBothPinned);
     assert.equal(sew2Dynamic.length, 2);
-    assert.equal(sew2Dynamic[0].code, 'Ne-1', 'Ne-1 must auto-rank at SL #1 for SEW-2 slice');
+    assert.equal(sew2Dynamic[0].code, 'Ne-1', 'Ne-1 must rank at SL #1 for SEW-2 slice');
     assert.equal(sew2Dynamic[0].capaRecord.defectQuantity, 4);
-    assert.equal(sew2Dynamic[0].isVirtual, true);
     assert.equal(sew2Dynamic[1].code, 'Cle-1');
     assert.equal(sew2Dynamic[1].capaRecord.defectQuantity, 1, 'Cle-1 quantity must recalculate to slice count 1, not global 26');
 
-    const sew2Dash = selectDashboardCapaRows(sew2Dynamic, 5);
-    assert.equal(sew2Dash[0].code, 'Ne-1', 'Dashboard RCA & CAPA SL #1 must auto-promote Ne-1');
+    const sew2Dash = selectDashboardCapaRows(sew2Dynamic);
+    assert.equal(sew2Dash.length, 2);
+    assert.equal(sew2Dash[0].code, 'Ne-1', 'Dashboard RCA & CAPA SL #1 must auto-promote Ne-1 above Cle-1');
     assert.equal(sew2Dash[0].capaRecord.defectQuantity, 4);
+    assert.equal(sew2Dash[1].code, 'Cle-1');
 
-    // 3. Empty slice returns [] cleanly when includeUnmatchedSaved is false/omitted
-    const emptyDynamic = computeDynamicCapaRows([], savedCapas, { includeUnmatchedSaved: false });
+    // 3. Unpinned items NEVER sneak onto Dashboard; unpinning Cle-1 removes it cleanly
+    const sew2OnlyCleUnpinned = computeDynamicCapaRows(sew2Slice, savedCapas.map((c) => ({ ...c, showOnDashboard: false })));
+    assert.equal(sew2OnlyCleUnpinned[0].code, 'Ne-1', 'RCA & CAPA list still ranks Ne-1 first highest-to-lowest');
+    assert.deepEqual(selectDashboardCapaRows(sew2OnlyCleUnpinned), [], 'Unpinned defects must not appear on Dashboard');
+
+    // 4. Empty slice returns [] cleanly when includeUnmatchedSaved is false/omitted
+    const emptyDynamic = computeDynamicCapaRows([], savedWithBothPinned, { includeUnmatchedSaved: false });
     assert.deepEqual(emptyDynamic, []);
-    assert.deepEqual(selectDashboardCapaRows(emptyDynamic, 5), []);
+    assert.deepEqual(selectDashboardCapaRows(emptyDynamic), []);
   });
 });
