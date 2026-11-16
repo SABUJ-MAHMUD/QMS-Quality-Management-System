@@ -149,9 +149,12 @@ export const LoginPortalView: React.FC = () => {
 
     // Special Auto-Handling for Super Admin
     if (trimmedEmail === 'quality.engineer.bd@gmail.com') {
+      const matchedAdmin = registeredUsers.find(
+        (u) => u.email.toLowerCase() === 'quality.engineer.bd@gmail.com'
+      );
       login('dashboard', {
         email: 'quality.engineer.bd@gmail.com',
-        name: 'Quality Engineer (Admin)',
+        name: matchedAdmin?.name || 'Quality Lead Admin',
         role: 'Admin',
       });
       return;

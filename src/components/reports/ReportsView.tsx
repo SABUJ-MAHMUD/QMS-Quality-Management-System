@@ -267,7 +267,7 @@ export const ReportsView: React.FC = () => {
 
         {/* Corporate branding watermark bar */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 text-center text-[11px] text-slate-500 font-medium">
-          Garment Quality Analytics | Digital Quality Intelligence System &bull; Northern Fashions Ltd. QMS
+          OQL: Analysis, (Garments Quality) &bull; Northern Fashions Ltd. OQL
         </div>
       </div>
     </div>

@@ -99,7 +99,7 @@ export function printQualityReport(title: string, contentHtml: string) {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>${title} - Garment Quality Analytics</title>
+        <title>${title} - OQL: Analysis, (Garments Quality)</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 24px; padding: 0; }
           .header { border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
@@ -118,8 +118,8 @@ export function printQualityReport(title: string, contentHtml: string) {
       <body>
         <div class="header">
           <div>
-            <div class="title">Garment Quality Analytics</div>
-            <div class="subtitle">Digital Quality Intelligence System | Northern Fashions Ltd.</div>
+            <div class="title">OQL: Analysis, (Garments Quality)</div>
+            <div class="subtitle">Northern Fashions Ltd. &bull; QMS - Quality Management System</div>
           </div>
           <div class="meta">
             <div><strong>Report:</strong> ${title}</div>
@@ -130,7 +130,7 @@ export function printQualityReport(title: string, contentHtml: string) {
           ${contentHtml}
         </div>
         <div class="footer">
-          <strong>Garment Quality Analytics | Digital Quality Intelligence System</strong><br/>
+          <strong>OQL: Analysis, (Garments Quality)</strong><br/>
           Confidential QMS Audit Documentation &copy; ${new Date().getFullYear()} Northern Fashions Ltd.
         </div>
         <script>

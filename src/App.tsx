@@ -58,7 +58,9 @@ const ViewLoadingFallback: React.FC = () => (
 
 const MainLayout: React.FC = () => {
   const { activeTab, isAuthenticated, canUpload, currentUserRole } = useApp();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   // If user is not signed in, show the exact screenshot Portal view!
   if (!isAuthenticated) {

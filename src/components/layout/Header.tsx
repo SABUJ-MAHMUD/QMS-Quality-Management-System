@@ -50,11 +50,11 @@ const LiveClock: React.FC = React.memo(() => {
   });
 
   return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono shrink-0">
+    <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-slate-900 text-white border border-slate-700 shadow-2xs font-mono shrink-0">
       <Clock className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
       <span className="text-[11px] font-black text-emerald-400 tracking-wide whitespace-nowrap">{timeStr}</span>
-      <span className="text-slate-500 font-sans hidden 2xl:inline">|</span>
-      <span className="text-[11px] font-semibold text-slate-300 font-sans hidden 2xl:inline whitespace-nowrap">{todayStr}</span>
+      <span className="text-slate-500 font-sans hidden @[1400px]:inline">|</span>
+      <span className="text-[11px] font-semibold text-slate-300 font-sans hidden @[1400px]:inline whitespace-nowrap">{todayStr}</span>
     </div>
   );
 });
@@ -196,20 +196,21 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
 
   return (
     <header className="@container sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-sky-100 dark:border-slate-800 shadow-xs transition-colors">
-      <div className="px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="px-2.5 sm:px-3.5 py-1.5 flex flex-wrap @[960px]:flex-nowrap items-center justify-between gap-1.5 sm:gap-2">
         {/* Left Section: 3-Dots Sidebar Toggle + Brand Title with Clean Green Quality Mark */}
-        <div className="flex items-center gap-2 shrink-0 order-1">
+        <div className="flex items-center gap-2 min-w-0 max-w-full order-1 shrink-0">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
               title={isSidebarCollapsed ? 'Expand Sidebar Navigation' : 'Collapse Sidebar Navigation'}
-              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-sky-700 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+              aria-label="Toggle Sidebar Navigation"
+              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-sky-700 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer shrink-0"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {/* Northern Fashions Swirl Monogram */}
             <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center p-1 shadow-xs shrink-0">
               <svg viewBox="0 0 40 40" className="w-full h-full" fill="none">
@@ -218,29 +219,29 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
                 <path d="M 16 24 C 20 20 24 16 26 14" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <div className="hidden lg:block shrink-0">
-              <div className="flex items-center gap-1">
-                <h1 className="text-xs font-black text-slate-900 dark:text-white tracking-wide uppercase leading-none whitespace-nowrap">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1 flex-nowrap">
+                <h1 className="text-[11px] sm:text-xs font-black text-slate-900 dark:text-white tracking-wide uppercase leading-none truncate">
                   NORTHERN FASHIONS LTD.
                 </h1>
-                <span className="text-[9px] uppercase font-bold px-1 py-0.2 rounded bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
-                  QMS
+                <span className="text-[9px] uppercase font-bold px-1 py-0.2 rounded bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800 shrink-0">
+                  OQL
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-none whitespace-nowrap">
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                <p className="text-[9.5px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-none truncate">
                   QMS - Quality Management System
                 </p>
-                <div className="h-0.5 w-3 bg-lime-500 rounded-full" />
+                <div className="h-0.5 w-3 bg-lime-500 rounded-full shrink-0" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Global Controls & Filters in Header — wraps cleanly onto 2nd bar until header is wide enough for a single line */}
-        <div className="order-3 @[1160px]:order-2 w-full @[1160px]:w-auto @[1160px]:flex-1 flex flex-wrap items-center gap-1.5 @[1160px]:justify-center pt-1.5 @[1160px]:pt-0 border-t border-slate-100 dark:border-slate-800 @[1160px]:border-t-0">
+        {/* Global Controls & Filters in Header — stays on a single line from @[960px] upward */}
+        <div className="order-3 @[960px]:order-2 w-full @[960px]:w-auto @[960px]:flex-1 min-w-0 flex flex-wrap @[960px]:flex-nowrap items-center gap-1.5 @[960px]:justify-center pt-1.5 @[960px]:pt-0 border-t border-slate-100 dark:border-slate-800 @[960px]:border-t-0">
           {/* Global Search */}
-          <div className="relative flex-1 min-w-[140px] max-w-[240px] @[1160px]:max-w-[190px]">
+          <div className="relative flex-1 min-w-[115px] max-w-[240px] @[960px]:flex-initial @[960px]:w-[135px] @[1120px]:w-[165px] @[1280px]:w-[190px]">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
@@ -409,7 +410,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
         </div>
 
         {/* Right Section: Live Clock, Fullscreen, Day/Night Switch, Notifications, User Profile */}
-        <div className="flex items-center gap-1.5 shrink-0 order-2 @[1160px]:order-3">
+        <div className="flex flex-wrap @[960px]:flex-nowrap items-center justify-end gap-1 sm:gap-1.5 max-w-full @[580px]:shrink-0 order-2 @[960px]:order-3">
           {/* Live Clock & Date */}
           <LiveClock />
 
@@ -433,12 +434,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
             {theme === 'dark' ? (
               <>
                 <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden 2xl:inline text-amber-300">Day Mode</span>
+                <span className="hidden @[1340px]:inline text-amber-300">Day Mode</span>
               </>
             ) : (
               <>
                 <Moon className="w-3.5 h-3.5 text-sky-600" />
-                <span className="hidden 2xl:inline text-slate-700">Night Mode</span>
+                <span className="hidden @[1340px]:inline text-slate-700">Night Mode</span>
               </>
             )}
           </button>
@@ -498,13 +499,15 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
               onClick={() => setShowRoleMenu(!showRoleMenu)}
               className="flex items-center gap-1.5 p-1 pl-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-slate-600 hover:bg-sky-50/50 dark:hover:bg-slate-800 transition-all text-left cursor-pointer"
             >
-              <div className="hidden lg:block text-right">
-                <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-none truncate max-w-[90px]">
-                  {currentUserEmail === 'quality.engineer.bd@gmail.com' ? 'Super Admin' : (currentUserName || 'Northern QMS')}
+              <div className="text-right leading-tight">
+                <div className="text-[10px] sm:text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-tight truncate max-w-[74px] sm:max-w-[115px]">
+                  {currentUserName?.trim() || (currentUserEmail ? currentUserEmail.split('@')[0] : 'User')}
                 </div>
-                <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">{currentUserRole}</div>
+                <div className="text-[9px] sm:text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 leading-tight truncate max-w-[74px] sm:max-w-[115px]">
+                  {currentUserRole}
+                </div>
               </div>
-              <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
                 <User className="w-3.5 h-3.5" />
               </div>
             </button>
