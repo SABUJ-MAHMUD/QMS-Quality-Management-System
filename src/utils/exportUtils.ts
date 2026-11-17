@@ -119,7 +119,7 @@ export function printQualityReport(title: string, contentHtml: string) {
         <div class="header">
           <div>
             <div class="title">OQL: Analysis, (Garments Quality)</div>
-            <div class="subtitle">Northern Fashions Ltd. &bull; QMS - Quality Management System</div>
+            <div class="subtitle">Northern Fashions Ltd. &bull; OQL: Analysis</div>
           </div>
           <div class="meta">
             <div><strong>Report:</strong> ${title}</div>

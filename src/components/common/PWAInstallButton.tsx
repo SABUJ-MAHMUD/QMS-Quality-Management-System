@@ -174,13 +174,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                 <Download className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Install QMS Application</h3>
+                <h3 className="text-base font-bold text-white">Install OQL: Analysis (NFL)</h3>
                 <p className="text-xs text-slate-400">Desktop & Browser Installation</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-              To install QMS on your computer or Android device:
+              To install OQL: Analysis (NFL) on your computer or Android device:
             </p>
 
             <div className="space-y-3 mb-6 text-xs text-slate-300">
@@ -190,7 +190,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-start gap-3">
                 <span className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 font-bold flex items-center justify-center shrink-0">2</span>
-                <span>Or open your browser menu (⋮ / ⋯) and click <strong>"Install QMS - Quality Management System..."</strong>.</span>
+                <span>Or open your browser menu (⋮ / ⋯) and click <strong>"Install OQL: Analysis (NFL)..."</strong>.</span>
               </div>
             </div>
 

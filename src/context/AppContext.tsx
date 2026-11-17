@@ -242,6 +242,15 @@ const scheduleStorageWrite = (key: string, value: unknown, delayMs: number = 0):
   };
 };
 
+const safeStorageGet = (key: string): string | null => {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -255,21 +264,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     quantity?: number;
   } | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
-    return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
+    return (safeStorageGet(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
   });
 
   const [accountRole, setAccountRole] = useState<UserRole>(() => {
-    const saved = localStorage.getItem('NFL_QMS_ACCOUNT_ROLE') as UserRole | null;
+    const saved = safeStorageGet('NFL_QMS_ACCOUNT_ROLE') as UserRole | null;
     if (saved) return saved;
-    return (localStorage.getItem(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
+    return (safeStorageGet(STORAGE_KEYS.USER_ROLE) as UserRole) || 'Admin';
   });
 
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => {
-    return localStorage.getItem('NFL_QMS_USER_EMAIL') || 'quality.engineer.bd@gmail.com';
+    return safeStorageGet('NFL_QMS_USER_EMAIL') || 'quality.engineer.bd@gmail.com';
   });
 
   const [currentUserName, setCurrentUserName] = useState<string>(() => {
-    return localStorage.getItem('NFL_QMS_USER_NAME') || 'Quality Admin (Lead)';
+    return safeStorageGet('NFL_QMS_USER_NAME') || 'Quality Admin (Lead)';
   });
 
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
@@ -305,10 +314,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeState(newTheme);
   };
 
+  const SESSION_AUTH_KEY = 'gqa_oql_session_auth_v1';
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEYS.AUTH);
-      return saved === 'true';
+      // Ensure legacy permanent auth token is cleared so closing the app/browser always logs out
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.AUTH);
+      }
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        return window.sessionStorage.getItem(SESSION_AUTH_KEY) === 'true';
+      }
+      return false;
     } catch {
       return false;
     }
@@ -317,7 +334,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const login = (targetTab?: string, userProfile?: { email: string; name?: string; role?: UserRole }) => {
     setIsAuthenticated(true);
     try {
-      localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(SESSION_AUTH_KEY, 'true');
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.AUTH);
+      }
     } catch {
       // ignore
     }
@@ -355,17 +377,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab(targetTab);
       }
     }
-    addNotification('success', `Signed in to Northern Fashions QMS Workspace as ${userProfile?.email || currentUserEmail}.`);
+    addNotification('success', `Signed in to OQL: Analysis Workspace as ${userProfile?.email || currentUserEmail}.`);
   };
 
   const logout = () => {
     setIsAuthenticated(false);
     try {
-      localStorage.setItem(STORAGE_KEYS.AUTH, 'false');
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem(SESSION_AUTH_KEY);
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.AUTH);
+      }
     } catch {
       // ignore
     }
-    addNotification('info', 'Logged out of QMS session. Workspace locked.');
+    addNotification('info', 'Logged out of session. Workspace locked.');
   };
 
   const [settings, setSettings] = useState<AppSettings>(() => {

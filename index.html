@@ -7,21 +7,157 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="QMS NFL" />
+    <meta name="apple-mobile-web-app-title" content="OQL: Analysis (NFL)" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
     <title>OQL: Analysis, (Garments Quality)</title>
     <meta name="description" content="OQL: Analysis, (Garments Quality) for Northern Fashions Ltd. QMS platform for BESTSELLER buyer OQL inspection reports, automated defect classification, trend analytics, RCA & CAPA management, and effectiveness monitoring." />
     <meta property="og:title" content="OQL: Analysis, (Garments Quality)" />
     <meta property="og:description" content="OQL: Analysis, (Garments Quality) for Northern Fashions Ltd. QMS platform for BESTSELLER buyer OQL inspection reports, automated defect classification, trend analytics, RCA & CAPA management, and effectiveness monitoring." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function () {
+        try {
+          if (typeof Promise !== 'undefined' && !Promise.withResolvers) {
+            Promise.withResolvers = function () {
+              var resolve, reject;
+              var promise = new Promise(function (res, rej) {
+                resolve = res;
+                reject = rej;
+              });
+              return { promise: promise, resolve: resolve, reject: reject };
+            };
+          }
+          if (!Object.hasOwn) {
+            Object.hasOwn = function (obj, prop) {
+              return Object.prototype.hasOwnProperty.call(obj, prop);
+            };
+          }
+          if (!Array.prototype.at) {
+            Array.prototype.at = function (n) {
+              n = Math.trunc(n) || 0;
+              if (n < 0) n += this.length;
+              if (n < 0 || n >= this.length) return undefined;
+              return this[n];
+            };
+          }
+          if (!Array.prototype.findLast) {
+            Array.prototype.findLast = function (predicate, thisArg) {
+              for (var i = this.length - 1; i >= 0; i--) {
+                if (predicate.call(thisArg, this[i], i, this)) return this[i];
+              }
+              return undefined;
+            };
+          }
+          if (!String.prototype.replaceAll) {
+            String.prototype.replaceAll = function (search, replacement) {
+              return this.split(search).join(replacement);
+            };
+          }
+        } catch (e) {}
+
+        window.__QMS_APP_MOUNTED__ = false;
+        window.__QMS_CLEAR_CACHE_AND_RELOAD__ = function () {
+          try {
+            var tasks = [];
+            if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+              tasks.push(
+                navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                })
+              );
+            }
+            if ('caches' in window && window.caches.keys) {
+              tasks.push(
+                window.caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (k) { return window.caches.delete(k); }));
+                })
+              );
+            }
+            Promise.all(tasks).finally(function () {
+              window.location.reload();
+            });
+          } catch (err) {
+            window.location.reload();
+          }
+        };
+
+        var bootErrors = [];
+        function showBootFallback(reason) {
+          if (window.__QMS_APP_MOUNTED__) return;
+          var root = document.getElementById('root');
+          if (!root) return;
+          var detail = reason ? String(reason).replace(/</g, '&lt;').slice(0, 220) : 'Application failed to initialize on this browser or network.';
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#07182e;color:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;">' +
+              '<div style="max-width:460px;width:100%;background:#ffffff;color:#0f172a;border-radius:20px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,0.45);text-align:center;">' +
+                '<div style="font-size:12px;font-weight:800;letter-spacing:0.08em;color:#0284c7;text-transform:uppercase;">Northern Fashions Ltd. &bull; OQL</div>' +
+                '<h1 style="font-size:18px;font-weight:800;margin:10px 0 8px;color:#0f172a;">Unable to Load Workspace</h1>' +
+                '<p style="font-size:13px;color:#475569;line-height:1.5;margin:0 0 14px;">A cached version or network restriction prevented the app from starting cleanly. Click below to clear stale cache and reload.</p>' +
+                '<div style="font-size:11px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 10px;margin-bottom:16px;word-break:break-word;">' + detail + '</div>' +
+                '<button onclick="window.__QMS_CLEAR_CACHE_AND_RELOAD__()" style="width:100%;padding:11px 16px;border:none;border-radius:12px;background:#059669;color:#ffffff;font-weight:700;font-size:13px;cursor:pointer;">Clear Cache &amp; Reload App</button>' +
+              '</div>' +
+            '</div>';
+        }
+
+        function handleEarlyFailure(msg) {
+          if (window.__QMS_APP_MOUNTED__) return;
+          bootErrors.push(msg);
+          var isChunkError = /chunk|module|mime|dynamically imported|unexpected token|syntaxerror/i.test(String(msg));
+          try {
+            if (isChunkError && !sessionStorage.getItem('__qms_boot_retried__')) {
+              sessionStorage.setItem('__qms_boot_retried__', '1');
+              window.__QMS_CLEAR_CACHE_AND_RELOAD__();
+              return;
+            }
+          } catch (e) {}
+          showBootFallback(msg);
+        }
+
+        window.addEventListener('error', function (e) {
+          if (window.__QMS_APP_MOUNTED__) return;
+          var target = e && e.target;
+          if (target && target.tagName === 'SCRIPT') {
+            handleEarlyFailure('Failed to load script: ' + (target.src || 'module'));
+          } else if (
+            target &&
+            target.tagName === 'LINK' &&
+            (target.rel === 'stylesheet' || target.rel === 'modulepreload')
+          ) {
+            handleEarlyFailure('Failed to load asset: ' + (target.href || target.rel));
+          } else if (e && e.message) {
+            handleEarlyFailure(e.message);
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function (e) {
+          if (window.__QMS_APP_MOUNTED__) return;
+          var reason = e && e.reason;
+          var msg = reason && reason.message ? reason.message : String(reason || '');
+          if (/chunk|module|mime|dynamically imported|unexpected token|syntaxerror|loading css/i.test(msg)) {
+            handleEarlyFailure(msg);
+          }
+        });
+
+        setTimeout(function () {
+          if (!window.__QMS_APP_MOUNTED__) {
+            showBootFallback(bootErrors[0] || 'Startup timed out on slow or restricted network.');
+          }
+        }, 12000);
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#07182e;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;gap:12px;">
+        <div style="font-size:13px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#a3e635;">NORTHERN FASHIONS LTD.</div>
+        <div style="font-size:15px;font-weight:700;color:#ffffff;">OQL: Analysis, (Garments Quality)</div>
+        <div style="font-size:12px;color:#94a3b8;">Loading workspace...</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

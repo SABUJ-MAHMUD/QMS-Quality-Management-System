@@ -24,6 +24,46 @@ import {
 } from 'lucide-react';
 
 const STORAGE_USERS_KEY = 'NFL_QMS_REGISTERED_USERS';
+const SAVED_CREDENTIALS_KEY = 'NFL_OQL_SAVED_CREDENTIALS_V1';
+
+interface SavedCredentials {
+  email: string;
+  password: string;
+}
+
+function loadSavedCredentials(): SavedCredentials | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const raw = window.localStorage.getItem(SAVED_CREDENTIALS_KEY);
+    if (!raw) return null;
+    const decoded = JSON.parse(decodeURIComponent(atob(raw)));
+    if (decoded && typeof decoded.email === 'string' && typeof decoded.password === 'string') {
+      return { email: decoded.email, password: decoded.password };
+    }
+  } catch {
+    // ignore malformed storage
+  }
+  return null;
+}
+
+function persistSavedCredentials(email: string, password: string): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const encoded = btoa(encodeURIComponent(JSON.stringify({ email: email.trim(), password })));
+    window.localStorage.setItem(SAVED_CREDENTIALS_KEY, encoded);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clearSavedCredentials(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.removeItem(SAVED_CREDENTIALS_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 // Default pre-seeded accounts including the requested Super Admin
 const DEFAULT_PRE_SEEDED_USERS: RegisteredUser[] = [
@@ -50,6 +90,9 @@ const DEFAULT_PRE_SEEDED_USERS: RegisteredUser[] = [
 export const LoginPortalView: React.FC = () => {
   const { login, theme, toggleTheme } = useApp();
 
+  // Load any user-saved credentials (never defaults to hardcoded admin if not saved by user)
+  const initialSavedCreds = loadSavedCredentials();
+
   // Mode: 'login' (Sign In) or 'register' (Create Account)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
@@ -59,9 +102,11 @@ export const LoginPortalView: React.FC = () => {
   // Register Flow: 'form' -> 'otp'
   const [regStep, setRegStep] = useState<'form' | 'otp'>('form');
 
-  // Login Form States (always start empty; never pre-fill or shadow admin email)
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Login Form States (shows saved credentials if user chose to save them; otherwise empty)
+  const [loginEmail, setLoginEmail] = useState(() => initialSavedCreds?.email || '');
+  const [loginPassword, setLoginPassword] = useState(() => initialSavedCreds?.password || '');
+  const [rememberCredentials, setRememberCredentials] = useState<boolean>(() => Boolean(initialSavedCreds));
+  const [hasSavedCredentials, setHasSavedCredentials] = useState<boolean>(() => Boolean(initialSavedCreds));
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -152,6 +197,13 @@ export const LoginPortalView: React.FC = () => {
       const matchedAdmin = registeredUsers.find(
         (u) => u.email.toLowerCase() === 'quality.engineer.bd@gmail.com'
       );
+      if (rememberCredentials) {
+        persistSavedCredentials(loginEmail.trim(), loginPassword);
+        setHasSavedCredentials(true);
+      } else {
+        clearSavedCredentials();
+        setHasSavedCredentials(false);
+      }
       login('dashboard', {
         email: 'quality.engineer.bd@gmail.com',
         name: matchedAdmin?.name || 'Quality Lead Admin',
@@ -180,6 +232,14 @@ export const LoginPortalView: React.FC = () => {
       if (foundUser.password && foundUser.password !== loginPassword.trim()) {
         setLoginError('Incorrect password. Please try again or use verification code login.');
         return;
+      }
+
+      if (rememberCredentials) {
+        persistSavedCredentials(foundUser.email, loginPassword.trim());
+        setHasSavedCredentials(true);
+      } else {
+        clearSavedCredentials();
+        setHasSavedCredentials(false);
       }
 
       login('dashboard', {
@@ -371,7 +431,7 @@ export const LoginPortalView: React.FC = () => {
               NORTHERN FASHIONS LTD.
             </h1>
             <p className="text-[11px] font-medium text-slate-300 mt-1">
-              QMS - Quality Management System
+              OQL: Analysis
             </p>
           </div>
         </div>
@@ -391,15 +451,15 @@ export const LoginPortalView: React.FC = () => {
         <div className="w-full lg:w-1/2 space-y-5 text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs font-bold text-lime-400 backdrop-blur-md">
             <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
-            BESTSELLER QMS Compliance &bull; Observed Quality Level
+            BESTSELLER OQL Compliance &bull; Observed Quality Level
           </div>
 
           <div>
-            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white uppercase leading-none">
-              QMS
+            <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-none">
+              OQL: Analysis
             </h2>
-            <h3 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-lime-400 leading-tight mt-1">
-              Quality Management System
+            <h3 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-lime-400 leading-tight mt-1.5">
+              (Garments Quality)
             </h3>
             <p className="text-sm sm:text-base text-slate-300 font-medium max-w-lg mt-4 leading-relaxed">
               Automated PDF inspection report data extraction, Observed Quality Level (OQL) calculations, 23 master defect classifications, and CAPA compliance for Northern Fashions Ltd.
@@ -455,8 +515,8 @@ export const LoginPortalView: React.FC = () => {
               <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-wider uppercase">
                 NORTHERN FASHIONS LTD.
               </h3>
-              <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
-                Quality Management System (QMS)
+              <p className="text-[11px] font-bold text-slate-600 mt-0.5">
+                OQL: Analysis
               </p>
             </div>
 
@@ -492,7 +552,7 @@ export const LoginPortalView: React.FC = () => {
               <div className="mt-5 space-y-3.5 text-left">
                 {loginMethod === 'password' ? (
                   /* Form: Password Login */
-                  <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+                  <form onSubmit={handleLoginSubmit} method="post" action="#" className="space-y-3.5">
                     <div>
                       <label htmlFor="login-email-input" className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                         EMAIL OR USER ID *
@@ -501,6 +561,7 @@ export const LoginPortalView: React.FC = () => {
                         <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                         <input
                           id="login-email-input"
+                          name="username"
                           type="text"
                           value={loginEmail}
                           onChange={(e) => setLoginEmail(e.target.value)}
@@ -520,6 +581,7 @@ export const LoginPortalView: React.FC = () => {
                         <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
                         <input
                           id="login-password-input"
+                          name="password"
                           type={showLoginPassword ? 'text' : 'password'}
                           value={loginPassword}
                           onChange={(e) => setLoginPassword(e.target.value)}
@@ -537,6 +599,41 @@ export const LoginPortalView: React.FC = () => {
                           {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <label className="inline-flex items-center gap-2 text-slate-700 font-semibold cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={rememberCredentials}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setRememberCredentials(checked);
+                            if (!checked) {
+                              clearSavedCredentials();
+                              setHasSavedCredentials(false);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded border-slate-300 accent-emerald-600 cursor-pointer"
+                        />
+                        <span>Save User ID &amp; Password</span>
+                      </label>
+
+                      {hasSavedCredentials && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearSavedCredentials();
+                            setHasSavedCredentials(false);
+                            setRememberCredentials(false);
+                            setLoginEmail('');
+                            setLoginPassword('');
+                          }}
+                          className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Clear Saved
+                        </button>
+                      )}
                     </div>
 
                     {loginError && (
@@ -917,10 +1014,10 @@ export const LoginPortalView: React.FC = () => {
                 </button>
               </div>
 
-              {/* Encrypted Session Footer */}
+              {/* Session Footer */}
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium pt-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Permanent Encrypted QMS Session &bull; ISO 2859-1</span>
+                <span>Auto-Locks on Close &bull; Saved Login Supported</span>
               </div>
             </div>
           </div>
@@ -932,7 +1029,7 @@ export const LoginPortalView: React.FC = () => {
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
           <span className="font-semibold text-slate-300">
-            NORTHERN FASHIONS LTD. &bull; QMS - Quality Management System
+            NORTHERN FASHIONS LTD. &bull; OQL: Analysis
           </span>
         </div>
         <div>

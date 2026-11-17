@@ -110,9 +110,14 @@ export const PWAUpdateToast: React.FC = () => {
       if (CURRENT_BUILD_ID !== 'dev' && data.version !== CURRENT_BUILD_ID) {
         setRemoteVersion(data.version);
         const elapsedSinceBoot = Date.now() - sessionStartRef.current;
-        const alreadyAttempted =
-          typeof sessionStorage !== 'undefined' &&
-          sessionStorage.getItem('qms_reloaded_for_version') === data.version;
+        let alreadyAttempted = false;
+        try {
+          alreadyAttempted =
+            typeof sessionStorage !== 'undefined' &&
+            sessionStorage.getItem('qms_reloaded_for_version') === data.version;
+        } catch {
+          alreadyAttempted = false;
+        }
 
         // If user just opened a stale cached link (< 3s), refresh seamlessly once
         if (elapsedSinceBoot < 3000 && !alreadyAttempted) {

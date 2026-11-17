@@ -230,7 +230,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
               </div>
               <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
                 <p className="text-[9.5px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-none truncate">
-                  QMS - Quality Management System
+                  OQL: Analysis
                 </p>
                 <div className="h-0.5 w-3 bg-lime-500 rounded-full shrink-0" />
               </div>
@@ -552,7 +552,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
                   </div>
                 )}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400 dark:text-slate-500">Northern Fashions QMS</span>
+                  <span className="text-slate-400 dark:text-slate-500">Northern Fashions • OQL: Analysis</span>
                   <button
                     onClick={() => {
                       setShowRoleMenu(false);

@@ -1,12 +1,24 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, doc, getDocFromServer, type Firestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Initialize Firestore with the exact firestoreDatabaseId from configuration
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// CRITICAL: Initialize Firestore with exact firestoreDatabaseId and auto-detect long polling
+// so restrictive corporate/factory proxies that block HTTP/2 WebChannel streams still connect reliably.
+let firestoreInstance: Firestore;
+try {
+  firestoreInstance = initializeFirestore(
+    app,
+    { experimentalAutoDetectLongPolling: true },
+    firebaseConfig.firestoreDatabaseId
+  );
+} catch {
+  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+export const db = firestoreInstance;
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -58,11 +70,19 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'reports', '_healthcheck_'));
+    await Promise.race([
+      getDocFromServer(doc(db, 'reports', '_healthcheck_')),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection healthcheck timed out')), 5000)
+      ),
+    ]);
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration: client is offline');
+    if (
+      error instanceof Error &&
+      (error.message.includes('the client is offline') || error.message.includes('timed out'))
+    ) {
+      console.warn('Firebase connection check warning:', error.message);
       return false;
     }
     return true;

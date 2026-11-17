@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed = false }) => {
                 Northern Fashions Ltd.
               </h2>
               <p className="text-[10px] text-sky-100 truncate font-semibold">
-                QMS- Quality Management System
+                OQL: Analysis
               </p>
             </div>
           )}

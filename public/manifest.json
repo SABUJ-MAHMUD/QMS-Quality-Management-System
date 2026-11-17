@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "QMS - Quality Management System",
-  "short_name": "QMS NFL",
-  "description": "Digital Quality Intelligence System for Northern Fashions Ltd. Real-time OQL inspection analysis, defect classification, and CAPA compliance.",
+  "name": "OQL: Analysis (NFL)",
+  "short_name": "OQL: Analysis (NFL)",
+  "description": "OQL: Analysis (Garments Quality) for Northern Fashions Ltd. Real-time OQL inspection analysis, defect classification, and CAPA compliance.",
   "theme_color": "#0284c7",
   "background_color": "#07182e",
   "display": "standalone",

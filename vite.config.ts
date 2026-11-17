@@ -2,11 +2,15 @@ import fs from 'fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { transform as lightningTransform } from 'lightningcss';
+import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const appBuildId = process.env.VITE_APP_BUILD_ID || Date.now().toString();
 const appBuiltAt = new Date().toISOString();
+
+const COMPAT_ESBUILD_TARGETS = ['chrome88', 'edge88', 'firefox85', 'safari14'];
 
 function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
   const payload = JSON.stringify({
@@ -40,6 +44,69 @@ function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
   };
 }
 
+/**
+ * Downlevels Tailwind v4 oklch() colors and modern CSS features to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
+ * so factory/office desktops running older browsers (e.g. Win7 Chrome 109) never drop text/border colors.
+ */
+function cssCompatDownlevelPlugin(): Plugin {
+  return {
+    name: 'qms-css-compat-downlevel',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      for (const [fileName, item] of Object.entries(bundle)) {
+        if (item.type === 'asset' && fileName.endsWith('.css')) {
+          const rawCode =
+            typeof item.source === 'string'
+              ? Buffer.from(item.source, 'utf8')
+              : Buffer.from(item.source);
+          const result = lightningTransform({
+            filename: fileName,
+            code: rawCode,
+            minify: true,
+            targets: {
+              chrome: 88 << 16,
+              edge: 88 << 16,
+              firefox: 85 << 16,
+              safari: 14 << 16,
+            },
+          });
+          item.source = Buffer.from(result.code).toString('utf8');
+        }
+      }
+    },
+  };
+}
+
+/**
+ * Ensures all emitted JS chunks compile down cleanly to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
+ * (eliminating ES2022+ class static blocks, private fields, regex /v flags in third-party deps).
+ */
+function jsCompatDownlevelPlugin(): Plugin {
+  return {
+    name: 'qms-js-compat-downlevel',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      for (const [fileName, item] of Object.entries(bundle)) {
+        if (item.type === 'chunk' && (fileName.endsWith('.js') || fileName.endsWith('.mjs'))) {
+          try {
+            const transformed = esbuildTransformSync(item.code, {
+              loader: 'js',
+              target: COMPAT_ESBUILD_TARGETS,
+              format: 'esm',
+              minify: true,
+              legalComments: 'none',
+            });
+            item.code = transformed.code;
+          } catch (err) {
+            // Keep original chunk if a worker bundle uses top-level await that esbuild rejects
+            console.warn(`[qms-js-compat] skipped downlevel on ${fileName}:`, err instanceof Error ? err.message : err);
+          }
+        }
+      }
+    },
+  };
+}
+
 function excludeAiStudioAssetsPlugin(): Plugin {
   return {
     name: 'qms-exclude-aistudio-assets',
@@ -62,16 +129,18 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
       versionManifestPlugin(appBuildId, appBuiltAt),
+      cssCompatDownlevelPlugin(),
+      jsCompatDownlevelPlugin(),
       excludeAiStudioAssetsPlugin(),
       VitePWA({
         registerType: 'prompt',
         includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'QMS - Quality Management System',
-          short_name: 'QMS NFL',
+          name: 'OQL: Analysis (NFL)',
+          short_name: 'OQL: Analysis (NFL)',
           description:
-            'Digital Quality Intelligence System for Northern Fashions Ltd. Real-time OQL inspection analysis, defect classification, and CAPA compliance.',
+            'OQL: Analysis (Garments Quality) for Northern Fashions Ltd. Real-time OQL inspection analysis, defect classification, and CAPA compliance.',
           theme_color: '#0284c7',
           background_color: '#07182e',
           display: 'standalone',
@@ -102,6 +171,7 @@ export default defineConfig(() => {
         workbox: {
           clientsClaim: true,
           navigateFallbackDenylist: [
+            /^\/assets\//,
             /^\/pdf\.worker/,
             /^\/tesseract-worker/,
             /^\/version\.json/,
@@ -160,6 +230,17 @@ export default defineConfig(() => {
       }),
     ],
     build: {
+      target: COMPAT_ESBUILD_TARGETS,
+      cssTarget: COMPAT_ESBUILD_TARGETS,
+      modulePreload: {
+        resolveDependencies: (_filename: string, deps: string[]) =>
+          deps.filter(
+            (d) =>
+              !d.includes('vendor-pdfjs') &&
+              !d.includes('vendor-pptx') &&
+              !d.includes('vendor-xlsx')
+          ),
+      },
       rollupOptions: {
         output: {
           manualChunks(id: string) {
