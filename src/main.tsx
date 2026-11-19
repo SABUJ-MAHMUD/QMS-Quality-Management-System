@@ -74,6 +74,16 @@ class AppErrorBoundary extends React.Component<
 
 if (typeof window !== 'undefined') {
   window.__QMS_APP_MOUNTED__ = true;
+  try {
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has('_v')) {
+      currentUrl.searchParams.delete('_v');
+      const cleaned = currentUrl.pathname + (currentUrl.search || '') + (currentUrl.hash || '');
+      window.history.replaceState(null, '', cleaned || '/');
+    }
+  } catch {
+    // ignore history cleanup errors
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

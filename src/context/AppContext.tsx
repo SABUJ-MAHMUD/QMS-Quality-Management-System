@@ -543,6 +543,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .then((regs) => Promise.all(regs.map((r) => r.update().catch(() => {}))))
           .catch(() => {});
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('qms:check-app-update'));
+      }
 
       addNotification(
         'success',
@@ -561,20 +564,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: 'notif-fresh',
       type: 'info',
-      message: 'Quality Intelligence System ready. Clean database connected to Firebase Firestore.',
+      message: 'OQL: Analysis ready. Connected to Firebase Firestore.',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
 
   // Listen for live App Update alerts and push them to every user's notification bell
   useEffect(() => {
-    const onAppUpdate = (e: Event) => {
-      const detail = (e as CustomEvent<{ version?: string }>).detail;
-      const buildTag = detail?.version ? ` (#${String(detail.version).slice(-6)})` : '';
+    const pushUpdateAlert = (version?: string) => {
+      const buildTag = version ? ` (#${String(version).slice(-6)})` : '';
       addNotification(
         'info',
-        `New QMS App update available${buildTag}. Please click "Update Now" in the popup to load the latest version.`
+        `New OQL: Analysis App update available${buildTag}. Click "Update Now" in the popup to load the latest version.`
       );
+    };
+
+    if (typeof window !== 'undefined' && window.__QMS_PENDING_UPDATE_VERSION__) {
+      pushUpdateAlert(window.__QMS_PENDING_UPDATE_VERSION__);
+    }
+
+    const onAppUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ version?: string }>).detail;
+      pushUpdateAlert(detail?.version);
     };
     window.addEventListener('qms:app-update-available', onAppUpdate);
     return () => window.removeEventListener('qms:app-update-available', onAppUpdate);

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getDocsFromServer,
   setDoc,
@@ -315,9 +316,19 @@ export const firestoreService = {
     const safeHost = hostId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || 'default_host';
     const docRef = doc(db, 'app_releases', safeHost);
     try {
-      const snap = await getDoc(docRef);
+      let snap;
+      try {
+        snap = await getDocFromServer(docRef);
+      } catch {
+        snap = await getDoc(docRef);
+      }
       const existing = snap.exists() ? (snap.data() as { version?: string; builtAt?: string }) : null;
-      if (!existing || !existing.builtAt || builtAt > existing.builtAt) {
+      if (
+        !existing ||
+        !existing.builtAt ||
+        (existing.version !== version && builtAt >= existing.builtAt) ||
+        builtAt > existing.builtAt
+      ) {
         await setDoc(docRef, {
           version: version.slice(0, 64),
           builtAt: builtAt.slice(0, 64),

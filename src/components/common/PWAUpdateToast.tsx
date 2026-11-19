@@ -6,6 +6,7 @@ import { firestoreService } from '../../services/firestoreService';
 declare global {
   interface Window {
     __QMS_FORCE_UPDATE_PROMPT__?: () => void;
+    __QMS_PENDING_UPDATE_VERSION__?: string;
   }
 }
 
@@ -15,7 +16,7 @@ const CURRENT_BUILT_AT = typeof __APP_BUILT_AT__ !== 'undefined' ? __APP_BUILT_A
 export const PWAUpdateToast: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [versionMismatchDetected, setVersionMismatchDetected] = useState(false);
-  const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
+  const [isSnoozed, setIsSnoozed] = useState(false);
   const [remoteVersion, setRemoteVersion] = useState<string>('');
   const [isOffline, setIsOffline] = useState(
     typeof navigator !== 'undefined' ? !navigator.onLine : false
@@ -23,6 +24,7 @@ export const PWAUpdateToast: React.FC = () => {
   const checkingRef = useRef(false);
   const notifiedVersionRef = useRef<string>('');
   const publishedRef = useRef<boolean>(false);
+  const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     offlineReady: [offlineReady, setOfflineReady],
@@ -34,7 +36,7 @@ export const PWAUpdateToast: React.FC = () => {
         registration.update().catch(() => {});
         const intervalId = setInterval(() => {
           registration.update().catch((err) => console.warn('Periodic SW update check failed:', err));
-        }, 60 * 1000);
+        }, 30 * 1000);
 
         const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
@@ -42,23 +44,20 @@ export const PWAUpdateToast: React.FC = () => {
           }
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-          clearInterval(intervalId);
-          document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        void intervalId;
       }
       void swUrl;
     },
     onRegisterError(error) {
-      console.warn('QMS Service Worker Registration Warning:', error);
+      console.warn('OQL Service Worker Registration Warning:', error);
     },
   });
 
-  const sessionStartRef = useRef<number>(Date.now());
-
   const broadcastUpdateToBell = useCallback((versionLabel: string) => {
     const key = versionLabel || 'sw-update';
+    if (typeof window !== 'undefined') {
+      window.__QMS_PENDING_UPDATE_VERSION__ = key;
+    }
     if (notifiedVersionRef.current === key || typeof window === 'undefined') return;
     notifiedVersionRef.current = key;
     window.dispatchEvent(
@@ -68,27 +67,42 @@ export const PWAUpdateToast: React.FC = () => {
 
   const clearCachesAndReload = useCallback(async (targetVersion?: string) => {
     try {
-      if (targetVersion && typeof sessionStorage !== 'undefined') {
-        const alreadyReloaded = sessionStorage.getItem('qms_reloaded_for_version');
-        if (alreadyReloaded === targetVersion) {
-          return false;
-        }
-        sessionStorage.setItem('qms_reloaded_for_version', targetVersion);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('qms_reloaded_for_version');
+        sessionStorage.removeItem('__qms_boot_retried__');
       }
+    } catch {
+      // ignore
+    }
+    try {
       if (typeof window !== 'undefined' && 'caches' in window) {
         const cacheKeys = await window.caches.keys();
-        await Promise.all(cacheKeys.map((k) => window.caches.delete(k)));
+        await Promise.all(cacheKeys.map((k) => window.caches.delete(k).catch(() => false)));
       }
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.update().catch(() => {})));
+        await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
       }
     } catch (e) {
       console.warn('Cache clearing notice:', e);
     }
-    window.location.reload();
-    return true;
+
+    if (typeof window !== 'undefined') {
+      const bust = encodeURIComponent(targetVersion || Date.now().toString());
+      const url = new URL(window.location.href);
+      url.searchParams.set('_v', bust);
+      window.location.replace(url.toString());
+    }
   }, []);
+
+  const triggerUpdatePrompt = useCallback(
+    (newVersion: string) => {
+      setRemoteVersion((prev) => newVersion || prev);
+      setVersionMismatchDetected(true);
+      broadcastUpdateToBell(newVersion);
+    },
+    [broadcastUpdateToBell]
+  );
 
   // Poll /version.json (always bypassing cache) and publish/broadcast newer releases via Firestore
   const checkServerVersion = useCallback(async () => {
@@ -97,7 +111,10 @@ export const PWAUpdateToast: React.FC = () => {
     try {
       const res = await fetch(`/version.json?t=${Date.now()}`, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
       });
       if (!res.ok) return;
       const contentType = res.headers.get('content-type') || '';
@@ -108,31 +125,15 @@ export const PWAUpdateToast: React.FC = () => {
       const hostId = window.location.hostname || 'localhost';
 
       if (CURRENT_BUILD_ID !== 'dev' && data.version !== CURRENT_BUILD_ID) {
-        setRemoteVersion(data.version);
-        const elapsedSinceBoot = Date.now() - sessionStartRef.current;
-        let alreadyAttempted = false;
-        try {
-          alreadyAttempted =
-            typeof sessionStorage !== 'undefined' &&
-            sessionStorage.getItem('qms_reloaded_for_version') === data.version;
-        } catch {
-          alreadyAttempted = false;
-        }
-
-        // If user just opened a stale cached link (< 3s), refresh seamlessly once
-        if (elapsedSinceBoot < 3000 && !alreadyAttempted) {
-          await clearCachesAndReload(data.version);
-          return;
-        }
-        setVersionMismatchDetected(true);
-        broadcastUpdateToBell(data.version);
+        // Always surface update popup + bell notification so every user sees it right away
+        triggerUpdatePrompt(data.version);
       } else if (
         CURRENT_BUILD_ID !== 'dev' &&
         data.version === CURRENT_BUILD_ID &&
         CURRENT_BUILT_AT &&
         !publishedRef.current
       ) {
-        // This tab is verified to be running the live server build -> announce to all connected clients via Firestore
+        // Verified live build -> broadcast release metadata to Firestore so all open tabs get instant push
         publishedRef.current = true;
         firestoreService.publishAppReleaseIfNewer(hostId, CURRENT_BUILD_ID, CURRENT_BUILT_AT);
       }
@@ -141,7 +142,7 @@ export const PWAUpdateToast: React.FC = () => {
     } finally {
       checkingRef.current = false;
     }
-  }, [clearCachesAndReload, broadcastUpdateToBell]);
+  }, [triggerUpdatePrompt]);
 
   // Real-time Firestore release listener so ALL open users get instant update alerts (<1s) on deploy
   useEffect(() => {
@@ -153,26 +154,24 @@ export const PWAUpdateToast: React.FC = () => {
         release.version !== CURRENT_BUILD_ID &&
         (!CURRENT_BUILT_AT || release.builtAt > CURRENT_BUILT_AT)
       ) {
-        setRemoteVersion(release.version);
-        setVersionMismatchDetected(true);
-        broadcastUpdateToBell(release.version);
+        triggerUpdatePrompt(release.version);
       }
     });
     return () => unsubscribe();
-  }, [broadcastUpdateToBell]);
+  }, [triggerUpdatePrompt]);
 
   useEffect(() => {
     if (needRefresh) {
-      broadcastUpdateToBell(remoteVersion || 'new-sw');
+      triggerUpdatePrompt(remoteVersion || 'new-sw');
     }
-  }, [needRefresh, remoteVersion, broadcastUpdateToBell]);
+  }, [needRefresh, remoteVersion, triggerUpdatePrompt]);
 
   useEffect(() => {
     checkServerVersion();
 
     const interval = setInterval(() => {
       checkServerVersion();
-    }, 25 * 1000);
+    }, 15 * 1000);
 
     const onFocusOrVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -180,21 +179,28 @@ export const PWAUpdateToast: React.FC = () => {
       }
     };
 
+    const onManualCheck = () => {
+      checkServerVersion();
+    };
+
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);
+    window.addEventListener('qms:check-app-update', onManualCheck);
 
     window.__QMS_FORCE_UPDATE_PROMPT__ = () => {
-      setSnoozedUntil(0);
-      setVersionMismatchDetected(true);
-      broadcastUpdateToBell('manual-test');
+      if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+      setIsSnoozed(false);
+      triggerUpdatePrompt('new-release');
     };
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocusOrVisible);
       document.removeEventListener('visibilitychange', onFocusOrVisible);
+      window.removeEventListener('qms:check-app-update', onManualCheck);
+      if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
     };
-  }, [checkServerVersion, broadcastUpdateToBell]);
+  }, [checkServerVersion, triggerUpdatePrompt]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -222,25 +228,32 @@ export const PWAUpdateToast: React.FC = () => {
     setIsUpdating(true);
     try {
       if (needRefresh) {
-        await updateServiceWorker(true);
+        await Promise.race([
+          updateServiceWorker(true),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
       }
     } catch {
-      // fall through to cache clear + reload
+      // fall through to unregister + cache clear + cache-busted reload
     }
     await clearCachesAndReload(remoteVersion || undefined);
   };
 
   const closeRefreshToast = () => {
-    setNeedRefresh(false);
-    setVersionMismatchDetected(false);
-    setSnoozedUntil(Date.now() + 3 * 60 * 1000); // Remind again in 3 min if still on old version
+    setIsSnoozed(true);
+    if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+    // Remind user again in 2 minutes if they are still on an outdated version
+    snoozeTimerRef.current = setTimeout(() => {
+      setIsSnoozed(false);
+      checkServerVersion();
+    }, 2 * 60 * 1000);
   };
 
   const closeOfflineReadyToast = () => {
     setOfflineReady(false);
   };
 
-  const showUpdatePopup = (needRefresh || versionMismatchDetected) && Date.now() >= snoozedUntil;
+  const showUpdatePopup = (needRefresh || versionMismatchDetected) && !isSnoozed;
 
   return (
     <>
@@ -270,7 +283,7 @@ export const PWAUpdateToast: React.FC = () => {
                   )}
                 </div>
                 <h4 className="mt-1 text-sm font-black text-white">
-                  Update Your App — New QMS Version Ready!
+                  Update Your App — New OQL: Analysis Version Ready!
                 </h4>
                 <p className="mt-0.5 text-xs text-slate-300 leading-relaxed">
                   অ্যাপসটির নতুন ভার্সন আপডেট হয়েছে! সর্বশেষ ফিচার ও সঠিক রিপোর্ট দেখতে এখনই <strong>Update Now</strong> বাটনে ক্লিক করুন।
@@ -317,7 +330,7 @@ export const PWAUpdateToast: React.FC = () => {
             <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
             <div className="text-xs">
               <span className="font-bold text-emerald-300 block">Offline Ready</span>
-              <span className="text-slate-300">QMS is cached for instant offline operation.</span>
+              <span className="text-slate-300">OQL: Analysis is cached for instant offline operation.</span>
             </div>
             <button
               type="button"
@@ -335,7 +348,7 @@ export const PWAUpdateToast: React.FC = () => {
       {isOffline && (
         <div className="fixed top-0 left-0 right-0 z-[110] bg-amber-500/95 text-slate-950 px-4 py-1.5 text-xs font-semibold text-center flex items-center justify-center gap-2 shadow-md">
           <WifiOff className="w-4 h-4" />
-          <span>You are currently offline. QMS is operating from local offline cache. Changes will sync when reconnected.</span>
+          <span>You are currently offline. OQL: Analysis is operating from local offline cache. Changes will sync when reconnected.</span>
         </div>
       )}
     </>
