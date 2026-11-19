@@ -19,6 +19,7 @@ import {
 } from '../types';
 
 import { sanitizeForFirestore } from '../utils/firestoreSanitizer';
+import { isFreshNotice, isNoticeVersion, sanitizeHostId } from '../utils/appRelease';
 export { sanitizeForFirestore };
 
 export const firestoreService = {
@@ -313,7 +314,7 @@ export const firestoreService = {
   // --- Live App Release Broadcast (Push Update Notifications to All Users) ---
   async publishAppReleaseIfNewer(hostId: string, version: string, builtAt: string): Promise<void> {
     if (!hostId || !version || !builtAt) return;
-    const safeHost = hostId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || 'default_host';
+    const safeHost = sanitizeHostId(hostId);
     const docRef = doc(db, 'app_releases', safeHost);
     try {
       let snap;
@@ -323,12 +324,13 @@ export const firestoreService = {
         snap = await getDoc(docRef);
       }
       const existing = snap.exists() ? (snap.data() as { version?: string; builtAt?: string }) : null;
-      if (
-        !existing ||
-        !existing.builtAt ||
-        (existing.version !== version && builtAt >= existing.builtAt) ||
-        builtAt > existing.builtAt
-      ) {
+      // Preserve very recent (<10m) manual Admin broadcast notices so a normal load doesn't clobber an active alert
+      const hasRecentAdminNotice =
+        existing?.version &&
+        isNoticeVersion(existing.version) &&
+        isFreshNotice(existing.builtAt, Date.now(), 10 * 60 * 1000);
+
+      if (!existing || (!hasRecentAdminNotice && existing.version !== version)) {
         await setDoc(docRef, {
           version: version.slice(0, 64),
           builtAt: builtAt.slice(0, 64),
@@ -340,11 +342,29 @@ export const firestoreService = {
     }
   },
 
+  async broadcastAppUpdateNotice(targetHosts: string[]): Promise<string> {
+    const noticeId = `notice-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const uniqueHosts = Array.from(new Set(targetHosts.map((h) => h.trim()).filter(Boolean)));
+    await Promise.all(
+      uniqueHosts.map(async (hostId) => {
+        const safeHost = sanitizeHostId(hostId);
+        const docRef = doc(db, 'app_releases', safeHost);
+        await setDoc(docRef, {
+          version: noticeId.slice(0, 64),
+          builtAt: nowIso.slice(0, 64),
+          host: safeHost,
+        });
+      })
+    );
+    return noticeId;
+  },
+
   subscribeAppRelease(
     hostId: string,
     onUpdate: (release: { version: string; builtAt: string; host: string }) => void
   ): () => void {
-    const safeHost = hostId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || 'default_host';
+    const safeHost = sanitizeHostId(hostId);
     const docRef = doc(db, 'app_releases', safeHost);
     return onSnapshot(
       docRef,

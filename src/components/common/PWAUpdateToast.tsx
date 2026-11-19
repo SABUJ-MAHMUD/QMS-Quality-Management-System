@@ -2,6 +2,13 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { RefreshCw, Sparkles, X, CheckCircle, WifiOff } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
+import {
+  acknowledgeNoticeVersion,
+  evaluateFirestoreRelease,
+  evaluateServerVersion,
+  extractEntryScriptSrc,
+  loadAcknowledgedNotices,
+} from '../../utils/appRelease';
 
 declare global {
   interface Window {
@@ -25,6 +32,18 @@ export const PWAUpdateToast: React.FC = () => {
   const notifiedVersionRef = useRef<string>('');
   const publishedRef = useRef<boolean>(false);
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedEntryScriptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const scripts = Array.from(document.querySelectorAll('script[type="module"][src]'));
+    const entry = scripts.find((s) => /\/assets\/index-[^/]+\.js/.test(s.getAttribute('src') || ''));
+    if (entry) {
+      const src = entry.getAttribute('src') || '';
+      const match = src.match(/(\/assets\/index-[^?#]+\.js)/);
+      if (match) loadedEntryScriptRef.current = match[1];
+    }
+  }, []);
 
   const {
     offlineReady: [offlineReady, setOfflineReady],
@@ -36,7 +55,7 @@ export const PWAUpdateToast: React.FC = () => {
         registration.update().catch(() => {});
         const intervalId = setInterval(() => {
           registration.update().catch((err) => console.warn('Periodic SW update check failed:', err));
-        }, 30 * 1000);
+        }, 20 * 1000);
 
         const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
@@ -66,6 +85,9 @@ export const PWAUpdateToast: React.FC = () => {
   }, []);
 
   const clearCachesAndReload = useCallback(async (targetVersion?: string) => {
+    if (targetVersion) {
+      acknowledgeNoticeVersion(targetVersion);
+    }
     try {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.removeItem('qms_reloaded_for_version');
@@ -104,38 +126,62 @@ export const PWAUpdateToast: React.FC = () => {
     [broadcastUpdateToBell]
   );
 
-  // Poll /version.json (always bypassing cache) and publish/broadcast newer releases via Firestore
+  // Poll /version.json (with secondary HTML bundle-hash fallback) & publish live releases to Firestore
   const checkServerVersion = useCallback(async () => {
     if (checkingRef.current || typeof window === 'undefined' || !navigator.onLine) return;
     checkingRef.current = true;
     try {
-      const res = await fetch(`/version.json?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-      });
-      if (!res.ok) return;
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) return;
-      const data = await res.json();
-      if (!data?.version || typeof data.version !== 'string') return;
+      const bust = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      let verifiedByJson = false;
 
-      const hostId = window.location.hostname || 'localhost';
+      try {
+        const res = await fetch(`/version.json?t=${bust}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+        });
+        if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+          const data = await res.json();
+          if (data?.version && typeof data.version === 'string') {
+            verifiedByJson = true;
+            const verdict = evaluateServerVersion({
+              currentBuildId: CURRENT_BUILD_ID,
+              remoteVersion: data.version,
+            });
+            if (verdict === 'update-available') {
+              triggerUpdatePrompt(data.version);
+              return;
+            }
+            if (verdict === 'verified-current' && CURRENT_BUILT_AT && !publishedRef.current) {
+              publishedRef.current = true;
+              const hostId = window.location.hostname || 'localhost';
+              firestoreService.publishAppReleaseIfNewer(hostId, CURRENT_BUILD_ID, CURRENT_BUILT_AT);
+              return;
+            }
+          }
+        }
+      } catch {
+        // Fall through to HTML entry script check
+      }
 
-      if (CURRENT_BUILD_ID !== 'dev' && data.version !== CURRENT_BUILD_ID) {
-        // Always surface update popup + bell notification so every user sees it right away
-        triggerUpdatePrompt(data.version);
-      } else if (
-        CURRENT_BUILD_ID !== 'dev' &&
-        data.version === CURRENT_BUILD_ID &&
-        CURRENT_BUILT_AT &&
-        !publishedRef.current
-      ) {
-        // Verified live build -> broadcast release metadata to Firestore so all open tabs get instant push
-        publishedRef.current = true;
-        firestoreService.publishAppReleaseIfNewer(hostId, CURRENT_BUILD_ID, CURRENT_BUILT_AT);
+      // Secondary fallback: compare server /index.html entry bundle hash if /version.json wasn't conclusive
+      if (!verifiedByJson && loadedEntryScriptRef.current) {
+        const htmlRes = await fetch(`/index.html?t=${bust}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+        });
+        if (htmlRes.ok && (htmlRes.headers.get('content-type') || '').includes('text/html')) {
+          const htmlText = await htmlRes.text();
+          const remoteEntry = extractEntryScriptSrc(htmlText);
+          if (remoteEntry && remoteEntry !== loadedEntryScriptRef.current) {
+            triggerUpdatePrompt(remoteEntry.replace('/assets/index-', '').replace('.js', ''));
+          }
+        }
       }
     } catch {
       // Ignore transient network errors
@@ -144,21 +190,28 @@ export const PWAUpdateToast: React.FC = () => {
     }
   }, [triggerUpdatePrompt]);
 
-  // Real-time Firestore release listener so ALL open users get instant update alerts (<1s) on deploy
+  // Real-time Firestore release listener so ALL open users receive instant update alerts (<1s)
   useEffect(() => {
-    if (typeof window === 'undefined' || CURRENT_BUILD_ID === 'dev') return;
+    if (typeof window === 'undefined') return;
     const hostId = window.location.hostname || 'localhost';
     const unsubscribe = firestoreService.subscribeAppRelease(hostId, (release) => {
-      if (
-        release.version &&
-        release.version !== CURRENT_BUILD_ID &&
-        (!CURRENT_BUILT_AT || release.builtAt > CURRENT_BUILT_AT)
-      ) {
+      const verdict = evaluateFirestoreRelease({
+        currentBuildId: CURRENT_BUILD_ID,
+        currentBuiltAt: CURRENT_BUILT_AT,
+        releaseVersion: release.version,
+        releaseBuiltAt: release.builtAt,
+        acknowledgedNotices: loadAcknowledgedNotices(),
+      });
+      if (verdict === 'trigger-now') {
+        if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+        setIsSnoozed(false);
         triggerUpdatePrompt(release.version);
+      } else if (verdict === 'verify-server') {
+        checkServerVersion();
       }
     });
     return () => unsubscribe();
-  }, [triggerUpdatePrompt]);
+  }, [triggerUpdatePrompt, checkServerVersion]);
 
   useEffect(() => {
     if (needRefresh) {
@@ -180,6 +233,8 @@ export const PWAUpdateToast: React.FC = () => {
     };
 
     const onManualCheck = () => {
+      if (snoozeTimerRef.current) clearTimeout(snoozeTimerRef.current);
+      setIsSnoozed(false);
       checkServerVersion();
     };
 
@@ -226,6 +281,9 @@ export const PWAUpdateToast: React.FC = () => {
 
   const handleUpdateNow = async () => {
     setIsUpdating(true);
+    if (remoteVersion) {
+      acknowledgeNoticeVersion(remoteVersion);
+    }
     try {
       if (needRefresh) {
         await Promise.race([
@@ -325,7 +383,7 @@ export const PWAUpdateToast: React.FC = () => {
 
       {/* 2. Offline Ready Notification (Transient) */}
       {offlineReady && (
-        <div className="fixed bottom-6 left-6 z-30 max-w-sm">
+        <div className="fixed top-16 right-6 z-40 max-w-sm">
           <div className="rounded-xl border border-emerald-500/40 bg-slate-900/95 p-3.5 shadow-xl text-white flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
             <div className="text-xs">

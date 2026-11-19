@@ -23,15 +23,21 @@ function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
     configureServer(server) {
       server.middlewares.use('/version.json', (_req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
         res.end(payload);
       });
     },
     configurePreviewServer(server) {
       server.middlewares.use('/version.json', (_req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.end(payload);
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        const distVersionPath = path.resolve('dist/version.json');
+        const currentPayload = fs.existsSync(distVersionPath)
+          ? fs.readFileSync(distVersionPath, 'utf8')
+          : payload;
+        res.end(currentPayload);
       });
     },
     generateBundle() {

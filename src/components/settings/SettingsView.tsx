@@ -11,7 +11,14 @@ import {
   Database,
   Save,
   CheckCircle2,
+  BellRing,
+  RefreshCw,
 } from 'lucide-react';
+import { firestoreService } from '../../services/firestoreService';
+import { acknowledgeNoticeVersion, NETLIFY_PRODUCTION_HOST } from '../../utils/appRelease';
+
+const CURRENT_APP_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
+const CURRENT_APP_BUILT_AT = typeof __APP_BUILT_AT__ !== 'undefined' ? __APP_BUILT_AT__ : '';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -31,6 +38,66 @@ export const SettingsView: React.FC = () => {
   const [factoryName, setFactoryName] = useState(settings.factoryName);
   const [defaultBuyer, setDefaultBuyer] = useState(settings.defaultBuyer);
   const [oqlDecimals, setOqlDecimals] = useState(settings.oqlDecimals);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isBroadcastingUpdate, setIsBroadcastingUpdate] = useState(false);
+  const [updateCheckStatus, setUpdateCheckStatus] = useState<string>('');
+
+  const { addNotification } = useApp();
+
+  const handleCheckLiveUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateCheckStatus('');
+    try {
+      const res = await fetch(`/version.json?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        const data = await res.json();
+        if (data?.version && data.version !== CURRENT_APP_BUILD_ID && CURRENT_APP_BUILD_ID !== 'dev') {
+          setUpdateCheckStatus(`New server version #${String(data.version).slice(-6)} detected! Opening update popup...`);
+          window.dispatchEvent(new CustomEvent('qms:check-app-update'));
+        } else {
+          setUpdateCheckStatus(`Running latest build (#${String(data?.version || CURRENT_APP_BUILD_ID).slice(-6)}).`);
+        }
+      } else {
+        setUpdateCheckStatus('Checked server manifest — no newer build returned.');
+      }
+    } catch {
+      setUpdateCheckStatus('Unable to reach server manifest while offline.');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleBroadcastUpdateToUsers = async () => {
+    setIsBroadcastingUpdate(true);
+    setUpdateCheckStatus('');
+    try {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : NETLIFY_PRODUCTION_HOST;
+      const noticeId = await firestoreService.broadcastAppUpdateNotice([
+        currentHost,
+        NETLIFY_PRODUCTION_HOST,
+      ]);
+      // Mark as acknowledged for the sender's own tab so Admin doesn't get interrupted mid-work
+      acknowledgeNoticeVersion(noticeId);
+      setUpdateCheckStatus(
+        `Update alert #${noticeId.slice(-6)} sent live to all active desktop & mobile users.`
+      );
+      addNotification(
+        'success',
+        `Broadcasted "New App Update Ready" alert (#${noticeId.slice(-6)}) to all connected users.`
+      );
+    } catch {
+      setUpdateCheckStatus('Failed to send live update alert. Please verify network connection.');
+      addNotification('error', 'Failed to broadcast app update alert to users.');
+    } finally {
+      setIsBroadcastingUpdate(false);
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +116,7 @@ export const SettingsView: React.FC = () => {
   ];
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 pb-24 max-w-5xl mx-auto space-y-6">
       {/* Title */}
       <div>
         <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -272,6 +339,53 @@ export const SettingsView: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* App Version & Live Update Notification Broadcast */}
+      <div className="bg-sky-50/70 rounded-xl p-5 border border-sky-200 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <BellRing className="w-4 h-4 text-sky-600" />
+              6. App Version &amp; Live Update Notification
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Running Build: <span className="font-mono font-bold text-slate-800">#{String(CURRENT_APP_BUILD_ID).slice(-6)}</span>
+              {CURRENT_APP_BUILT_AT ? ` • ${CURRENT_APP_BUILT_AT.slice(0, 16).replace('T', ' ')} UTC` : ''}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              After pushing code to GitHub &amp; Netlify deploy completes, active users auto-receive the update popup within seconds—or send an instant push notification right now.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCheckLiveUpdate}
+              disabled={isCheckingUpdate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-sky-600 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+              Check Server Version
+            </button>
+            {canManageSettings && (
+              <button
+                type="button"
+                onClick={handleBroadcastUpdateToUsers}
+                disabled={isBroadcastingUpdate}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                {isBroadcastingUpdate ? 'Sending Alert...' : 'Notify All Users of Update'}
+              </button>
+            )}
+          </div>
+        </div>
+        {updateCheckStatus && (
+          <div className="text-xs font-semibold text-sky-800 bg-white/90 border border-sky-200 rounded-lg px-3 py-2 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{updateCheckStatus}</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -523,6 +523,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshCloudData = useCallback(async () => {
     if (isSyncingData) return;
     setIsSyncingData(true);
+
+    // Immediately check for any newer deployed app version without waiting on Firestore queries
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('qms:check-app-update'));
+    }
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.update().catch(() => {}))))
+        .catch(() => {});
+    }
+
     try {
       const [remoteReports, remoteCapas, remoteMon] = await Promise.all([
         firestoreService.fetchReportsFromServer(),
@@ -535,17 +547,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMonitoringRecords(remoteMon);
       setIsFirebaseConnected(true);
       setSyncGeneration((prev) => prev + 1);
-
-      // Silently check for any new Service Worker / app updates in background
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker
-          .getRegistrations()
-          .then((regs) => Promise.all(regs.map((r) => r.update().catch(() => {}))))
-          .catch(() => {});
-      }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('qms:check-app-update'));
-      }
 
       addNotification(
         'success',
