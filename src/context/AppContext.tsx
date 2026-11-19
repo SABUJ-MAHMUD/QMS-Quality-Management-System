@@ -45,6 +45,8 @@ interface AppContextType {
 
   // Cloud Database
   isFirebaseConnected: boolean;
+  isSyncingData: boolean;
+  refreshCloudData: () => Promise<void>;
 
   // Settings
   settings: AppSettings;
@@ -456,6 +458,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
+  const [isSyncingData, setIsSyncingData] = useState<boolean>(false);
+  const [syncGeneration, setSyncGeneration] = useState<number>(0);
 
   // Initial Firestore synchronization & real-time multi-user listeners (active only once signed in)
   useEffect(() => {
@@ -469,9 +473,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const isHealthy = await testConnection();
         if (isMounted) setIsFirebaseConnected(isHealthy);
-        if (!isHealthy) return;
 
-        // Subscribe to real-time updates so colleagues stay 100% synced with Firestore (no stale localStorage resurrection)
+        // Always attach real-time listeners so colleagues receive updates once connection stabilizes
         unsubReports = firestoreService.subscribeReports(
           (remoteReports) => {
             if (!isMounted) return;
@@ -500,7 +503,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (err) => console.warn('Firestore monitoring listener note:', err)
         );
 
-        addNotification('success', 'Connected to Firebase Cloud Firestore real-time sync.');
+        if (isHealthy && syncGeneration === 0) {
+          addNotification('success', 'Connected to Firebase Cloud Firestore real-time sync.');
+        }
       } catch (err) {
         console.warn('Firestore initial sync note:', err);
         if (isMounted) setIsFirebaseConnected(false);
@@ -513,7 +518,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubCapas?.();
       unsubMonitoring?.();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, syncGeneration]);
+
+  const refreshCloudData = useCallback(async () => {
+    if (isSyncingData) return;
+    setIsSyncingData(true);
+    try {
+      const [remoteReports, remoteCapas, remoteMon] = await Promise.all([
+        firestoreService.fetchReportsFromServer(),
+        firestoreService.fetchCapasFromServer(),
+        firestoreService.fetchMonitoringFromServer(),
+      ]);
+
+      setReports(remoteReports);
+      setCapas(remoteCapas);
+      setMonitoringRecords(remoteMon);
+      setIsFirebaseConnected(true);
+      setSyncGeneration((prev) => prev + 1);
+
+      // Silently check for any new Service Worker / app updates in background
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.update().catch(() => {}))))
+          .catch(() => {});
+      }
+
+      addNotification(
+        'success',
+        `Reloaded latest updates from cloud (${remoteReports.length} inspection reports synced).`
+      );
+    } catch (err) {
+      console.warn('Manual cloud reload note:', err);
+      setIsFirebaseConnected(false);
+      addNotification('warning', 'Unable to reach cloud server right now. Showing last synced reports.');
+    } finally {
+      setIsSyncingData(false);
+    }
+  }, [isSyncingData]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
@@ -966,6 +1008,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toggleTheme,
       setTheme,
       isFirebaseConnected,
+      isSyncingData,
+      refreshCloudData,
       settings,
       updateSettings,
       filters,
@@ -1018,6 +1062,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isAuthenticated,
       theme,
       isFirebaseConnected,
+      isSyncingData,
+      refreshCloudData,
       settings,
       filters,
       reports,

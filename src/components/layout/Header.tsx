@@ -21,6 +21,7 @@ import {
   Minimize2,
   ChevronDown,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -74,6 +75,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
     theme,
     toggleTheme,
     canSwitchRole,
+    isSyncingData,
+    refreshCloudData,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -413,6 +416,18 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onToggleSidebar, isSi
         <div className="flex flex-wrap @[960px]:flex-nowrap items-center justify-end gap-1 sm:gap-1.5 max-w-full @[580px]:shrink-0 order-2 @[960px]:order-3">
           {/* Live Clock & Date */}
           <LiveClock />
+
+          {/* Reload Latest Reports Button (Icon Only) */}
+          <button
+            type="button"
+            onClick={() => refreshCloudData()}
+            disabled={isSyncingData}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-700/80 hover:border-sky-300 dark:hover:border-sky-700 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
+            title={isSyncingData ? 'Syncing latest reports...' : 'Reload latest reports from cloud'}
+            aria-label="Reload latest reports"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncingData ? 'animate-spin' : ''}`} />
+          </button>
 
           {/* Fullscreen Button */}
           <button

@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -33,6 +34,21 @@ export const firestoreService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, path);
       return [];
+    }
+  },
+
+  async fetchReportsFromServer(): Promise<InspectionReport[]> {
+    const path = 'reports';
+    try {
+      const snap = await getDocsFromServer(collection(db, path));
+      const list: InspectionReport[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...(docSnap.data() as Omit<InspectionReport, 'id'>) });
+      });
+      list.sort((a, b) => (b.createdAt || b.inspectionDate || '').localeCompare(a.createdAt || a.inspectionDate || ''));
+      return list;
+    } catch {
+      return this.fetchReports();
     }
   },
 
@@ -163,6 +179,21 @@ export const firestoreService = {
     }
   },
 
+  async fetchCapasFromServer(): Promise<CAPARecord[]> {
+    const path = 'capas';
+    try {
+      const snap = await getDocsFromServer(collection(db, path));
+      const list: CAPARecord[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...(docSnap.data() as Omit<CAPARecord, 'id'>) });
+      });
+      list.sort((a, b) => (Number(b.defectQuantity) || 0) - (Number(a.defectQuantity) || 0));
+      return list;
+    } catch {
+      return this.fetchCapas();
+    }
+  },
+
   async saveCapa(capa: CAPARecord): Promise<void> {
     const path = `capas/${capa.id}`;
     try {
@@ -219,6 +250,20 @@ export const firestoreService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, path);
       return [];
+    }
+  },
+
+  async fetchMonitoringFromServer(): Promise<MonitoringRecord[]> {
+    const path = 'monitoring';
+    try {
+      const snap = await getDocsFromServer(collection(db, path));
+      const list: MonitoringRecord[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...(docSnap.data() as Omit<MonitoringRecord, 'id'>) });
+      });
+      return list;
+    } catch {
+      return this.fetchMonitoring();
     }
   },
 
