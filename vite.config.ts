@@ -7,6 +7,7 @@ import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const BASE_PATH = '/QMS-Quality-Management-System/';
 const appBuildId = process.env.VITE_APP_BUILD_ID || Date.now().toString();
 const appBuiltAt = new Date().toISOString();
 
@@ -21,7 +22,7 @@ function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
   return {
     name: 'qms-version-manifest',
     configureServer(server) {
-      server.middlewares.use('/version.json', (_req, res) => {
+      server.middlewares.use(`${BASE_PATH}version.json`, (_req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
@@ -29,7 +30,7 @@ function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
       });
     },
     configurePreviewServer(server) {
-      server.middlewares.use('/version.json', (_req, res) => {
+      server.middlewares.use(`${BASE_PATH}version.json`, (_req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
@@ -127,6 +128,7 @@ function excludeAiStudioAssetsPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    base: BASE_PATH,
     define: {
       __APP_BUILD_ID__: JSON.stringify(appBuildId),
       __APP_BUILT_AT__: JSON.stringify(appBuiltAt),
@@ -142,7 +144,7 @@ export default defineConfig(() => {
         registerType: 'prompt',
         includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: BASE_PATH,
           name: 'OQL: Analysis (NFL)',
           short_name: 'OQL: Analysis (NFL)',
           description:
@@ -151,23 +153,23 @@ export default defineConfig(() => {
           background_color: '#07182e',
           display: 'standalone',
           orientation: 'portrait',
-          start_url: '/',
-          scope: '/',
+          start_url: BASE_PATH,
+          scope: BASE_PATH,
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: 'pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
@@ -176,12 +178,13 @@ export default defineConfig(() => {
         },
         workbox: {
           clientsClaim: true,
+          navigateFallback: `${BASE_PATH}index.html`,
           navigateFallbackDenylist: [
-            /^\/assets\//,
-            /^\/pdf\.worker/,
-            /^\/tesseract-worker/,
-            /^\/version\.json/,
-            /^\/api\//,
+            new RegExp(`^${BASE_PATH}assets/`),
+            new RegExp(`^${BASE_PATH}pdf\\.worker`),
+            new RegExp(`^${BASE_PATH}tesseract-worker`),
+            new RegExp(`^${BASE_PATH}version\\.json`),
+            new RegExp(`^${BASE_PATH}api/`),
           ],
           maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
