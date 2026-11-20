@@ -203,6 +203,7 @@ const DEFAULT_FILTERS: GlobalFilterState = {
   floors: [],
   reportSource: 'ALL',
   month: 'ALL',
+  week: 'ALL',
   dateFrom: '',
   dateTo: '',
   orderNumber: '',

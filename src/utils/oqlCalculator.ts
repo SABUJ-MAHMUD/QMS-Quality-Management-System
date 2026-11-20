@@ -154,61 +154,111 @@ export function getFinancialYear(dateStr: string, startMonth: number = 8): strin
 
 export interface FiscalWeekInfo {
   fiscalYear: string;
+  weekYear: number;
   weekNumber: number;
-  weekLabel: string; // e.g. "W32" .. "W52", "W01" .. "W31"
-  fyOrder: number; // 0 .. 51 chronological position inside the FY
-  weekStartDate: string; // YYYY-MM-DD
-  weekEndDate: string; // YYYY-MM-DD
+  weekKey: string; // e.g. "2026-W47" (unique ISO Mon-Sun week key)
+  weekLabel: string; // e.g. "W32" .. "W52"/"W53", "W01" .. "W31"
+  fyOrder: number; // chronological Mon-Sun week offset inside the FY
+  weekStartDate: string; // YYYY-MM-DD (Monday)
+  weekEndDate: string; // YYYY-MM-DD (Sunday)
+}
+
+const ONE_DAY_MS = 86400000;
+const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function parseUtcDateParts(dateStr: string): { year: number; month: number; day: number } {
+  const isoMatch = (dateStr || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+    };
+  }
+  if (dateStr) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        day: d.getDate(),
+      };
+    }
+  }
+  return { year: 2026, month: 8, day: 1 };
 }
 
 /**
- * Maps any inspection date into BESTSELLER's International Week cycle starting in August as Week 32 (W32).
- * Chronological order within an FY: W32 -> W52 -> W01 -> W31.
+ * Maps any inspection date into BESTSELLER's International ISO 8601 Monday–Sunday Week Schedule.
+ * Weeks always run Monday -> Sunday (e.g., Week 47, 2026 = Mon Nov 16 - Sun Nov 22, 2026).
  */
 export function getFiscalWeekInfo(dateStr: string, fyStartMonth: number = 8): FiscalWeekInfo {
-  let year = 2026;
-  let month = 8;
-  let day = 1;
-
-  const isoMatch = (dateStr || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    year = Number(isoMatch[1]);
-    month = Number(isoMatch[2]);
-    day = Number(isoMatch[3]);
-  } else if (dateStr) {
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      year = d.getFullYear();
-      month = d.getMonth() + 1;
-      day = d.getDate();
-    }
-  }
-
-  const fyStartYear = month >= fyStartMonth ? year : year - 1;
-  const fyStartUtc = Date.UTC(fyStartYear, fyStartMonth - 1, 1);
+  const { year, month, day } = parseUtcDateParts(dateStr);
   const dateUtc = Date.UTC(year, month - 1, day);
-  const diffDays = Math.max(0, Math.floor((dateUtc - fyStartUtc) / 86400000));
-  const clampedOrder = Math.min(51, Math.floor(diffDays / 7));
 
-  const startWeek = fyStartMonth === 8 ? 32 : 1;
-  const rawWeek = startWeek + clampedOrder;
-  const weekNumber = rawWeek <= 52 ? rawWeek : rawWeek - 52;
+  // Convert JS Sun=0..Sat=6 into ISO Mon=0..Sun=6
+  const isoDay = (new Date(dateUtc).getUTCDay() + 6) % 7;
+  const weekStartUtc = dateUtc - isoDay * ONE_DAY_MS;
+  const weekEndUtc = weekStartUtc + 6 * ONE_DAY_MS;
+
+  // ISO week belongs to the calendar year containing its Thursday
+  const thursdayUtc = weekStartUtc + 3 * ONE_DAY_MS;
+  const weekYear = new Date(thursdayUtc).getUTCFullYear();
+
+  // Jan 4 is always inside ISO Week 1 of weekYear
+  const jan4Utc = Date.UTC(weekYear, 0, 4);
+  const jan4IsoDay = (new Date(jan4Utc).getUTCDay() + 6) % 7;
+  const week1MondayUtc = jan4Utc - jan4IsoDay * ONE_DAY_MS;
+
+  const weekNumber = 1 + Math.round((weekStartUtc - week1MondayUtc) / (7 * ONE_DAY_MS));
   const weekLabel = `W${String(weekNumber).padStart(2, '0')}`;
+  const weekKey = `${weekYear}-${weekLabel}`;
 
-  const weekStartUtc = fyStartUtc + clampedOrder * 7 * 86400000;
-  const weekEndUtc =
-    clampedOrder === 51
-      ? Date.UTC(fyStartYear + 1, fyStartMonth - 1, 0)
-      : weekStartUtc + 6 * 86400000;
+  // Chronological Monday-Sunday week index within the active Financial Year
+  const fyStartYear = month >= fyStartMonth ? year : year - 1;
+  const fyAnchorUtc = Date.UTC(fyStartYear, fyStartMonth - 1, 1);
+  const fyAnchorIsoDay = (new Date(fyAnchorUtc).getUTCDay() + 6) % 7;
+  const fyFirstMondayUtc = fyAnchorUtc - fyAnchorIsoDay * ONE_DAY_MS;
+  const fyOrder = Math.max(0, Math.round((weekStartUtc - fyFirstMondayUtc) / (7 * ONE_DAY_MS)));
 
   return {
     fiscalYear: getFinancialYear(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`, fyStartMonth),
+    weekYear,
     weekNumber,
+    weekKey,
     weekLabel,
-    fyOrder: clampedOrder,
+    fyOrder,
     weekStartDate: new Date(weekStartUtc).toISOString().slice(0, 10),
     weekEndDate: new Date(weekEndUtc).toISOString().slice(0, 10),
   };
+}
+
+export function getIsoWeekKey(dateStr: string): string {
+  if (!dateStr) return '';
+  return getFiscalWeekInfo(dateStr).weekKey;
+}
+
+export function formatWeekDateRange(weekStartDate: string, weekEndDate: string): string {
+  const sMatch = weekStartDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const eMatch = weekEndDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!sMatch || !eMatch) return `${weekStartDate} - ${weekEndDate}`;
+
+  const sYear = Number(sMatch[1]);
+  const sMonth = SHORT_MONTH_NAMES[Number(sMatch[2]) - 1] || sMatch[2];
+  const sDay = Number(sMatch[3]);
+
+  const eYear = Number(eMatch[1]);
+  const eMonth = SHORT_MONTH_NAMES[Number(eMatch[2]) - 1] || eMatch[2];
+  const eDay = Number(eMatch[3]);
+
+  if (sYear === eYear) {
+    return `${sMonth} ${sDay} - ${eMonth} ${eDay}, ${eYear}`;
+  }
+  return `${sMonth} ${sDay}, ${sYear} - ${eMonth} ${eDay}, ${eYear}`;
+}
+
+export function formatWeekOptionLabel(info: Pick<FiscalWeekInfo, 'weekLabel' | 'weekStartDate' | 'weekEndDate'>): string {
+  return `${info.weekLabel} (${formatWeekDateRange(info.weekStartDate, info.weekEndDate)})`;
 }
 
 /**
@@ -274,6 +324,7 @@ export function filterReports(
     floors?: string[];
     reportSource?: 'ALL' | ReportSource;
     month?: string;
+    week?: string;
     dateFrom?: string;
     dateTo?: string;
     orderNumber?: string;
@@ -319,6 +370,16 @@ export function filterReports(
     if (filters.month && filters.month !== 'ALL') {
       // Month format: 'YYYY-MM'
       if (!report.inspectionDate.startsWith(filters.month)) return false;
+    }
+
+    if (filters.week && filters.week !== 'ALL') {
+      // Week format: 'YYYY-Www' (ISO 8601 Monday–Sunday week) or 'Www'
+      const repWeekInfo = getFiscalWeekInfo(report.inspectionDate, fyStartMonth);
+      if (filters.week.includes('-W')) {
+        if (repWeekInfo.weekKey !== filters.week) return false;
+      } else if (repWeekInfo.weekLabel !== filters.week) {
+        return false;
+      }
     }
 
     if (filters.dateFrom && report.inspectionDate < filters.dateFrom) {

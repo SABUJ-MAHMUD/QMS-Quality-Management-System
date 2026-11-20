@@ -1,9 +1,16 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { Filter, RotateCcw } from 'lucide-react';
+import { buildAvailableWeeks } from '../../utils/dashboardAnalytics';
 
 export const FilterBar: React.FC = () => {
-  const { filters, setFilters, resetFilters, defectGroups, reports } = useApp();
+  const { filters, setFilters, resetFilters, defectGroups, reports, settings } = useApp();
+
+  const availableWeeks = buildAvailableWeeks(
+    reports,
+    settings.financialYearStartMonth,
+    filters.month
+  );
 
   const styles = Array.from(new Set(reports.map((r) => r.styleNumber))).filter(Boolean);
   const orders = Array.from(
@@ -28,6 +35,7 @@ export const FilterBar: React.FC = () => {
       ? filters.financialYear.length > 0 && !filters.financialYear.includes('ALL')
       : filters.financialYear !== 'ALL') ||
     filters.month !== 'ALL' ||
+    (filters.week !== undefined && filters.week !== 'ALL') ||
     filters.dateFrom !== '' ||
     filters.dateTo !== '' ||
     filters.orderNumber !== '' ||
@@ -50,7 +58,7 @@ export const FilterBar: React.FC = () => {
           <span className="text-slate-400 dark:text-slate-500 font-medium">Month:</span>
           <select
             value={filters.month}
-            onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
+            onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value, week: 'ALL' }))}
             className="bg-transparent text-slate-800 dark:text-slate-100 font-semibold focus:outline-none cursor-pointer"
           >
             <option value="ALL" className="dark:bg-slate-800">All Months</option>
@@ -59,6 +67,24 @@ export const FilterBar: React.FC = () => {
             <option value="2026-09" className="dark:bg-slate-800">September 2026</option>
             <option value="2026-08" className="dark:bg-slate-800">August 2026</option>
             <option value="2026-07" className="dark:bg-slate-800">July 2026</option>
+          </select>
+        </div>
+
+        {/* Week Selector (Monday–Sunday ISO Schedule) */}
+        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1">
+          <span className="text-slate-400 dark:text-slate-500 font-medium">Week:</span>
+          <select
+            aria-label="Filter by Week"
+            value={filters.week || 'ALL'}
+            onChange={(e) => setFilters((prev) => ({ ...prev, week: e.target.value }))}
+            className="bg-transparent text-slate-800 dark:text-slate-100 font-semibold focus:outline-none cursor-pointer max-w-[195px] truncate"
+          >
+            <option value="ALL" className="dark:bg-slate-800">All Weeks</option>
+            {availableWeeks.map((w) => (
+              <option key={w.weekKey} value={w.weekKey} className="dark:bg-slate-800">
+                {w.optionLabel}
+              </option>
+            ))}
           </select>
         </div>
 

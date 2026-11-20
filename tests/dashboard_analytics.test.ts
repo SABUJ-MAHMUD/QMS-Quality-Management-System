@@ -10,9 +10,10 @@ import {
   buildDefaultCapaGuidance,
   computeDynamicCapaRows,
   selectDashboardCapaRows,
+  buildAvailableWeeks,
   formatQtyAndPct,
 } from '../src/utils/dashboardAnalytics';
-import { getFiscalWeekInfo, filterReports } from '../src/utils/oqlCalculator';
+import { getFiscalWeekInfo, filterReports, formatWeekDateRange } from '../src/utils/oqlCalculator';
 import { getCanonicalDefectInfo } from '../src/data/defectMasterData';
 
 function makeDefect(partial: Partial<InspectionDefect> & { originalDefectName: string }): InspectionDefect {
@@ -221,30 +222,87 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
     assert.equal(formatQtyAndPct(3, 37.5), '3 (37.50%)');
   });
 
-  it('getFiscalWeekInfo starts August at W32 and computeWeeklyOqlTrend sorts W32->W52->W01 chronologically', () => {
-    const augStart = getFiscalWeekInfo('2026-08-01', 8);
-    assert.equal(augStart.fiscalYear, 'FY26/27');
-    assert.equal(augStart.weekLabel, 'W32');
-    assert.equal(augStart.fyOrder, 0);
+  it('getFiscalWeekInfo uses ISO Monday–Sunday schedule (Week 47 2026 = Nov 16 - Nov 22) and computeWeeklyOqlTrend sorts chronologically', () => {
+    // Exact BESTSELLER portal screenshot verification: Week 47, 2026 = Mon Nov 16 - Sun Nov 22
+    const nov16Mon = getFiscalWeekInfo('2026-11-16', 8);
+    const nov20Fri = getFiscalWeekInfo('2026-11-20', 8);
+    const nov22Sun = getFiscalWeekInfo('2026-11-22', 8);
+    assert.equal(nov16Mon.weekLabel, 'W47');
+    assert.equal(nov16Mon.weekKey, '2026-W47');
+    assert.equal(nov16Mon.weekStartDate, '2026-11-16');
+    assert.equal(nov16Mon.weekEndDate, '2026-11-22');
+    assert.equal(formatWeekDateRange(nov16Mon.weekStartDate, nov16Mon.weekEndDate), 'Nov 16 - Nov 22, 2026');
+    assert.equal(nov20Fri.weekKey, '2026-W47');
+    assert.equal(nov22Sun.weekKey, '2026-W47');
 
-    const janMid = getFiscalWeekInfo('2027-01-05', 8);
-    assert.equal(janMid.fiscalYear, 'FY26/27');
-    assert.ok(janMid.weekNumber < 32, 'January must wrap past W52 into W01..W31');
-    assert.ok(janMid.fyOrder > augStart.fyOrder);
+    // Adjacent Sunday -> Monday boundaries belong to adjacent weeks
+    const nov15Sun = getFiscalWeekInfo('2026-11-15', 8);
+    const nov23Mon = getFiscalWeekInfo('2026-11-23', 8);
+    assert.equal(nov15Sun.weekLabel, 'W46');
+    assert.equal(nov15Sun.weekStartDate, '2026-11-09');
+    assert.equal(nov15Sun.weekEndDate, '2026-11-15');
+    assert.equal(nov23Mon.weekLabel, 'W48');
+    assert.equal(nov23Mon.weekStartDate, '2026-11-23');
+    assert.equal(nov23Mon.weekEndDate, '2026-11-29');
 
-    const trend = computeWeeklyOqlTrend(
-      [
-        makeReport({ id: 'w-jan', inspectionDate: '2027-01-05', inspectedQuantity: 100, totalDefectQuantity: 3 }),
-        makeReport({ id: 'w-aug', inspectionDate: '2026-08-03', inspectedQuantity: 100, totalDefectQuantity: 5 }),
-      ],
-      8
+    // August cycle & year-boundary ISO weeks (2026 has 53 ISO weeks; 2027-01-03 is Sun of 2026-W53)
+    const aug3Mon = getFiscalWeekInfo('2026-08-03', 8);
+    assert.equal(aug3Mon.fiscalYear, 'FY26/27');
+    assert.equal(aug3Mon.weekLabel, 'W32');
+    assert.equal(aug3Mon.weekStartDate, '2026-08-03');
+    assert.equal(aug3Mon.weekEndDate, '2026-08-09');
+
+    const jan3Sun = getFiscalWeekInfo('2027-01-03', 8);
+    assert.equal(jan3Sun.weekKey, '2026-W53');
+    assert.equal(jan3Sun.weekStartDate, '2026-12-28');
+    assert.equal(jan3Sun.weekEndDate, '2027-01-03');
+
+    const jan5Tue = getFiscalWeekInfo('2027-01-05', 8);
+    assert.equal(jan5Tue.fiscalYear, 'FY26/27');
+    assert.equal(jan5Tue.weekKey, '2027-W01');
+    assert.equal(jan5Tue.weekStartDate, '2027-01-04');
+    assert.equal(jan5Tue.weekEndDate, '2027-01-10');
+    assert.ok(jan5Tue.fyOrder > nov16Mon.fyOrder);
+    assert.ok(nov16Mon.fyOrder > aug3Mon.fyOrder);
+
+    // computeWeeklyOqlTrend groups Mon-Sun and sorts chronologically W32 -> W47 -> W53 -> W01
+    const historicalReports: InspectionReport[] = [
+      makeReport({ id: 'w-jan', inspectionDate: '2027-01-05', inspectedQuantity: 100, totalDefectQuantity: 3 }),
+      makeReport({ id: 'w-w53-sun', inspectionDate: '2027-01-03', inspectedQuantity: 100, totalDefectQuantity: 4 }),
+      makeReport({ id: 'w-nov-mon', inspectionDate: '2026-11-16', inspectedQuantity: 50, totalDefectQuantity: 2 }),
+      makeReport({ id: 'w-nov-sun', inspectionDate: '2026-11-22', inspectedQuantity: 50, totalDefectQuantity: 6 }),
+      makeReport({ id: 'w-aug', inspectionDate: '2026-08-03', inspectedQuantity: 100, totalDefectQuantity: 5 }),
+    ];
+
+    const trend = computeWeeklyOqlTrend(historicalReports, 8);
+    assert.equal(trend.length, 4);
+    assert.deepEqual(
+      trend.map((t) => t.weekLabel),
+      ['W32', 'W47', 'W53', 'W01']
+    );
+    assert.equal(trend[0].oql, 5);
+    assert.equal(trend[1].oql, 8, 'Mon Nov 16 (2/50) + Sun Nov 22 (6/50) = 8/100 = 8% in W47');
+    assert.equal(trend[1].dateRangeLabel, 'Nov 16 - Nov 22, 2026');
+    assert.equal(trend[2].oql, 4);
+    assert.equal(trend[3].oql, 3);
+
+    // filterReports & buildAvailableWeeks strictly apply Monday-Sunday schedule to existing reports
+    const w47Filtered = filterReports(historicalReports, { week: '2026-W47' }, 8);
+    assert.equal(w47Filtered.length, 2);
+    assert.deepEqual(
+      w47Filtered.map((r) => r.id).sort(),
+      ['w-nov-mon', 'w-nov-sun']
     );
 
-    assert.equal(trend.length, 2);
-    assert.equal(trend[0].weekLabel, 'W32');
-    assert.equal(trend[0].oql, 5);
-    assert.equal(trend[1].oql, 3);
-    assert.ok(trend[1].fyOrder > trend[0].fyOrder);
+    const allWeeks = buildAvailableWeeks(historicalReports, 8, 'ALL');
+    assert.equal(allWeeks.length, 4);
+    assert.equal(allWeeks[0].weekKey, '2027-W01', 'Newest week sorted first');
+    const w47Option = allWeeks.find((w) => w.weekKey === '2026-W47')!;
+    assert.equal(w47Option.optionLabel, 'W47 (Nov 16 - Nov 22, 2026)');
+    assert.equal(w47Option.reportCount, 2);
+
+    const novWeeks = buildAvailableWeeks(historicalReports, 8, '2026-11');
+    assert.deepEqual(novWeeks.map((w) => w.weekKey), ['2026-W47']);
   });
 
   it('computeFloorStats counts distinct styles & floor totals and findDuplicateReportIds flags duplicates', () => {

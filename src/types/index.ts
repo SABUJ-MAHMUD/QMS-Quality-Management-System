@@ -159,6 +159,7 @@ export interface GlobalFilterState {
   floors: string[];
   reportSource: 'ALL' | ReportSource;
   month: string;
+  week: string;
   dateFrom: string;
   dateTo: string;
   orderNumber: string;

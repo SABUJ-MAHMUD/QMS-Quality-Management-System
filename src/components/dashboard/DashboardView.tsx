@@ -44,6 +44,7 @@ import {
   computeFloorStats,
   computeDynamicCapaRows,
   selectDashboardCapaRows,
+  buildAvailableWeeks,
   formatPctText,
 } from '../../utils/dashboardAnalytics';
 import { ReportSource } from '../../types';
@@ -109,6 +110,27 @@ export const DashboardView: React.FC = () => {
     ['2026-11', '2026-10', '2026-09', '2026-08'].forEach((m) => set.add(m));
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [reports]);
+
+  // Dynamic Monday–Sunday ISO weeks derived from uploaded/previous reports (scoped by active FY)
+  const fyScopedReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { financialYear: filters.financialYear },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters.financialYear, settings.financialYearStartMonth]
+  );
+
+  const availableWeeksAll = useMemo(
+    () => buildAvailableWeeks(fyScopedReports, settings.financialYearStartMonth, 'ALL'),
+    [fyScopedReports, settings.financialYearStartMonth]
+  );
+
+  const availableWeeks = useMemo(
+    () => buildAvailableWeeks(fyScopedReports, settings.financialYearStartMonth, filters.month),
+    [fyScopedReports, settings.financialYearStartMonth, filters.month]
+  );
 
   // Dynamic Styles list from uploaded reports
   const availableStyles = useMemo(() => {
@@ -215,6 +237,7 @@ export const DashboardView: React.FC = () => {
     selectedFloors.length > 0 ||
     activeReportSource !== 'ALL' ||
     filters.month !== 'ALL' ||
+    (filters.week !== undefined && filters.week !== 'ALL') ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
     filters.defectGroup !== 'ALL' ||
@@ -240,12 +263,12 @@ export const DashboardView: React.FC = () => {
   // Active floor & distinct style breakdown for INSPECTION REPORTS card
   const floorStats = useMemo(() => computeFloorStats(filteredReports), [filteredReports]);
 
-  // Non-month filtered slice (respects FY, Floor, Buyer, ReportSource, Style, Order, Group, Result, Search)
+  // Non-month/week filtered slice (respects FY, Floor, Buyer, ReportSource, Style, Order, Group, Result, Search)
   const nonMonthFilteredReports = useMemo(
     () =>
       filterReports(
         reports,
-        { ...filters, month: 'ALL', dateFrom: '', dateTo: '' },
+        { ...filters, month: 'ALL', week: 'ALL', dateFrom: '', dateTo: '' },
         settings.financialYearStartMonth
       ),
     [reports, filters, settings.financialYearStartMonth]
@@ -407,8 +430,20 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
               <span className="text-slate-500 dark:text-slate-400 font-semibold">Month:</span>
               <select
+                aria-label="Filter by Month"
                 value={filters.month}
-                onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
+                onChange={(e) => {
+                  const nextMonth = e.target.value;
+                  setFilters((prev) => {
+                    if (nextMonth === 'ALL' || !prev.week || prev.week === 'ALL') {
+                      return { ...prev, month: nextMonth };
+                    }
+                    const wk = availableWeeksAll.find((w) => w.weekKey === prev.week);
+                    const overlaps =
+                      wk && (wk.weekStartDate.startsWith(nextMonth) || wk.weekEndDate.startsWith(nextMonth));
+                    return { ...prev, month: nextMonth, week: overlaps ? prev.week : 'ALL' };
+                  });
+                }}
                 className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
               >
                 <option value="ALL">All Months</option>
@@ -417,6 +452,43 @@ export const DashboardView: React.FC = () => {
                     {m}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* 2. Week Filter (ISO 8601 Monday–Sunday Schedule) */}
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">Week:</span>
+              <select
+                aria-label="Filter by Week"
+                value={filters.week || 'ALL'}
+                onChange={(e) => {
+                  const nextWeek = e.target.value;
+                  setFilters((prev) => {
+                    if (nextWeek !== 'ALL' && prev.month !== 'ALL') {
+                      const wk = availableWeeksAll.find((w) => w.weekKey === nextWeek);
+                      const overlaps =
+                        wk && (wk.weekStartDate.startsWith(prev.month) || wk.weekEndDate.startsWith(prev.month));
+                      if (!overlaps) {
+                        return { ...prev, week: nextWeek, month: 'ALL' };
+                      }
+                    }
+                    return { ...prev, week: nextWeek };
+                  });
+                }}
+                title="Monday to Sunday ISO Week Schedule (matching BESTSELLER Inspection Portal)"
+                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[195px] truncate"
+              >
+                <option value="ALL">All Weeks</option>
+                {availableWeeks.map((w) => (
+                  <option key={w.weekKey} value={w.weekKey}>
+                    {w.optionLabel}
+                  </option>
+                ))}
+                {filters.week &&
+                  filters.week !== 'ALL' &&
+                  !availableWeeks.some((w) => w.weekKey === filters.week) && (
+                    <option value={filters.week}>{filters.week}</option>
+                  )}
               </select>
             </div>
 
@@ -608,11 +680,18 @@ export const DashboardView: React.FC = () => {
             <button
               onClick={async () => {
                 const { exportDashboardToPptx } = await import('../../utils/exportUtils');
-                await exportDashboardToPptx(
-                  filteredReports,
-                  capas,
-                  filters.month !== 'ALL' ? filters.month : undefined
-                );
+                const selectedWeekInfo =
+                  filters.week && filters.week !== 'ALL'
+                    ? availableWeeksAll.find((w) => w.weekKey === filters.week)
+                    : undefined;
+                const periodLabel = selectedWeekInfo
+                  ? selectedWeekInfo.optionLabel
+                  : filters.week && filters.week !== 'ALL'
+                  ? filters.week
+                  : filters.month !== 'ALL'
+                  ? filters.month
+                  : undefined;
+                await exportDashboardToPptx(filteredReports, capas, periodLabel);
               }}
               title="Download full quality audit PowerPoint (.pptx) presentation"
               className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-orange-600 hover:bg-orange-700 text-white font-bold border border-orange-700 shadow-xs cursor-pointer transition-colors shrink-0"
@@ -900,11 +979,14 @@ export const DashboardView: React.FC = () => {
           </div>
           <div className="p-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200">
-                BESTSELLER FY (Aug = W32 &rarr; Jul = W31)
+              <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                ISO Mon&ndash;Sun (Aug W32 &rarr; Jul W31)
               </h4>
               {latestWeekPoint && (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0">
+                <span
+                  title={`Mon–Sun: ${latestWeekPoint.dateRangeLabel}`}
+                  className="text-[10px] font-black px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0"
+                >
                   Latest {latestWeekPoint.weekLabel}: {latestWeekPoint.oql.toFixed(2)}%
                 </span>
               )}
@@ -919,7 +1001,7 @@ export const DashboardView: React.FC = () => {
                     No Weekly OQL Data in Current FY Slice
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload inspection reports to track weekly OQL progression starting Week 32 (August).
+                    Upload inspection reports to track Monday&ndash;Sunday weekly OQL progression starting Week 32 (August).
                   </p>
                 </div>
               ) : (
@@ -958,7 +1040,7 @@ export const DashboardView: React.FC = () => {
                       labelFormatter={(label: any, payload: any) => {
                         const row = payload?.[0]?.payload;
                         if (!row) return String(label);
-                        return `${label} (${row.weekStartDate} to ${row.weekEndDate}) • ${row.reportCount} rpt(s)`;
+                        return `${label} (Mon–Sun: ${row.dateRangeLabel || `${row.weekStartDate} to ${row.weekEndDate}`}) • ${row.reportCount} rpt(s)`;
                       }}
                     />
                     <Line

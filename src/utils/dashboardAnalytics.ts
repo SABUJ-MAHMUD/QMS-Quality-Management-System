@@ -1,6 +1,11 @@
 import { CAPARecord, InspectionReport } from '../types';
 import { getCanonicalDefectInfo } from '../data/defectMasterData';
-import { getFiscalWeekInfo, normalizeFloorName } from './oqlCalculator';
+import {
+  getFiscalWeekInfo,
+  normalizeFloorName,
+  formatWeekDateRange,
+  formatWeekOptionLabel,
+} from './oqlCalculator';
 
 export interface TopSingleDefectBar {
   code: string;
@@ -39,15 +44,26 @@ export interface MonthToMonthComparisonResult {
 
 export interface WeeklyOqlPoint {
   weekKey: string;
-  weekLabel: string; // e.g. "W32", "W44"
+  weekLabel: string; // e.g. "W32", "W47"
   fiscalYear: string;
   fyOrder: number;
   weekStartDate: string;
   weekEndDate: string;
+  dateRangeLabel: string; // e.g. "Nov 16 - Nov 22, 2026"
   inspected: number;
   defects: number;
   reportCount: number;
   oql: number;
+}
+
+export interface WeekFilterOption {
+  weekKey: string; // e.g. "2026-W47"
+  weekLabel: string; // e.g. "W47"
+  weekStartDate: string; // Monday YYYY-MM-DD
+  weekEndDate: string; // Sunday YYYY-MM-DD
+  dateRangeLabel: string; // e.g. "Nov 16 - Nov 22, 2026"
+  optionLabel: string; // e.g. "W47 (Nov 16 - Nov 22, 2026)"
+  reportCount: number;
 }
 
 export interface FloorSummaryItem {
@@ -289,7 +305,8 @@ export function computeMonthToMonthTopDefects(
 }
 
 /**
- * Computes Weekly OQL Trend sorted chronologically in BESTSELLER's FY order (August = W32 .. W52 -> W01 .. W31).
+ * Computes Weekly OQL Trend sorted chronologically in ISO 8601 Monday–Sunday week order
+ * (matching BESTSELLER Online Inspection Portal week schedule).
  */
 export function computeWeeklyOqlTrend(
   reports: InspectionReport[],
@@ -304,6 +321,7 @@ export function computeWeeklyOqlTrend(
       fyOrder: number;
       weekStartDate: string;
       weekEndDate: string;
+      dateRangeLabel: string;
       inspected: number;
       defects: number;
       reportCount: number;
@@ -314,13 +332,14 @@ export function computeWeeklyOqlTrend(
     if (!r.inspectionDate) return;
     const info = getFiscalWeekInfo(r.inspectionDate, fyStartMonth);
     fySet.add(info.fiscalYear);
-    const key = `${info.fiscalYear}::${String(info.fyOrder).padStart(2, '0')}`;
+    const key = info.weekKey;
     const curr = weekMap.get(key) || {
       weekLabel: info.weekLabel,
       fiscalYear: info.fiscalYear,
       fyOrder: info.fyOrder,
       weekStartDate: info.weekStartDate,
       weekEndDate: info.weekEndDate,
+      dateRangeLabel: formatWeekDateRange(info.weekStartDate, info.weekEndDate),
       inspected: 0,
       defects: 0,
       reportCount: 0,
@@ -334,7 +353,7 @@ export function computeWeeklyOqlTrend(
   const multiFy = fySet.size > 1;
 
   return Array.from(weekMap.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .sort((a, b) => a[1].weekStartDate.localeCompare(b[1].weekStartDate))
     .map(([weekKey, w]) => ({
       weekKey,
       weekLabel: multiFy ? `${w.weekLabel} (${w.fiscalYear.replace('FY', '')})` : w.weekLabel,
@@ -342,11 +361,55 @@ export function computeWeeklyOqlTrend(
       fyOrder: w.fyOrder,
       weekStartDate: w.weekStartDate,
       weekEndDate: w.weekEndDate,
+      dateRangeLabel: w.dateRangeLabel,
       inspected: w.inspected,
       defects: w.defects,
       reportCount: w.reportCount,
       oql: w.inspected > 0 ? Number(((w.defects / w.inspected) * 100).toFixed(2)) : 0,
     }));
+}
+
+/**
+ * Builds distinct Monday–Sunday ISO week filter options derived from reports,
+ * sorted newest-week-first (matching the Month dropdown sort order).
+ */
+export function buildAvailableWeeks(
+  reports: InspectionReport[],
+  fyStartMonth: number = 8,
+  monthFilter: string = 'ALL'
+): WeekFilterOption[] {
+  const weekMap = new Map<string, WeekFilterOption>();
+
+  reports.forEach((r) => {
+    if (!r.inspectionDate) return;
+    const info = getFiscalWeekInfo(r.inspectionDate, fyStartMonth);
+    if (
+      monthFilter &&
+      monthFilter !== 'ALL' &&
+      !info.weekStartDate.startsWith(monthFilter) &&
+      !info.weekEndDate.startsWith(monthFilter)
+    ) {
+      return;
+    }
+    const existing = weekMap.get(info.weekKey);
+    if (existing) {
+      existing.reportCount += 1;
+    } else {
+      weekMap.set(info.weekKey, {
+        weekKey: info.weekKey,
+        weekLabel: info.weekLabel,
+        weekStartDate: info.weekStartDate,
+        weekEndDate: info.weekEndDate,
+        dateRangeLabel: formatWeekDateRange(info.weekStartDate, info.weekEndDate),
+        optionLabel: formatWeekOptionLabel(info),
+        reportCount: 1,
+      });
+    }
+  });
+
+  return Array.from(weekMap.values()).sort((a, b) =>
+    b.weekStartDate.localeCompare(a.weekStartDate)
+  );
 }
 
 /**

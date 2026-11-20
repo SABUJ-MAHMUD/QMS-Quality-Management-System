@@ -24,8 +24,9 @@ import {
 import {
   buildDefaultCapaGuidance,
   computeDynamicCapaRows,
+  buildAvailableWeeks,
 } from '../../utils/dashboardAnalytics';
-import { normalizeFloorName } from '../../utils/oqlCalculator';
+import { filterReports, normalizeFloorName } from '../../utils/oqlCalculator';
 import { ReportSource } from '../../types';
 
 const normalizeDefectTitleKey = (name: string): string => {
@@ -90,6 +91,7 @@ export const CapaView: React.FC = () => {
     selectedFloors.length > 0 ||
     activeReportSource !== 'ALL' ||
     filters.month !== 'ALL' ||
+    (filters.week !== undefined && filters.week !== 'ALL') ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
     filters.defectGroup !== 'ALL' ||
@@ -104,6 +106,21 @@ export const CapaView: React.FC = () => {
     });
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [reports]);
+
+  const fyScopedReports = useMemo(
+    () => filterReports(reports, { financialYear: filters.financialYear }, 8),
+    [reports, filters.financialYear]
+  );
+
+  const availableWeeksAll = useMemo(
+    () => buildAvailableWeeks(fyScopedReports, 8, 'ALL'),
+    [fyScopedReports]
+  );
+
+  const availableWeeks = useMemo(
+    () => buildAvailableWeeks(fyScopedReports, 8, filters.month),
+    [fyScopedReports, filters.month]
+  );
 
   const availableFloors = useMemo(() => {
     const set = new Set<string>(['SEW-1', 'SEW-2', 'SEW-3']);
@@ -644,12 +661,38 @@ export const CapaView: React.FC = () => {
             <select
               aria-label="Filter CAPA by Month"
               value={filters.month}
-              onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
+              onChange={(e) => {
+                const nextMonth = e.target.value;
+                setFilters((prev) => {
+                  if (nextMonth === 'ALL' || !prev.week || prev.week === 'ALL') {
+                    return { ...prev, month: nextMonth };
+                  }
+                  const wk = availableWeeksAll.find((w) => w.weekKey === prev.week);
+                  const overlaps =
+                    wk && (wk.weekStartDate.startsWith(nextMonth) || wk.weekEndDate.startsWith(nextMonth));
+                  return { ...prev, month: nextMonth, week: overlaps ? prev.week : 'ALL' };
+                });
+              }}
               className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Months</option>
               {availableMonths.map((m) => (
                 <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5">
+            <span className="text-[11px] font-bold text-slate-500">Week:</span>
+            <select
+              aria-label="Filter CAPA by Week"
+              value={filters.week || 'ALL'}
+              onChange={(e) => setFilters((prev) => ({ ...prev, week: e.target.value }))}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[185px] truncate"
+            >
+              <option value="ALL">All Weeks</option>
+              {availableWeeks.map((w) => (
+                <option key={w.weekKey} value={w.weekKey}>{w.optionLabel}</option>
               ))}
             </select>
           </div>

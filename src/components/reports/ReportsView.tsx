@@ -125,7 +125,13 @@ export const ReportsView: React.FC = () => {
             Export to Excel (.xlsx)
           </button>
           <button
-            onClick={() => exportDashboardToPptx(filteredReports, capas, filters.month)}
+            onClick={() =>
+              exportDashboardToPptx(
+                filteredReports,
+                capas,
+                filters.week && filters.week !== 'ALL' ? filters.week : filters.month
+              )
+            }
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#b25900] hover:bg-[#964b00] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             title="Download executive PowerPoint presentation (.pptx) with charts, KPIs, and CAPA logs"
           >
