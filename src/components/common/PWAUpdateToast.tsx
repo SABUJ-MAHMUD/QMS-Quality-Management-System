@@ -19,6 +19,7 @@ declare global {
 
 const CURRENT_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
 const CURRENT_BUILT_AT = typeof __APP_BUILT_AT__ !== 'undefined' ? __APP_BUILT_AT__ : '';
+const APP_BASE_URL = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
 
 export const PWAUpdateToast: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
@@ -39,9 +40,14 @@ export const PWAUpdateToast: React.FC = () => {
     const scripts = Array.from(document.querySelectorAll('script[type="module"][src]'));
     const entry = scripts.find((s) => /\/assets\/index-[^/]+\.js/.test(s.getAttribute('src') || ''));
     if (entry) {
-      const src = entry.getAttribute('src') || '';
-      const match = src.match(/(\/assets\/index-[^?#]+\.js)/);
-      if (match) loadedEntryScriptRef.current = match[1];
+      try {
+        const parsed = new URL(entry.getAttribute('src') || '', window.location.href);
+        loadedEntryScriptRef.current = parsed.pathname;
+      } catch {
+        const src = entry.getAttribute('src') || '';
+        const match = src.match(/([^?#]*\/assets\/index-[^?#]+\.js)/);
+        if (match) loadedEntryScriptRef.current = match[1];
+      }
     }
   }, []);
 
@@ -135,7 +141,7 @@ export const PWAUpdateToast: React.FC = () => {
       let verifiedByJson = false;
 
       try {
-        const res = await fetch(`/version.json?t=${bust}`, {
+        const res = await fetch(`${APP_BASE_URL}version.json?t=${bust}`, {
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -166,9 +172,9 @@ export const PWAUpdateToast: React.FC = () => {
         // Fall through to HTML entry script check
       }
 
-      // Secondary fallback: compare server /index.html entry bundle hash if /version.json wasn't conclusive
+      // Secondary fallback: compare server index.html entry bundle hash if version.json wasn't conclusive
       if (!verifiedByJson && loadedEntryScriptRef.current) {
-        const htmlRes = await fetch(`/index.html?t=${bust}`, {
+        const htmlRes = await fetch(`${APP_BASE_URL}index.html?t=${bust}`, {
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -177,9 +183,18 @@ export const PWAUpdateToast: React.FC = () => {
         });
         if (htmlRes.ok && (htmlRes.headers.get('content-type') || '').includes('text/html')) {
           const htmlText = await htmlRes.text();
-          const remoteEntry = extractEntryScriptSrc(htmlText);
+          const remoteEntryRaw = extractEntryScriptSrc(htmlText);
+          let remoteEntry = remoteEntryRaw;
+          if (remoteEntryRaw) {
+            try {
+              remoteEntry = new URL(remoteEntryRaw, window.location.href).pathname;
+            } catch {
+              remoteEntry = remoteEntryRaw;
+            }
+          }
           if (remoteEntry && remoteEntry !== loadedEntryScriptRef.current) {
-            triggerUpdatePrompt(remoteEntry.replace('/assets/index-', '').replace('.js', ''));
+            const hashPart = remoteEntry.split('/assets/index-').pop()?.replace('.js', '') || 'update';
+            triggerUpdatePrompt(hashPart);
           }
         }
       }

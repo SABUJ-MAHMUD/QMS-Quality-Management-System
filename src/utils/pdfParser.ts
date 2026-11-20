@@ -329,8 +329,9 @@ async function recognizeCanvasesWithOcr(
     const { createWorker } = await import('tesseract.js');
     let worker: any;
     try {
+      const baseUrl = ((import.meta as any).env?.BASE_URL || '/').replace(/\/?$/, '/');
       worker = await createWorker('eng', 1, {
-        workerPath: '/tesseract-worker.min.js',
+        workerPath: `${baseUrl}tesseract-worker.min.js`,
         errorHandler: (err: any) => console.warn('OCR worker note:', err),
       });
     } catch (workerErr) {
@@ -428,8 +429,9 @@ async function renderPdfPagesToCanvases(pdfDoc: any, maxPages: number = 3): Prom
  * cell detection (` | `), and falls back to OCR when a PDF is scanned/image-only.
  */
 async function openPdfDocumentResilient(pdfjsLib: any, dataBytes: Uint8Array): Promise<any> {
-  // Stage A: Try Vite-bundled module worker URL (immune to stale /pdf.worker.min.js SW HTML fallback)
-  let workerUrl = '/pdf.worker.min.js';
+  // Stage A: Try Vite-bundled module worker URL (immune to stale SW HTML fallback on any host subpath)
+  const baseUrl = ((import.meta as any).env?.BASE_URL || '/').replace(/\/?$/, '/');
+  let workerUrl = `${baseUrl}pdf.worker.min.js`;
   try {
     const workerUrlMod = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
     if (workerUrlMod?.default) {

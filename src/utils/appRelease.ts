@@ -77,7 +77,7 @@ export function evaluateFirestoreRelease(params: {
 
 export function extractEntryScriptSrc(html: string): string | null {
   if (!html) return null;
-  const match = html.match(/<script[^>]+src=["'](\/assets\/index-[^"']+\.js)["']/i);
+  const match = html.match(/<script[^>]+src=["']([^"']*\/assets\/index-[^"'?#]+\.js)["']/i);
   return match ? match[1] : null;
 }
 

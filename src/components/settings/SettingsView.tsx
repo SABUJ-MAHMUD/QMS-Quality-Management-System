@@ -19,6 +19,7 @@ import { acknowledgeNoticeVersion, NETLIFY_PRODUCTION_HOST } from '../../utils/a
 
 const CURRENT_APP_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
 const CURRENT_APP_BUILT_AT = typeof __APP_BUILT_AT__ !== 'undefined' ? __APP_BUILT_AT__ : '';
+const APP_BASE_URL = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
 
 export const SettingsView: React.FC = () => {
   const {
@@ -48,7 +49,7 @@ export const SettingsView: React.FC = () => {
     setIsCheckingUpdate(true);
     setUpdateCheckStatus('');
     try {
-      const res = await fetch(`/version.json?t=${Date.now()}`, {
+      const res = await fetch(`${APP_BASE_URL}version.json?t=${Date.now()}`, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -354,7 +355,7 @@ export const SettingsView: React.FC = () => {
               {CURRENT_APP_BUILT_AT ? ` • ${CURRENT_APP_BUILT_AT.slice(0, 16).replace('T', ' ')} UTC` : ''}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              After pushing code to GitHub &amp; Netlify deploy completes, active users auto-receive the update popup within seconds—or send an instant push notification right now.
+              After pushing code to GitHub &amp; GitHub Pages deploy completes, active users auto-receive the update popup within seconds—or send an instant push notification right now.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">

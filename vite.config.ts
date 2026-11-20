@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { transform as lightningTransform } from 'lightningcss';
+import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -46,6 +47,11 @@ function versionManifestPlugin(buildId: string, builtAt: string): Plugin {
         fileName: 'version.json',
         source: payload,
       });
+      this.emitFile({
+        type: 'asset',
+        fileName: '404.html',
+        source: `<!doctype html><html><head><meta charset="utf-8"><title>OQL: Analysis</title><script>(function(){try{if(!/\\.[a-z0-9]+$/i.test(window.location.pathname)){window.location.replace(${JSON.stringify(BASE_PATH)});}}catch(e){}})();</script></head><body>Redirecting to OQL: Analysis...</body></html>`,
+      });
     },
   };
 }
@@ -83,6 +89,35 @@ function cssCompatDownlevelPlugin(): Plugin {
   };
 }
 
+/**
+ * Ensures all emitted JS chunks compile down cleanly to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
+ * (eliminating ES2022+ class static blocks in vendor-firebase, private fields, regex /v flags).
+ */
+function jsCompatDownlevelPlugin(): Plugin {
+  return {
+    name: 'qms-js-compat-downlevel',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      for (const [fileName, item] of Object.entries(bundle)) {
+        if (item.type === 'chunk' && (fileName.endsWith('.js') || fileName.endsWith('.mjs'))) {
+          try {
+            const transformed = esbuildTransformSync(item.code, {
+              loader: 'js',
+              target: COMPAT_ESBUILD_TARGETS,
+              format: 'esm',
+              minify: true,
+              legalComments: 'none',
+            });
+            item.code = transformed.code;
+          } catch (err) {
+            console.warn(`[qms-js-compat] skipped downlevel on ${fileName}:`, err instanceof Error ? err.message : err);
+          }
+        }
+      }
+    },
+  };
+}
+
 function excludeAiStudioAssetsPlugin(): Plugin {
   return {
     name: 'qms-exclude-aistudio-assets',
@@ -107,6 +142,7 @@ export default defineConfig(() => {
       tailwindcss(),
       versionManifestPlugin(appBuildId, appBuiltAt),
       cssCompatDownlevelPlugin(),
+      jsCompatDownlevelPlugin(),
       excludeAiStudioAssetsPlugin(),
       VitePWA({
         registerType: 'prompt',

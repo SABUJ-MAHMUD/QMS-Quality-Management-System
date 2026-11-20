@@ -100,8 +100,10 @@ test('evaluateFirestoreRelease handles normal deploys, clock skew, and admin not
   );
 });
 
-test('extractEntryScriptSrc extracts Vite entry bundle hash from index.html fallback', () => {
-  const sampleHtml = `<!doctype html><html><body><script type="module" crossorigin src="/assets/index-BUCSjnwK.js"></script></body></html>`;
-  assert.equal(extractEntryScriptSrc(sampleHtml), '/assets/index-BUCSjnwK.js');
+test('extractEntryScriptSrc extracts Vite entry bundle hash from index.html fallback across root and GitHub Pages base paths', () => {
+  const rootHtml = `<!doctype html><html><body><script type="module" crossorigin src="/assets/index-BUCSjnwK.js"></script></body></html>`;
+  const ghPagesHtml = `<!doctype html><html><body><script type="module" crossorigin src="/QMS-Quality-Management-System/assets/index-Dis94-nz.js"></script></body></html>`;
+  assert.equal(extractEntryScriptSrc(rootHtml), '/assets/index-BUCSjnwK.js');
+  assert.equal(extractEntryScriptSrc(ghPagesHtml), '/QMS-Quality-Management-System/assets/index-Dis94-nz.js');
   assert.equal(extractEntryScriptSrc('<html><body>empty</body></html>'), null);
 });
