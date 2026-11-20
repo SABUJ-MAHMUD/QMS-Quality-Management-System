@@ -3,7 +3,6 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { transform as lightningTransform } from 'lightningcss';
-import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -84,36 +83,6 @@ function cssCompatDownlevelPlugin(): Plugin {
   };
 }
 
-/**
- * Ensures all emitted JS chunks compile down cleanly to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
- * (eliminating ES2022+ class static blocks, private fields, regex /v flags in third-party deps).
- */
-function jsCompatDownlevelPlugin(): Plugin {
-  return {
-    name: 'qms-js-compat-downlevel',
-    enforce: 'post',
-    generateBundle(_options, bundle) {
-      for (const [fileName, item] of Object.entries(bundle)) {
-        if (item.type === 'chunk' && (fileName.endsWith('.js') || fileName.endsWith('.mjs'))) {
-          try {
-            const transformed = esbuildTransformSync(item.code, {
-              loader: 'js',
-              target: COMPAT_ESBUILD_TARGETS,
-              format: 'esm',
-              minify: true,
-              legalComments: 'none',
-            });
-            item.code = transformed.code;
-          } catch (err) {
-            // Keep original chunk if a worker bundle uses top-level await that esbuild rejects
-            console.warn(`[qms-js-compat] skipped downlevel on ${fileName}:`, err instanceof Error ? err.message : err);
-          }
-        }
-      }
-    },
-  };
-}
-
 function excludeAiStudioAssetsPlugin(): Plugin {
   return {
     name: 'qms-exclude-aistudio-assets',
@@ -138,7 +107,6 @@ export default defineConfig(() => {
       tailwindcss(),
       versionManifestPlugin(appBuildId, appBuiltAt),
       cssCompatDownlevelPlugin(),
-      jsCompatDownlevelPlugin(),
       excludeAiStudioAssetsPlugin(),
       VitePWA({
         registerType: 'prompt',
