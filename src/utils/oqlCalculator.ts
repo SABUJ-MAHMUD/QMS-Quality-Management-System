@@ -2,39 +2,146 @@ import { InspectionReport, DefectGroup, ReportSource, GlobalFilterState } from '
 import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../data/defectMasterData';
 
 /**
- * Calculates single report OQL percentage based on official BESTSELLER formula:
- * OQL (%) = (Total Defects / Total Inspected Quantity) * 100
- * where Total Defects = Critical + Major + Minor
+ * Returns the defect count included in OQL calculation (Major + Minor only; Critical excluded).
+ * Critical defects remain tracked separately and in Total Defects (Critical + Major + Minor).
+ * Falls back to totalDefectQuantity only for minimal synthetic inputs that omit major/minor fields.
+ */
+export function getReportOqlDefects(report: {
+  criticalDefectQuantity?: number;
+  majorDefectQuantity?: number;
+  minorDefectQuantity?: number;
+  totalDefectQuantity?: number;
+}): number {
+  if (report.majorDefectQuantity !== undefined || report.minorDefectQuantity !== undefined) {
+    return (Number(report.majorDefectQuantity) || 0) + (Number(report.minorDefectQuantity) || 0);
+  }
+  return Number(report.totalDefectQuantity) || 0;
+}
+
+/**
+ * Calculates single report OQL percentage:
+ * OQL (%) = ((Major + Minor Defects) / Total Inspected Quantity) * 100
  */
 export function calculateReportOql(
-  totalDefects: number,
+  oqlDefects: number,
   inspectedQuantity: number,
   decimals: number = 2
 ): number {
   if (!inspectedQuantity || inspectedQuantity <= 0) {
     return 0;
   }
-  const oql = (totalDefects / inspectedQuantity) * 100;
+  const oql = (oqlDefects / inspectedQuantity) * 100;
   return Number(oql.toFixed(decimals));
 }
 
 /**
+ * Dynamically calculates an InspectionReport's OQL % from Major + Minor defects / Inspected Qty.
+ */
+export function getReportOql(
+  report: {
+    criticalDefectQuantity?: number;
+    majorDefectQuantity?: number;
+    minorDefectQuantity?: number;
+    totalDefectQuantity?: number;
+    inspectedQuantity?: number;
+  },
+  decimals: number = 2
+): number {
+  return calculateReportOql(
+    getReportOqlDefects(report),
+    Number(report.inspectedQuantity) || 0,
+    decimals
+  );
+}
+
+/**
  * Calculates Aggregated OQL across multiple inspection reports:
- * Aggregated OQL (%) = (Sum of Total Defects / Sum of Total Inspected Quantity) * 100
+ * Aggregated OQL (%) = (Sum of (Major + Minor) Defects / Sum of Total Inspected Quantity) * 100
  * IMPORTANT: Never calculate aggregated OQL by taking a simple average of individual inspection OQLs.
  */
 export function calculateAggregatedOql(
-  reports: Array<{ totalDefectQuantity: number; inspectedQuantity: number }>,
+  reports: Array<{
+    criticalDefectQuantity?: number;
+    majorDefectQuantity?: number;
+    minorDefectQuantity?: number;
+    totalDefectQuantity?: number;
+    inspectedQuantity: number;
+  }>,
   decimals: number = 2
 ): number {
   if (!reports || reports.length === 0) return 0;
 
-  const totalDefects = reports.reduce((sum, r) => sum + (Number(r.totalDefectQuantity) || 0), 0);
+  const oqlDefects = reports.reduce((sum, r) => sum + getReportOqlDefects(r), 0);
   const totalInspected = reports.reduce((sum, r) => sum + (Number(r.inspectedQuantity) || 0), 0);
 
   if (totalInspected <= 0) return 0;
-  const aggregated = (totalDefects / totalInspected) * 100;
+  const aggregated = (oqlDefects / totalInspected) * 100;
   return Number(aggregated.toFixed(decimals));
+}
+
+export interface OqlTargetVariation {
+  delta: number;
+  absDelta: number;
+  formattedDelta: string;
+  status: 'ACHIEVED' | 'ON_TARGET' | 'MISS' | 'NO_DATA';
+  shortLabel: string;
+}
+
+/**
+ * Computes how far the current OQL is from Target OQL (e.g. +1.79% Not Achieved / -0.70% Achieved).
+ */
+export function calculateOqlTargetVariation(
+  actualOql: number,
+  targetOql: number,
+  hasInspectedData: boolean = true,
+  decimals: number = 2
+): OqlTargetVariation {
+  if (!hasInspectedData) {
+    const zero = (0).toFixed(decimals);
+    return {
+      delta: 0,
+      absDelta: 0,
+      formattedDelta: `${zero}%`,
+      status: 'NO_DATA',
+      shortLabel: `Var: ${zero}% (No Data)`,
+    };
+  }
+
+  const roundedActual = Number((Number(actualOql) || 0).toFixed(decimals));
+  const roundedTarget = Number((Number(targetOql) || 0).toFixed(decimals));
+  const delta = Number((roundedActual - roundedTarget).toFixed(decimals));
+  const absDelta = Math.abs(delta);
+
+  if (delta > 0) {
+    const formattedDelta = `+${delta.toFixed(decimals)}%`;
+    return {
+      delta,
+      absDelta,
+      formattedDelta,
+      status: 'MISS',
+      shortLabel: `Var: ${formattedDelta} (Not Achieved)`,
+    };
+  }
+
+  if (delta < 0) {
+    const formattedDelta = `-${absDelta.toFixed(decimals)}%`;
+    return {
+      delta,
+      absDelta,
+      formattedDelta,
+      status: 'ACHIEVED',
+      shortLabel: `Var: ${formattedDelta} (Achieved)`,
+    };
+  }
+
+  const zero = (0).toFixed(decimals);
+  return {
+    delta: 0,
+    absDelta: 0,
+    formattedDelta: `${zero}%`,
+    status: 'ON_TARGET',
+    shortLabel: `Var: ${zero}% (On Target)`,
+  };
 }
 
 /**

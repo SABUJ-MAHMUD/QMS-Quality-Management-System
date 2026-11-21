@@ -268,12 +268,53 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
     assert.ok(nov16Mon.fyOrder > aug3Mon.fyOrder);
 
     // computeWeeklyOqlTrend groups Mon-Sun and sorts chronologically W32 -> W47 -> W53 -> W01
+    // Note: OQL uses Major + Minor only while `defects` retains Critical + Major + Minor
     const historicalReports: InspectionReport[] = [
-      makeReport({ id: 'w-jan', inspectionDate: '2027-01-05', inspectedQuantity: 100, totalDefectQuantity: 3 }),
-      makeReport({ id: 'w-w53-sun', inspectionDate: '2027-01-03', inspectedQuantity: 100, totalDefectQuantity: 4 }),
-      makeReport({ id: 'w-nov-mon', inspectionDate: '2026-11-16', inspectedQuantity: 50, totalDefectQuantity: 2 }),
-      makeReport({ id: 'w-nov-sun', inspectionDate: '2026-11-22', inspectedQuantity: 50, totalDefectQuantity: 6 }),
-      makeReport({ id: 'w-aug', inspectionDate: '2026-08-03', inspectedQuantity: 100, totalDefectQuantity: 5 }),
+      makeReport({
+        id: 'w-jan',
+        inspectionDate: '2027-01-05',
+        inspectedQuantity: 100,
+        criticalDefectQuantity: 0,
+        majorDefectQuantity: 2,
+        minorDefectQuantity: 1,
+        totalDefectQuantity: 3,
+      }),
+      makeReport({
+        id: 'w-w53-sun',
+        inspectionDate: '2027-01-03',
+        inspectedQuantity: 100,
+        criticalDefectQuantity: 1,
+        majorDefectQuantity: 3,
+        minorDefectQuantity: 1,
+        totalDefectQuantity: 5,
+      }),
+      makeReport({
+        id: 'w-nov-mon',
+        inspectionDate: '2026-11-16',
+        inspectedQuantity: 50,
+        criticalDefectQuantity: 0,
+        majorDefectQuantity: 1,
+        minorDefectQuantity: 1,
+        totalDefectQuantity: 2,
+      }),
+      makeReport({
+        id: 'w-nov-sun',
+        inspectionDate: '2026-11-22',
+        inspectedQuantity: 50,
+        criticalDefectQuantity: 2,
+        majorDefectQuantity: 4,
+        minorDefectQuantity: 2,
+        totalDefectQuantity: 8,
+      }),
+      makeReport({
+        id: 'w-aug',
+        inspectionDate: '2026-08-03',
+        inspectedQuantity: 100,
+        criticalDefectQuantity: 0,
+        majorDefectQuantity: 3,
+        minorDefectQuantity: 2,
+        totalDefectQuantity: 5,
+      }),
     ];
 
     const trend = computeWeeklyOqlTrend(historicalReports, 8);
@@ -283,9 +324,11 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
       ['W32', 'W47', 'W53', 'W01']
     );
     assert.equal(trend[0].oql, 5);
-    assert.equal(trend[1].oql, 8, 'Mon Nov 16 (2/50) + Sun Nov 22 (6/50) = 8/100 = 8% in W47');
+    assert.equal(trend[1].defects, 10, 'W47 Total defects preserves Critical+Major+Minor (2 + 8 = 10)');
+    assert.equal(trend[1].oql, 8, 'W47 OQL uses Major+Minor only: (1+1 + 4+2) / 100 = 8% (Critical=2 excluded)');
     assert.equal(trend[1].dateRangeLabel, 'Nov 16 - Nov 22, 2026');
-    assert.equal(trend[2].oql, 4);
+    assert.equal(trend[2].defects, 5, 'W53 preserves all 5 total defects including 1 Critical');
+    assert.equal(trend[2].oql, 4, 'W53 OQL excludes 1 Critical: (3+1)/100 = 4%');
     assert.equal(trend[3].oql, 3);
 
     // filterReports & buildAvailableWeeks strictly apply Monday-Sunday schedule to existing reports

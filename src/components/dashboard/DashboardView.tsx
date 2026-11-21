@@ -38,7 +38,14 @@ import { DefectAxisTick } from '../common/DefectAxisTick';
 import { MultiSelectCheckboxFilter } from '../common/MultiSelectCheckboxFilter';
 import { ExpandablePanel } from '../common/ExpandablePanel';
 import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
-import { filterReports, getReportSource, normalizeFloorName, normalizeMultiSelect } from '../../utils/oqlCalculator';
+import {
+  calculateOqlTargetVariation,
+  filterReports,
+  getReportOqlDefects,
+  getReportSource,
+  normalizeFloorName,
+  normalizeMultiSelect,
+} from '../../utils/oqlCalculator';
 import {
   computeTopSingleDefects,
   computeMonthToMonthTopDefects,
@@ -318,8 +325,17 @@ export const DashboardView: React.FC = () => {
   const majorPct = totalInspectedQty > 0 ? (totalMajor / totalInspectedQty) * 100 : 0;
   const minorPct = totalInspectedQty > 0 ? (totalMinor / totalInspectedQty) * 100 : 0;
 
-  // Observed Quality Level (OQL) %: (Total Defects ÷ Inspected Qty) × 100
-  const calculatedOql = totalInspectedQty > 0 ? (totalDefects / totalInspectedQty) * 100 : 0;
+  // Observed Quality Level (OQL) %: ((Major + Minor) ÷ Inspected Qty) × 100 (Critical excluded from OQL)
+  const totalOqlDefects = filteredReports.reduce((sum, r) => sum + getReportOqlDefects(r), 0);
+  const calculatedOql = totalInspectedQty > 0 ? (totalOqlDefects / totalInspectedQty) * 100 : 0;
+  const oqlDecimals = settings.oqlDecimals ?? 2;
+  const targetOql = Number(settings.targetOql) || 4.5;
+  const oqlVariation = calculateOqlTargetVariation(
+    calculatedOql,
+    targetOql,
+    totalInspectedQty > 0,
+    oqlDecimals
+  );
 
   // Active floor & distinct style breakdown for INSPECTION REPORTS card
   const floorStats = useMemo(() => computeFloorStats(filteredReports), [filteredReports]);
@@ -342,14 +358,14 @@ export const DashboardView: React.FC = () => {
   // Middle Right: Month wise OQL Performance (OBH Only)
   // Dynamic calculation respecting active FY, Floor, Buyer & BSQC/AQC filters
   const monthlyPerformanceData = useMemo(() => {
-    const monthMap = new Map<string, { inspected: number; defects: number; name: string }>();
+    const monthMap = new Map<string, { inspected: number; oqlDefects: number; name: string }>();
 
     nonMonthFilteredReports.forEach((r) => {
       const ym = r.targetMonth || (r.inspectionDate ? r.inspectionDate.slice(0, 7) : '');
       if (ym && ym.length === 7) {
-        const curr = monthMap.get(ym) || { inspected: 0, defects: 0, name: '' };
+        const curr = monthMap.get(ym) || { inspected: 0, oqlDefects: 0, name: '' };
         curr.inspected += Number(r.inspectedQuantity) || 0;
-        curr.defects += Number(r.totalDefectQuantity) || 0;
+        curr.oqlDefects += getReportOqlDefects(r);
         if (!curr.name) {
           const monthNames = [
             'January', 'February', 'March', 'April', 'May', 'June',
@@ -367,7 +383,7 @@ export const DashboardView: React.FC = () => {
       .map(([ym, data]) => ({
         monthKey: ym,
         month: data.name,
-        oql: data.inspected > 0 ? Number(((data.defects / data.inspected) * 100).toFixed(2)) : 0,
+        oql: data.inspected > 0 ? Number(((data.oqlDefects / data.inspected) * 100).toFixed(2)) : 0,
       }));
   }, [nonMonthFilteredReports]);
 
@@ -823,17 +839,30 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* 5. OQL Speedometer Gauge Card */}
-        <div className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2 flex flex-col justify-between items-center text-center shadow-xs">
-          <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
+        <div
+          data-testid="kpi-oql-card"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2 flex flex-col justify-start items-center text-center shadow-xs overflow-hidden min-w-0"
+        >
+          <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase mb-1">
             OQL
           </div>
-          <div className="w-full flex items-center justify-center my-[-2px]">
+          <div className="w-full flex-1 flex items-start justify-center min-w-0">
             <SpeedometerGauge
               value={calculatedOql}
-              target={4.5}
+              target={targetOql}
               max={12.0}
               size="sm"
-              subLabel="Target: 4.50%"
+              decimals={oqlDecimals}
+              subLabel={`Target: ${targetOql.toFixed(oqlDecimals)}%`}
+              variationLabel={oqlVariation.shortLabel}
+              variationTone={
+                oqlVariation.status === 'MISS'
+                  ? 'miss'
+                  : oqlVariation.status === 'ACHIEVED' || oqlVariation.status === 'ON_TARGET'
+                  ? 'achieved'
+                  : 'neutral'
+              }
+              variationTestId="oql-target-variation"
             />
           </div>
         </div>
@@ -841,12 +870,12 @@ export const DashboardView: React.FC = () => {
         {/* 6. PASS RATE Speedometer Gauge Card */}
         <div
           data-testid="kpi-pass-rate-card"
-          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2 flex flex-col justify-between items-center text-center shadow-xs"
+          className="bg-[#e2efda] dark:bg-slate-900/90 border-2 border-[#a9d08e] dark:border-emerald-800 rounded-lg p-2 flex flex-col justify-start items-center text-center shadow-xs overflow-hidden min-w-0"
         >
-          <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase">
+          <div className="text-[11px] font-black tracking-wider text-emerald-900 dark:text-emerald-400 uppercase mb-1">
             PASS RATE
           </div>
-          <div className="w-full flex items-center justify-center my-[-2px]">
+          <div className="w-full flex-1 flex items-start justify-center min-w-0">
             <SpeedometerGauge
               mode="passRate"
               value={kpiMetrics.passRate}

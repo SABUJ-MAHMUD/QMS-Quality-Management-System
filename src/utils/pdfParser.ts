@@ -1,5 +1,5 @@
 import { InspectionReport, DefectMasterItem, DefectGroup, DefectSeverity, ReportSource } from '../types';
-import { calculateReportOql, detectReportSource, getReportSource, normalizeFloorName } from './oqlCalculator';
+import { calculateReportOql, detectReportSource, getReportOql, getReportSource, normalizeFloorName } from './oqlCalculator';
 import { classifyRawDefect } from '../data/defectMasterData';
 
 const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1587,7 +1587,7 @@ export function reportToDraft(report: InspectionReport): ExtractedInspectionDraf
       `Inspection Date: ${report.inspectionDate}`,
       `Stage: ${report.inspectionType || 'Final'} | Result: ${report.inspectionResult}`,
       `Order Qty: ${report.orderQuantity} | Inspected Qty: ${report.inspectedQuantity}`,
-      `Defects: ${report.totalDefectQuantity} (C:${report.criticalDefectQuantity} M:${report.majorDefectQuantity} Min:${report.minorDefectQuantity}) | OQL: ${Number(report.oql || 0).toFixed(2)}%`,
+      `Defects: ${report.totalDefectQuantity} (C:${report.criticalDefectQuantity} M:${report.majorDefectQuantity} Min:${report.minorDefectQuantity}) | OQL: ${getReportOql(report).toFixed(2)}%`,
     ].join('\n'),
     defects: (report.defects || []).map((d) => ({
       id: d.id,

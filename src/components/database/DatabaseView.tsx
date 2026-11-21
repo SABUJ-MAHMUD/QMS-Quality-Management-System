@@ -18,7 +18,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { findDuplicateReportIds } from '../../utils/dashboardAnalytics';
-import { getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
+import { getReportOql, getReportOqlDefects, getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
 import { ReportSource } from '../../types';
 import { ExpandablePanel } from '../common/ExpandablePanel';
 
@@ -85,6 +85,11 @@ export const DatabaseView: React.FC = () => {
 
   // Sorting
   const sortedReports = [...filteredReports].sort((a, b) => {
+    if (sortField === 'oql') {
+      const aOql = getReportOql(a, settings.oqlDecimals);
+      const bOql = getReportOql(b, settings.oqlDecimals);
+      return sortAsc ? aOql - bOql : bOql - aOql;
+    }
     let aVal = a[sortField];
     let bVal = b[sortField];
     if (typeof aVal === 'string') {
@@ -552,10 +557,12 @@ export const DatabaseView: React.FC = () => {
                     <td className="py-2.5 px-3 text-right font-black">
                       <span
                         className={
-                          r.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'
+                          getReportOql(r, settings.oqlDecimals) <= settings.targetOql
+                            ? 'text-emerald-600'
+                            : 'text-rose-600'
                         }
                       >
-                        {r.oql.toFixed(2)}%
+                        {getReportOql(r, settings.oqlDecimals).toFixed(2)}%
                       </span>
                     </td>
 
@@ -665,10 +672,12 @@ export const DatabaseView: React.FC = () => {
                   <span className="text-slate-400 block">Official OQL</span>
                   <span
                     className={`font-black text-sm ${
-                      selectedReport.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'
+                      getReportOql(selectedReport, settings.oqlDecimals) <= settings.targetOql
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
                     }`}
                   >
-                    {selectedReport.oql.toFixed(2)}% ({selectedReport.inspectionResult})
+                    {getReportOql(selectedReport, settings.oqlDecimals).toFixed(2)}% ({selectedReport.inspectionResult})
                   </span>
                 </div>
               </div>
@@ -989,11 +998,13 @@ export const DatabaseView: React.FC = () => {
                       Calculated Observed Quality Level (OQL)
                     </div>
                     <div className="text-[10px] text-sky-700">
-                      Formula: ({previewPdfReport.totalDefectQuantity} defects / {previewPdfReport.inspectedQuantity} inspected) &times; 100
+                      Formula: ({getReportOqlDefects(previewPdfReport)} Maj+Min / {previewPdfReport.inspectedQuantity} inspected) &times; 100 | Total Defects: {previewPdfReport.totalDefectQuantity}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-black text-sky-900">{previewPdfReport.oql.toFixed(2)}%</div>
+                    <div className="text-xl font-black text-sky-900">
+                      {getReportOql(previewPdfReport, settings.oqlDecimals).toFixed(2)}%
+                    </div>
                     <div className="font-bold text-xs uppercase text-slate-800">
                       Verdict: {previewPdfReport.inspectionResult}
                     </div>

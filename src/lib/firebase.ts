@@ -1,17 +1,38 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, initializeFirestore, doc, getDocFromServer, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+  enableNetwork,
+  disableNetwork,
+  doc,
+  getDocFromServer,
+  type Firestore,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import {
+  DEFAULT_LONG_POLLING_TIMEOUT_SECONDS,
+  isNavigatorOnline,
+  isOfflineFirestoreError,
+} from '../utils/firebaseConnection';
 
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Initialize Firestore with exact firestoreDatabaseId and auto-detect long polling
-// so restrictive corporate/factory proxies that block HTTP/2 WebChannel streams still connect reliably.
+// Force reliable short-lived long-polling so proxies, iframes, firewalls, and older Chrome browsers
+// never hang for 10+ seconds on buffered HTTP/2 WebChannel streams, while using safe memoryLocalCache
+// (app state is cached locally in localStorage without IndexedDB multi-tab target conflicts).
 let firestoreInstance: Firestore;
 try {
   firestoreInstance = initializeFirestore(
     app,
-    { experimentalAutoDetectLongPolling: true },
+    {
+      experimentalForceLongPolling: true,
+      experimentalLongPollingOptions: {
+        timeoutSeconds: DEFAULT_LONG_POLLING_TIMEOUT_SECONDS,
+      },
+      localCache: memoryLocalCache(),
+    },
     firebaseConfig.firestoreDatabaseId
   );
 } catch {
@@ -20,6 +41,43 @@ try {
 
 export const db = firestoreInstance;
 export const auth = getAuth(app);
+
+let networkSyncInitialized = false;
+let networkDisabledForOffline = false;
+
+export function initFirestoreNetworkSync(): void {
+  if (networkSyncInitialized || typeof window === 'undefined') return;
+  networkSyncInitialized = true;
+
+  if (!isNavigatorOnline()) {
+    networkDisabledForOffline = true;
+    void disableNetwork(db).catch(() => {});
+  }
+
+  window.addEventListener('offline', () => {
+    networkDisabledForOffline = true;
+    void disableNetwork(db).catch(() => {});
+  });
+
+  window.addEventListener('online', () => {
+    if (networkDisabledForOffline) {
+      networkDisabledForOffline = false;
+      void enableNetwork(db).catch(() => {});
+    }
+  });
+}
+
+initFirestoreNetworkSync();
+
+export async function ensureFirestoreOnline(): Promise<void> {
+  if (!isNavigatorOnline() || !networkDisabledForOffline) return;
+  networkDisabledForOffline = false;
+  try {
+    await enableNetwork(db);
+  } catch {
+    // ignore transient enableNetwork issues
+  }
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -69,23 +127,31 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 export async function testConnection(): Promise<boolean> {
+  if (!isNavigatorOnline()) {
+    return false;
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
+    await ensureFirestoreOnline();
     await Promise.race([
       getDocFromServer(doc(db, 'reports', '_healthcheck_')),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Connection healthcheck timed out')), 5000)
-      ),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Connection healthcheck timed out')), 10000);
+      }),
     ]);
     return true;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('the client is offline') || error.message.includes('timed out'))
-    ) {
-      console.warn('Firebase connection check warning:', error.message);
+    if (isOfflineFirestoreError(error)) {
+      console.warn(
+        'Firebase connection check warning:',
+        error instanceof Error ? error.message : String(error)
+      );
       return false;
     }
     return true;
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
 }
 

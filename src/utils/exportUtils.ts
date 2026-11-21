@@ -1,4 +1,5 @@
 import { InspectionReport, CAPARecord } from '../types';
+import { getReportOql, getReportOqlDefects } from './oqlCalculator';
 
 export async function exportReportsToExcel(
   reports: InspectionReport[],
@@ -22,7 +23,7 @@ export async function exportReportsToExcel(
     'Major Defects': r.majorDefectQuantity,
     'Minor Defects': r.minorDefectQuantity,
     'Total Defects': r.totalDefectQuantity,
-    'OQL (%)': `${r.oql.toFixed(2)}%`,
+    'OQL (%)': `${getReportOql(r).toFixed(2)}%`,
     'Result': r.inspectionResult,
     'Inspection Level': r.inspectionLevel,
     'Data Status': r.isDemo ? 'DEMO DATA' : 'Actual Report',
@@ -201,7 +202,8 @@ export async function exportDashboardToPptx(
   const totalOrderQty = reports.reduce((s, r) => s + (Number(r.orderQuantity) || 0), 0);
   const totalInspected = reports.reduce((s, r) => s + (Number(r.inspectedQuantity) || 0), 0);
   const totalDefects = reports.reduce((s, r) => s + (Number(r.totalDefectQuantity) || 0), 0);
-  const avgOql = totalInspected > 0 ? ((totalDefects / totalInspected) * 100).toFixed(2) : '0.00';
+  const totalOqlDefects = reports.reduce((s, r) => s + getReportOqlDefects(r), 0);
+  const avgOql = totalInspected > 0 ? ((totalOqlDefects / totalInspected) * 100).toFixed(2) : '0.00';
   const critDefects = reports.reduce((s, r) => s + (Number(r.criticalDefectQuantity) || 0), 0);
   const majDefects = reports.reduce((s, r) => s + (Number(r.majorDefectQuantity) || 0), 0);
   const minDefects = reports.reduce((s, r) => s + (Number(r.minorDefectQuantity) || 0), 0);

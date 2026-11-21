@@ -473,7 +473,7 @@ export const LoginPortalView: React.FC = () => {
                 <span>OQL Compliance</span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Formula: (Defects &divide; Inspected) &times; 100 with 4.5% target
+                Formula: (Major + Minor &divide; Inspected) &times; 100 with 4.5% target
               </p>
             </div>
 

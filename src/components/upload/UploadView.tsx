@@ -24,7 +24,7 @@ import {
   ExtractedInspectionDraft,
 } from '../../utils/pdfParser';
 import { InspectionReport } from '../../types';
-import { getReportSource } from '../../utils/oqlCalculator';
+import { getReportOql, getReportSource } from '../../utils/oqlCalculator';
 import { ValidationModal } from './ValidationModal';
 
 export const UploadView: React.FC = () => {
@@ -438,7 +438,7 @@ export const UploadView: React.FC = () => {
                           <div className="flex justify-between gap-2">
                             <span className="text-slate-400">Defects / OQL:</span>
                             <span className="font-bold text-amber-700 dark:text-amber-400">
-                              {r.totalDefectQuantity} items ({Number(r.oql || 0).toFixed(2)}%)
+                              {r.totalDefectQuantity} items ({getReportOql(r).toFixed(2)}%)
                             </span>
                           </div>
                         </div>

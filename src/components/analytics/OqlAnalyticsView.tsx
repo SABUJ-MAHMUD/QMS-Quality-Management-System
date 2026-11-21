@@ -34,7 +34,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import { getFinancialYear } from '../../utils/oqlCalculator';
+import { getFinancialYear, getReportOqlDefects } from '../../utils/oqlCalculator';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 import { formatQtyAndPct, formatPctText } from '../../utils/dashboardAnalytics';
 import { DefectAxisTick } from '../common/DefectAxisTick';
@@ -56,12 +56,13 @@ export const OqlAnalyticsView: React.FC = () => {
 
   // Month data
   const monthlyChartData = useMemo(() => {
-    const map = new Map<string, { inspected: number; defects: number; passed: number; failed: number }>();
+    const map = new Map<string, { inspected: number; defects: number; oqlDefects: number; passed: number; failed: number }>();
     filteredReports.forEach((r) => {
       const month = r.inspectionDate.slice(0, 7);
-      const cur = map.get(month) || { inspected: 0, defects: 0, passed: 0, failed: 0 };
+      const cur = map.get(month) || { inspected: 0, defects: 0, oqlDefects: 0, passed: 0, failed: 0 };
       cur.inspected += Number(r.inspectedQuantity) || 0;
       cur.defects += Number(r.totalDefectQuantity) || 0;
+      cur.oqlDefects += getReportOqlDefects(r);
       if (r.inspectionResult === 'PASSED') cur.passed++;
       else cur.failed++;
       map.set(month, cur);
@@ -71,7 +72,7 @@ export const OqlAnalyticsView: React.FC = () => {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([label, d]) => ({
         label,
-        actualOql: d.inspected > 0 ? Number(((d.defects / d.inspected) * 100).toFixed(2)) : 0,
+        actualOql: d.inspected > 0 ? Number(((d.oqlDefects / d.inspected) * 100).toFixed(2)) : 0,
         targetOql: settings.targetOql,
         defects: d.defects,
         inspected: d.inspected,
@@ -173,7 +174,7 @@ export const OqlAnalyticsView: React.FC = () => {
     const totalSystemDefects = filteredReports.reduce((s, r) => s + (Number(r.totalDefectQuantity) || 0), 0);
 
     return Array.from(map.values()).map((d) => {
-      const oql = d.inspected > 0 ? Number(((d.defects / d.inspected) * 100).toFixed(2)) : 0;
+      const oql = d.inspected > 0 ? Number((((d.major + d.minor) / d.inspected) * 100).toFixed(2)) : 0;
       const defectShare = totalSystemDefects > 0 ? Number(((d.defects / totalSystemDefects) * 100).toFixed(1)) : 0;
       return {
         ...d,

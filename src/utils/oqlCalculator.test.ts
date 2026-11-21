@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   calculateReportOql,
   calculateAggregatedOql,
+  getReportOqlDefects,
+  getReportOql,
+  calculateOqlTargetVariation,
   calculateReductionPercentage,
   getFinancialYear,
   computeParetoAnalysis,
@@ -39,6 +42,63 @@ test('calculateAggregatedOql satisfies the sum-of-defects / sum-of-inspected rul
 
   // Simple average would be (5.77 + 5.00)/2 = 5.385. Ensure it is NOT simple average!
   assert.notEqual(aggregated, 5.38);
+});
+
+test('getReportOql & calculateAggregatedOql use Major + Minor only while keeping Critical & Total Defects intact', () => {
+  const reportWithCritical = {
+    criticalDefectQuantity: 5,
+    majorDefectQuantity: 10,
+    minorDefectQuantity: 5,
+    totalDefectQuantity: 20, // Critical + Major + Minor
+    inspectedQuantity: 500,
+  };
+  assert.equal(reportWithCritical.totalDefectQuantity, 20);
+  assert.equal(getReportOqlDefects(reportWithCritical), 15);
+  assert.equal(getReportOql(reportWithCritical, 2), 3.0);
+
+  // Critical-only defects give 0.00% OQL while total defects & critical count remain tracked
+  const criticalOnly = {
+    criticalDefectQuantity: 3,
+    majorDefectQuantity: 0,
+    minorDefectQuantity: 0,
+    totalDefectQuantity: 3,
+    inspectedQuantity: 100,
+  };
+  assert.equal(getReportOqlDefects(criticalOnly), 0);
+  assert.equal(getReportOql(criticalOnly, 2), 0);
+
+  // Aggregated check: Critical=1, Major=357, Minor=221, Total=579, Inspected=9190 -> 578/9190*100 = 6.29%
+  const agg = calculateAggregatedOql([
+    {
+      criticalDefectQuantity: 1,
+      majorDefectQuantity: 357,
+      minorDefectQuantity: 221,
+      totalDefectQuantity: 579,
+      inspectedQuantity: 9190,
+    },
+  ]);
+  assert.equal(agg, 6.29);
+});
+
+test('calculateOqlTargetVariation reports Miss/Not Achieved, Achieved, On Target, and No Data accurately', () => {
+  const miss = calculateOqlTargetVariation(6.29, 4.5, true, 2);
+  assert.equal(miss.delta, 1.79);
+  assert.equal(miss.status, 'MISS');
+  assert.equal(miss.shortLabel, 'Var: +1.79% (Not Achieved)');
+
+  const achieved = calculateOqlTargetVariation(3.8, 4.5, true, 2);
+  assert.equal(achieved.delta, -0.7);
+  assert.equal(achieved.status, 'ACHIEVED');
+  assert.equal(achieved.shortLabel, 'Var: -0.70% (Achieved)');
+
+  const exact = calculateOqlTargetVariation(4.5, 4.5, true, 2);
+  assert.equal(exact.delta, 0);
+  assert.equal(exact.status, 'ON_TARGET');
+  assert.equal(exact.shortLabel, 'Var: 0.00% (On Target)');
+
+  const noData = calculateOqlTargetVariation(0, 4.5, false, 2);
+  assert.equal(noData.status, 'NO_DATA');
+  assert.equal(noData.shortLabel, 'Var: 0.00% (No Data)');
 });
 
 test('calculateReductionPercentage satisfies ((Prev - Curr) / Prev) * 100 and safe zero handling', () => {

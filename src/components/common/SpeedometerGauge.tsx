@@ -7,6 +7,9 @@ interface SpeedometerGaugeProps {
   size?: 'sm' | 'md' | 'lg';
   showTargetPill?: boolean;
   subLabel?: string;
+  variationLabel?: string;
+  variationTone?: 'miss' | 'achieved' | 'neutral';
+  variationTestId?: string;
   mode?: 'oql' | 'passRate';
   decimals?: number;
 }
@@ -17,6 +20,9 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
   max,
   size = 'md',
   subLabel,
+  variationLabel,
+  variationTone = 'neutral',
+  variationTestId,
   mode = 'oql',
   decimals,
 }) => {
@@ -37,15 +43,15 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
   const percentage = effectiveMax > 0 ? clampedValue / effectiveMax : 0;
   const needleAngle = -180 + percentage * 180;
 
-  // Dimensions
+  // Dimensions (thick, full-width curve filling the card cleanly)
   const dimensions = {
-    sm: { width: 125, height: 78, radius: 44, strokeWidth: 11, fontSize: 'text-base', labelSize: 'text-[9px]' },
-    md: { width: 170, height: 102, radius: 62, strokeWidth: 14, fontSize: 'text-xl', labelSize: 'text-[11px]' },
-    lg: { width: 220, height: 130, radius: 80, strokeWidth: 18, fontSize: 'text-2xl', labelSize: 'text-xs' },
+    sm: { width: 156, height: 86, radius: 55, strokeWidth: 16, fontSize: 'text-lg sm:text-xl', labelSize: 'text-[9.5px]' },
+    md: { width: 184, height: 106, radius: 66, strokeWidth: 18, fontSize: 'text-xl', labelSize: 'text-[11px]' },
+    lg: { width: 228, height: 132, radius: 82, strokeWidth: 20, fontSize: 'text-2xl', labelSize: 'text-xs' },
   }[size];
 
   const cx = dimensions.width / 2;
-  const cy = dimensions.height - 18;
+  const cy = dimensions.height - 16;
   const r = dimensions.radius;
   const sw = dimensions.strokeWidth;
 
@@ -102,14 +108,26 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
 
   const needleColor = mode === 'passRate' ? '#0284c7' : '#dc2626';
 
+  const variationParts = (() => {
+    if (!variationLabel) return null;
+    const idx = variationLabel.indexOf('(');
+    if (idx > 0) {
+      return {
+        primary: variationLabel.slice(0, idx).trim(),
+        status: variationLabel.slice(idx).trim(),
+      };
+    }
+    return { primary: variationLabel, status: '' };
+  })();
+
   return (
-    <div className="flex flex-col items-center justify-center select-none w-full">
-      <div className="relative flex items-center justify-center">
+    <div className="flex flex-col items-center justify-start select-none w-full min-w-0">
+      <div className="relative flex items-center justify-center w-full">
         <svg
-          width={dimensions.width}
-          height={dimensions.height}
           viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-          className="overflow-visible"
+          className={`h-auto overflow-visible ${
+            size === 'sm' ? 'w-full max-w-[156px]' : size === 'md' ? 'w-full max-w-[184px]' : 'w-full max-w-[228px]'
+          }`}
         >
           {/* Subtle background track */}
           <path
@@ -137,7 +155,7 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
           {(() => {
             const targetAngle = -180 + (effectiveTarget / effectiveMax) * 180;
             const pInner = polarToCartesian(cx, cy, r - sw / 2 - 2, targetAngle);
-            const pOuter = polarToCartesian(cx, cy, r + sw / 2 + 3, targetAngle);
+            const pOuter = polarToCartesian(cx, cy, r + sw / 2 + 2, targetAngle);
             return (
               <line
                 x1={pInner.x}
@@ -161,32 +179,55 @@ export const SpeedometerGauge: React.FC<SpeedometerGaugeProps> = ({
             }}
           >
             <path
-              d={`M 0 -3 L ${r - sw / 2} 0 L 0 3 Z`}
+              d={`M 0 -3.5 L ${r - sw / 2 + 1} 0 L 0 3.5 Z`}
               fill={needleColor}
               filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.3))"
             />
-            <circle cx="0" cy="0" r="5" fill="#1e293b" stroke="#ffffff" strokeWidth="2" />
+            <circle cx="0" cy="0" r="5.5" fill="#1e293b" stroke="#ffffff" strokeWidth="2" />
           </g>
 
           {/* Scale min / max labels */}
-          <text x={cx - r + 2} y={cy + 14} fontSize="7.5" fill="#64748b" textAnchor="middle" fontWeight="bold">
+          <text x={cx - r} y={cy + 13} fontSize="8" fill="#64748b" textAnchor="middle" fontWeight="bold">
             0%
           </text>
-          <text x={cx + r - 2} y={cy + 14} fontSize="7.5" fill="#64748b" textAnchor="middle" fontWeight="bold">
+          <text x={cx + r} y={cy + 13} fontSize="8" fill="#64748b" textAnchor="middle" fontWeight="bold">
             {effectiveMax}%
           </text>
         </svg>
       </div>
 
       {/* Main Percentage Display */}
-      <div className={`mt-0.5 font-black tracking-tight ${valueColor} ${dimensions.fontSize}`}>
+      <div className={`mt-1 font-black tracking-tight leading-tight ${valueColor} ${dimensions.fontSize}`}>
         {value.toFixed(effectiveDecimals)}%
       </div>
 
       {/* Sublabel */}
       {effectiveSubLabel && (
-        <div className={`font-semibold text-slate-500 dark:text-slate-400 ${dimensions.labelSize}`}>
+        <div className={`w-full text-center font-semibold text-slate-500 dark:text-slate-400 leading-tight ${dimensions.labelSize}`}>
           {effectiveSubLabel}
+        </div>
+      )}
+
+      {/* Target Variation — strictly contained within the card box */}
+      {variationParts && (
+        <div
+          data-testid={variationTestId}
+          title={variationLabel}
+          className={`w-full max-w-full mt-0.5 text-center font-semibold leading-tight break-words ${dimensions.labelSize} ${
+            variationTone === 'miss'
+              ? 'text-red-500/80 dark:text-red-400/90'
+              : variationTone === 'achieved'
+              ? 'text-emerald-600/85 dark:text-emerald-400/90'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <span className="inline-block whitespace-nowrap">{variationParts.primary}</span>
+          {variationParts.status ? (
+            <>
+              {' '}
+              <span className="inline-block whitespace-nowrap">{variationParts.status}</span>
+            </>
+          ) : null}
         </div>
       )}
     </div>

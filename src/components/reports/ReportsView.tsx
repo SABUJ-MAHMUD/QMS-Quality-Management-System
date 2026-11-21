@@ -12,7 +12,7 @@ import {
   Presentation,
 } from 'lucide-react';
 import { exportReportsToExcel, exportCapaToExcel, printQualityReport, exportDashboardToPptx } from '../../utils/exportUtils';
-import { computeParetoAnalysis } from '../../utils/oqlCalculator';
+import { computeParetoAnalysis, getReportOql } from '../../utils/oqlCalculator';
 import { formatSelectedPeriodLabel } from '../../utils/dashboardAnalytics';
 
 export const ReportsView: React.FC = () => {
@@ -80,7 +80,7 @@ export const ReportsView: React.FC = () => {
           <td>${r.styleNumber}</td>
           <td style="text-align: right;">${r.inspectedQuantity}</td>
           <td style="text-align: right;">${r.totalDefectQuantity}</td>
-          <td style="text-align: right; font-weight: bold;">${r.oql.toFixed(2)}%</td>
+          <td style="text-align: right; font-weight: bold;">${getReportOql(r, settings.oqlDecimals).toFixed(2)}%</td>
           <td style="text-align: center;"><span class="${r.inspectionResult === 'PASSED' ? 'badge-passed' : 'badge-failed'}">${r.inspectionResult}</span></td>
         </tr>
       `;
@@ -251,8 +251,8 @@ export const ReportsView: React.FC = () => {
                   <td className="py-2 px-3 text-center text-sky-600 font-bold">{r.minorDefectQuantity}</td>
                   <td className="py-2 px-3 text-center font-extrabold text-slate-900 bg-slate-50">{r.totalDefectQuantity}</td>
                   <td className="py-2 px-3 text-right font-black">
-                    <span className={r.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
-                      {r.oql.toFixed(2)}%
+                    <span className={getReportOql(r, settings.oqlDecimals) <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
+                      {getReportOql(r, settings.oqlDecimals).toFixed(2)}%
                     </span>
                   </td>
                   <td className="py-2 px-3 text-center">

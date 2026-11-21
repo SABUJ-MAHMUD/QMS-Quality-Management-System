@@ -76,9 +76,10 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
     .reduce((s, d) => s + (Number(d.defectQuantity) || 0), 0);
 
   const totalDefects = criticalCount + majorCount + minorCount;
+  const oqlDefects = majorCount + minorCount;
 
-  // Live OQL calculation: (Total Defects / Inspected Quantity) * 100
-  const calculatedOql = calculateReportOql(totalDefects, inspectedQuantity, settings.oqlDecimals);
+  // Live OQL calculation: ((Major + Minor) / Inspected Quantity) * 100
+  const calculatedOql = calculateReportOql(oqlDefects, inspectedQuantity, settings.oqlDecimals);
 
   // Inspection result mirrors Inspector Conclusion
   const [inspectionResult, setInspectionResult] = useState<InspectionResult>(
@@ -579,7 +580,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
                 {calculatedOql.toFixed(2)}%
               </div>
               <div className="text-[9px] text-slate-400">
-                Formula: ({totalDefects} &divide; {inspectedQuantity}) &times; 100 | Benchmark Target: {settings.targetOql}%
+                Formula: ({oqlDefects} Maj+Min &divide; {inspectedQuantity}) &times; 100 | Total Defects: {totalDefects} | Target: {settings.targetOql}%
               </div>
             </div>
           </div>

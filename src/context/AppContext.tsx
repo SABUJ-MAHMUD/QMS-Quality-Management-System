@@ -11,10 +11,11 @@ import {
   AppSettings,
 } from '../types';
 import { INITIAL_DEFECT_GROUPS, INITIAL_DEFECT_MASTER } from '../data/defectMasterData';
-import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource, normalizeReportSourceSelection, buildResetFilterState } from '../utils/oqlCalculator';
+import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource, normalizeReportSourceSelection, buildResetFilterState, getReportOql } from '../utils/oqlCalculator';
 import { findDuplicateReportIds } from '../utils/dashboardAnalytics';
 import { firestoreService } from '../services/firestoreService';
-import { testConnection } from '../lib/firebase';
+import { ensureFirestoreOnline, testConnection } from '../lib/firebase';
+import { isNavigatorOnline } from '../utils/firebaseConnection';
 
 interface NotificationItem {
   id: string;
@@ -482,12 +483,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let unsubCapas: (() => void) | null = null;
     let unsubMonitoring: (() => void) | null = null;
 
-    const initCloudDatabase = async () => {
-      try {
-        const isHealthy = await testConnection();
-        if (isMounted) setIsFirebaseConnected(isHealthy);
+    const handleOnline = () => {
+      void ensureFirestoreOnline().then(async () => {
+        const ok = await testConnection();
+        if (isMounted) setIsFirebaseConnected(ok);
+      });
+    };
+    const handleOffline = () => {
+      if (isMounted) setIsFirebaseConnected(false);
+    };
 
-        // Always attach real-time listeners so colleagues receive updates once connection stabilizes
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
+    const initCloudDatabase = () => {
+      try {
+        if (!isNavigatorOnline() && isMounted) {
+          setIsFirebaseConnected(false);
+        }
+
+        // Attach real-time listeners immediately (no sequential wait behind health check)
         unsubReports = firestoreService.subscribeReports(
           (remoteReports) => {
             if (!isMounted) return;
@@ -516,9 +533,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (err) => console.warn('Firestore monitoring listener note:', err)
         );
 
-        if (isHealthy && syncGeneration === 0) {
-          addNotification('success', 'Connected to Firebase Cloud Firestore real-time sync.');
-        }
+        // Run server reachability verification in parallel
+        void testConnection().then((isHealthy) => {
+          if (!isMounted) return;
+          setIsFirebaseConnected(isHealthy);
+          if (isHealthy && syncGeneration === 0) {
+            addNotification('success', 'Connected to Firebase Cloud Firestore real-time sync.');
+          }
+        });
       } catch (err) {
         console.warn('Firestore initial sync note:', err);
         if (isMounted) setIsFirebaseConnected(false);
@@ -527,6 +549,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initCloudDatabase();
     return () => {
       isMounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
       unsubReports?.();
       unsubCapas?.();
       unsubMonitoring?.();
@@ -548,7 +574,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .catch(() => {});
     }
 
+    if (!isNavigatorOnline()) {
+      setIsFirebaseConnected(false);
+      addNotification('warning', 'Device appears offline. Showing last synced local reports.');
+      setIsSyncingData(false);
+      return;
+    }
+
     try {
+      await ensureFirestoreOnline();
       const [remoteReports, remoteCapas, remoteMon] = await Promise.all([
         firestoreService.fetchReportsFromServer(),
         firestoreService.fetchCapasFromServer(),
@@ -800,8 +834,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const resolvedSource = getReportSource(data);
 
     const id = `rep-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const computedOql = getReportOql(data, settings.oqlDecimals);
     const newReport: InspectionReport = {
       ...data,
+      oql: computedOql,
       floor: normalizedFloor,
       section: normalizedFloor,
       reportSource: resolvedSource,
@@ -813,7 +849,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: now,
           user: `${currentUserRole}`,
           action: 'Created & Approved',
-          details: `Report ${data.reportNumber} (${data.inspectionType || 'Final'} • ${resolvedSource}) created with OQL ${data.oql}%`,
+          details: `Report ${data.reportNumber} (${data.inspectionType || 'Final'} • ${resolvedSource}) created with OQL ${computedOql}%`,
         },
       ],
     };
@@ -849,9 +885,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             details: `Modified report fields`,
           },
         ];
-        const updated = {
+        const merged = {
           ...r,
           ...updates,
+        };
+        const updated = {
+          ...merged,
+          oql: getReportOql(merged, settings.oqlDecimals),
           updatedAt: now,
           auditLogs: updatedAudit,
         };

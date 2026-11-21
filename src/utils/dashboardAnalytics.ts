@@ -2,6 +2,7 @@ import { CAPARecord, InspectionReport } from '../types';
 import { getCanonicalDefectInfo } from '../data/defectMasterData';
 import {
   getFiscalWeekInfo,
+  getReportOqlDefects,
   normalizeFloorName,
   normalizeMultiSelect,
   formatWeekDateRange,
@@ -329,6 +330,7 @@ export function computeWeeklyOqlTrend(
       dateRangeLabel: string;
       inspected: number;
       defects: number;
+      oqlDefects: number;
       reportCount: number;
     }
   >();
@@ -347,10 +349,12 @@ export function computeWeeklyOqlTrend(
       dateRangeLabel: formatWeekDateRange(info.weekStartDate, info.weekEndDate),
       inspected: 0,
       defects: 0,
+      oqlDefects: 0,
       reportCount: 0,
     };
     curr.inspected += Number(r.inspectedQuantity) || 0;
     curr.defects += Number(r.totalDefectQuantity) || 0;
+    curr.oqlDefects += getReportOqlDefects(r);
     curr.reportCount += 1;
     weekMap.set(key, curr);
   });
@@ -370,7 +374,7 @@ export function computeWeeklyOqlTrend(
       inspected: w.inspected,
       defects: w.defects,
       reportCount: w.reportCount,
-      oql: w.inspected > 0 ? Number(((w.defects / w.inspected) * 100).toFixed(2)) : 0,
+      oql: w.inspected > 0 ? Number(((w.oqlDefects / w.inspected) * 100).toFixed(2)) : 0,
     }));
 }
 

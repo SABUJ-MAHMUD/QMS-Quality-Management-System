@@ -9,6 +9,7 @@ import {
   extractEntryScriptSrc,
   loadAcknowledgedNotices,
 } from '../../utils/appRelease';
+import { shouldPublishAppRelease } from '../../utils/firebaseConnection';
 
 declare global {
   interface Window {
@@ -163,7 +164,15 @@ export const PWAUpdateToast: React.FC = () => {
             if (verdict === 'verified-current' && CURRENT_BUILT_AT && !publishedRef.current) {
               publishedRef.current = true;
               const hostId = window.location.hostname || 'localhost';
-              firestoreService.publishAppReleaseIfNewer(hostId, CURRENT_BUILD_ID, CURRENT_BUILT_AT);
+              if (
+                shouldPublishAppRelease({
+                  isProd: import.meta.env.PROD,
+                  hostname: hostId,
+                  buildId: CURRENT_BUILD_ID,
+                })
+              ) {
+                firestoreService.publishAppReleaseIfNewer(hostId, CURRENT_BUILD_ID, CURRENT_BUILT_AT);
+              }
               return;
             }
           }
@@ -207,7 +216,7 @@ export const PWAUpdateToast: React.FC = () => {
 
   // Real-time Firestore release listener so ALL open users receive instant update alerts (<1s)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isOffline) return;
     const hostId = window.location.hostname || 'localhost';
     const unsubscribe = firestoreService.subscribeAppRelease(hostId, (release) => {
       const verdict = evaluateFirestoreRelease({
@@ -226,7 +235,7 @@ export const PWAUpdateToast: React.FC = () => {
       }
     });
     return () => unsubscribe();
-  }, [triggerUpdatePrompt, checkServerVersion]);
+  }, [isOffline, triggerUpdatePrompt, checkServerVersion]);
 
   useEffect(() => {
     if (needRefresh) {

@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 import { formatPctText } from '../../utils/dashboardAnalytics';
+import { getReportOql } from '../../utils/oqlCalculator';
 import { ExpandablePanel } from '../common/ExpandablePanel';
 
 export const InspectionSummaryView: React.FC = () => {
@@ -496,8 +497,8 @@ export const InspectionSummaryView: React.FC = () => {
                         {r.totalDefectQuantity}
                       </td>
                       <td className="py-2.5 px-3 text-right font-black">
-                        <span className={r.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
-                          {r.oql.toFixed(2)}%
+                        <span className={getReportOql(r, settings.oqlDecimals) <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
+                          {getReportOql(r, settings.oqlDecimals).toFixed(2)}%
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
@@ -578,10 +579,12 @@ export const InspectionSummaryView: React.FC = () => {
                   <span className="text-slate-400 block text-[10px]">Observed OQL</span>
                   <span
                     className={`font-black ${
-                      selectedReportModal.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'
+                      getReportOql(selectedReportModal, settings.oqlDecimals) <= settings.targetOql
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
                     }`}
                   >
-                    {selectedReportModal.oql.toFixed(2)}% ({selectedReportModal.inspectionResult})
+                    {getReportOql(selectedReportModal, settings.oqlDecimals).toFixed(2)}% ({selectedReportModal.inspectionResult})
                   </span>
                 </div>
               </div>
