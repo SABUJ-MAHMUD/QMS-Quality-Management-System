@@ -392,3 +392,119 @@ Planned Sample Qty/Inspected | 125/50 | Order Qty/Available | 1000/1000
   assert.equal(bsqcFinal.floor, 'SEW-1');
 });
 
+test('AQC Final report (image_030420d8): auto-collects Sample Qty (200) into inspectedQuantity, Order Qty/Available (15424), 3 NOFs & long AQC Inspector name', () => {
+  const aqcFinalReportText = `
+Inspection report, AQC Final: NOF4705775 + | BESTSELLER
+NOF4717358 + NOF4723560
+15323159: ONLRILEY O-NECK L/S TOP JRS NOOS
+Online report
+Inspector | NORTHERN FASHION LTD .- MD . Suruz ali | Inspection Date | Aug 12, 2026
+Sample Qty | 200 | Order Qty/Available | 15424/15424
+Location | 23° 59' 29" N x 90° 15' 25" E | Checklist Name | AQC inspection with AI Checkpoints
+Planned Date | Aug 12, 2026 | Sampling Method | AQL 2.5/2.5 Level II Reduced
+Supplier Name | NORTHERN FASHION LTD.
+Order No. | Item No. | Name | Order qty/available
+NOF4705775 | 15323159 | ONLRILEY O-NECK L/S TOP JRS NOOS | 9120
+NOF4717358 | 15323159 | ONLRILEY O-NECK L/S TOP JRS NOOS | 2304
+NOF4723560 | 15323159 | ONLRILEY O-NECK L/S TOP JRS NOOS | 4000
+Inspector Conclusion | Approved | Final inspection result accepted as per AQL.
+  `;
+
+  const draft = extractDataFromText(
+    aqcFinalReportText,
+    'NOF4705775_AQC_Final.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-11'
+  );
+
+  assert.equal(draft.reportSource, 'AQC');
+  assert.equal(draft.inspectionType, 'Final');
+  assert.equal(draft.orderNumber, 'NOF4705775 + NOF4717358 + NOF4723560');
+  assert.equal(draft.styleNumber, '15323159');
+  assert.equal(draft.styleName, 'ONLRILEY O-NECK L/S TOP JRS NOOS');
+  assert.equal(draft.buyer, 'ONLY');
+  assert.equal(draft.inspector, 'NORTHERN FASHION LTD .- MD . Suruz ali');
+  assert.equal(draft.inspectionDate, '2026-08-12');
+  assert.equal(draft.targetMonth, '2026-08');
+  assert.equal(draft.inspectedQuantity, 200);
+  assert.equal(draft.orderQuantity, 15424);
+  assert.equal(draft.inspectionResult, 'PASSED');
+  assert.equal(draft.defects.length, 0);
+});
+
+test('Buyer QC Final report (image_dd525e93): preserves Planned Sample Qty/Inspected 80/50 -> 50 & Order Qty/Available 1080/1080 -> 1080', () => {
+  const bsqcFinalReportText = `
+Inspection report, Final: NOF4702985 | BESTSELLER
+15388158: KMGELLEN KNOT SHORTS JRS
+Online report
+Inspector | Salah Uddin | Inspection Date | Nov 18, 2026
+Planned Sample Qty/Inspected | 80/50 | Order Qty/Available | 1080/1080
+Location | 23° 59' 29" N x 90° 15' 25" E | Checklist Name | BS inspection Kids Wear with AI Checkpoints
+Planned Date | Nov 18, 2026 | Sampling Method | AQL 2.5/2.5 Level II Reduced
+Supplier Name | NORTHERN FASHIONS LTD.
+Inspector Conclusion | Approved | Please take care for defective points found during inspection.
+  `;
+
+  const draft = extractDataFromText(
+    bsqcFinalReportText,
+    'NOF4702985_Final.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-11'
+  );
+
+  assert.equal(draft.reportSource, 'BSQC');
+  assert.equal(draft.inspectionType, 'Final');
+  assert.equal(draft.orderNumber, 'NOF4702985');
+  assert.equal(draft.styleNumber, '15388158');
+  assert.equal(draft.styleName, 'KMGELLEN KNOT SHORTS JRS');
+  assert.equal(draft.buyer, 'ONLY');
+  assert.equal(draft.inspector, 'Salah Uddin');
+  assert.equal(draft.inspectionDate, '2026-11-18');
+  assert.equal(draft.inspectedQuantity, 50);
+  assert.equal(draft.orderQuantity, 1080);
+});
+
+test('AQC flattened OCR layout ("Sample Qty 200 Order Qty/Available 15424/15424") and vertical table layout extract 200 without leaking Order Qty', () => {
+  const flattenedOcr = `
+Inspection report, AQC Final: NOF4705775 + NOF4717358 + NOF4723560
+15323159: ONLRILEY O-NECK L/S TOP JRS NOOS
+Inspector NORTHERN FASHION LTD .- MD . Suruz ali Inspection Date Aug 12, 2026
+Sample Qty 200 Order Qty/Available 15424/15424
+Checklist Name AQC inspection with AI Checkpoints
+Cle-5 Oil spots or stains (cannot be removed) - 2 -
+  `;
+  const flatDraft = extractDataFromText(
+    flattenedOcr,
+    'aqc_screenshot.png',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-08'
+  );
+  assert.equal(flatDraft.reportSource, 'AQC');
+  assert.equal(flatDraft.inspectedQuantity, 200);
+  assert.equal(flatDraft.orderQuantity, 15424);
+  assert.equal(flatDraft.totalDefectQuantity, 2);
+  assert.equal(calculateReportOql(flatDraft.totalDefectQuantity, Number(flatDraft.inspectedQuantity)), 1.0);
+
+  const verticalAqc = `
+Inspection report, AQC Inline: NOF4705999
+15323159: ONLRILEY O-NECK L/S TOP JRS NOOS
+Inspection Date: Aug 15, 2026
+Sample Qty | Order Qty/Available
+125 | 3200/3200
+  `;
+  const vertDraft = extractDataFromText(
+    verticalAqc,
+    'aqc_inline.pdf',
+    INITIAL_DEFECT_MASTER,
+    INITIAL_DEFECT_GROUPS,
+    '2026-08'
+  );
+  assert.equal(vertDraft.reportSource, 'AQC');
+  assert.equal(vertDraft.inspectionType, 'Inline');
+  assert.equal(vertDraft.inspectedQuantity, 125);
+  assert.equal(vertDraft.orderQuantity, 3200);
+});
+

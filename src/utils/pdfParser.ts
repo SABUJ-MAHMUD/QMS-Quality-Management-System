@@ -902,9 +902,84 @@ function extractSlashSecondValue(lines: string[], bodyText: string, labelPattern
   return 0;
 }
 
+/**
+ * Extracts a standalone integer value immediately following a label (e.g. AQC "Sample Qty | 200")
+ * without accidentally crossing into adjacent columns (like "Order Qty/Available | 15424/15424")
+ * or capturing the planned count from "Planned Sample Qty/Inspected | 80/50".
+ */
+function extractSingleNumericValue(lines: string[], bodyText: string, labelPattern: RegExp): number {
+  const isLabelLine = (s: string) =>
+    /^(?:Inspector|Inspection\s*Date|Location|Checklist|Planned\s*Date|Sampling|Supplier|Planned\s*Sample|Order\s*Qty|Available|Summary|Total|Result)/i.test(
+      s.trim()
+    );
+  const nextColStopRegex =
+    /\b(?:Order\s*Qty|Planned\s*Sample|Planned\s*Date|Inspection\s*Date|Sampling|Location|Checklist|Supplier|Available|Result|Inspector)\b/i;
+
+  const parseLeadingStandaloneInt = (segment: string): number => {
+    const clean = (segment || '').trim();
+    if (!clean) return 0;
+    // Do not treat a slash pair like "80/50" or decimal like "2.5" as a standalone Sample Qty
+    if (/^[:.\-\s]*[\d,]+\s*[\/|\\.]\s*[\d,]+/.test(clean)) return 0;
+    const m = clean.match(/^[:.\-=\s]*([\d,]{1,7})(?:\s*(?:pcs?|units?))?(?:\b|$)/i);
+    if (!m) return 0;
+    return parseInt(m[1].replace(/,/g, ''), 10) || 0;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(labelPattern);
+    if (!match || match.index === undefined) continue;
+
+    // Never match "Planned Sample Qty" as standalone "Sample Qty"
+    const prefix = line.slice(Math.max(0, match.index - 14), match.index);
+    if (/Planned\s*$/i.test(prefix)) continue;
+
+    const afterLabel = line.slice(match.index + match[0].length);
+    if (/^\s*[\/|\\]\s*Inspected\b/i.test(afterLabel)) continue;
+
+    const cells = afterLabel.split('|').map((c) => c.trim()).filter(Boolean);
+    if (cells.length > 0 && !nextColStopRegex.test(cells[0])) {
+      const val = parseLeadingStandaloneInt(cells[0]);
+      if (val > 0) return val;
+    }
+
+    const beforeNextLabel = afterLabel.split(nextColStopRegex)[0];
+    const inlineVal = parseLeadingStandaloneInt(beforeNextLabel);
+    if (inlineVal > 0) return inlineVal;
+
+    // Check next 1-2 lines in case of vertical/columnar extraction
+    for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+      const nextLine = lines[i + j].trim();
+      if (!nextLine) continue;
+      if (isLabelLine(nextLine)) break;
+      const firstCell = nextLine.split('|')[0].trim();
+      const nextVal = parseLeadingStandaloneInt(firstCell);
+      if (nextVal > 0) return nextVal;
+    }
+  }
+
+  // Bounded loose fallback on bodyText
+  const flags = labelPattern.flags.includes('g')
+    ? labelPattern.flags
+    : `${labelPattern.flags}g`;
+  const globalPattern = new RegExp(labelPattern.source, flags);
+  let m: RegExpExecArray | null;
+  while ((m = globalPattern.exec(bodyText)) !== null) {
+    const prefix = bodyText.slice(Math.max(0, m.index - 14), m.index);
+    if (/Planned\s*$/i.test(prefix)) continue;
+    const after = bodyText.slice(m.index + m[0].length, m.index + m[0].length + 60);
+    if (/^\s*[\/|\\]\s*Inspected\b/i.test(after)) continue;
+    const bounded = after.split(/[\r\n|]/)[0].split(nextColStopRegex)[0];
+    const val = parseLeadingStandaloneInt(bounded);
+    if (val > 0) return val;
+  }
+
+  return 0;
+}
+
 function extractInspectorName(lines: string[], bodyText: string): string {
   const stopWordsRegex =
-    /\b(?:Inspection\s*Date|Inspection\s*report|Location|Planned\s*Date|Planned\s*Sample|Order\s*Qty|Supplier|Sampling|Checklist|Conclusion|Approved|Rejected)\b/i;
+    /\b(?:Inspection\s*Date|Inspection\s*report|Location|Planned\s*Date|Planned\s*Sample|Sample\s*Qty|Order\s*Qty|Supplier|Sampling|Checklist|Conclusion|Approved|Rejected)\b/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -928,7 +1003,7 @@ function extractInspectorName(lines: string[], bodyText: string): string {
 
     if (
       candidate.length >= 2 &&
-      candidate.length <= 45 &&
+      candidate.length <= 80 &&
       /[A-Za-z]{2}/.test(candidate) &&
       !/^(conclusion|report|final|inline|method|approved|rejected|passed|failed|name|date|n\/a)$/i.test(candidate)
     ) {
@@ -939,14 +1014,14 @@ function extractInspectorName(lines: string[], bodyText: string): string {
     for (let j = 1; j <= 2 && i + j < lines.length; j++) {
       const nextCand = lines[i + j].split('|')[0].trim();
       if (!nextCand || stopWordsRegex.test(nextCand) || /\d{4}/.test(nextCand)) continue;
-      if (/^[A-Za-z][A-Za-z\s.\-]{1,40}$/.test(nextCand)) {
+      if (/^[A-Za-z][A-Za-z\s.,\-&]{1,80}$/.test(nextCand)) {
         return nextCand;
       }
     }
   }
 
   const fallback = bodyText.match(
-    /(?:^|\n)\s*Inspector(?:\s*Name)?\s*[:.\-|]+\s*([A-Za-z][A-Za-z\s.\-]{1,40}?)(?=\s*\||\r|\n|Inspection|Location|Date|Planned|Order|Supplier|Sampling|Checklist|$)/i
+    /(?:^|\n)\s*Inspector(?:\s*Name)?\s*[:.\-|]+\s*([A-Za-z][A-Za-z\s.,\-&]{1,80}?)(?=\s*\||\r|\n|Inspection|Location|Date|Planned|Sample|Order|Supplier|Sampling|Checklist|$)/i
   );
   if (fallback && fallback[1]) {
     const cand = fallback[1].trim();
@@ -1011,12 +1086,13 @@ function extractInspectionDate(
 }
 
 /**
- * Intelligent field parser handling Northern Fashions & BESTSELLER Inline / Final format.
+ * Intelligent field parser handling Northern Fashions & BESTSELLER Inline / Final / AQC format.
  * Rules strictly enforced:
  * - Parses document body (`rawText`) BEFORE falling back to `fileName`.
- * - Detects Inspection Type (`Inline` vs `Final` vs `Pre-Final`).
+ * - Detects Report Source (`AQC` vs `BSQC`) and Inspection Type (`Inline` vs `Final` vs `Pre-Final`).
  * - Order Qty / Available: ALWAYS extracts the 2nd number (after '/').
- * - Planned Sample Qty / Inspected: ALWAYS extracts the 2nd number (after '/').
+ * - Buyer QC (`Planned Sample Qty/Inspected`): ALWAYS extracts the 2nd number (after '/').
+ * - Factory AQC (`Sample Qty`): extracts the standalone number directly when slash pair is absent.
  * - Captures Inspector Name, Inspection Date, Style No/Name, Brand, NOF Serials & Critical/Major/Minor defects.
  */
 export function extractDataFromText(
@@ -1183,11 +1259,13 @@ export function extractDataFromText(
     styleNumber ||
     'Report';
 
-  // 6. Inspected Sample Quantity (Planned Sample Qty/Inspected -> 2nd number after '/')
+  // 6. Inspected Sample Quantity:
+  //    - Buyer QC (BSQC): "Planned Sample Qty/Inspected | 80/50" -> ALWAYS extracts 2nd number after '/' (50)
+  //    - Factory AQC (AQC): "Sample Qty | 200" -> extracts standalone number (200)
   let inspectedQuantity = extractSlashSecondValue(
     lines,
     bodyText,
-    /(?:Planned\s*Sample|Sample)\s*(?:Qty|Quantity)?\s*[\/|]\s*Inspected/i
+    /(?:Planned\s*Sample|Sample)\s*(?:Qty|Quantity)?\s*(?:[\/|\\]\s*|\s+)Inspected/i
   );
   if (!inspectedQuantity) {
     const altSlash = bodyText.match(
@@ -1196,12 +1274,18 @@ export function extractDataFromText(
     if (altSlash) {
       inspectedQuantity = parseInt(altSlash[2].replace(/,/g, ''), 10) || 0;
     } else {
-      const singleInspected = bodyText.match(
-        /\bInspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)\s*[:.\-|]*\s*([\d,]+)/i
+      inspectedQuantity = extractSingleNumericValue(
+        lines,
+        bodyText,
+        /\bSample\s*(?:Qty|Quantity|Size)\b/i
       );
-      if (singleInspected) {
-        inspectedQuantity = parseInt(singleInspected[1].replace(/,/g, ''), 10) || 0;
-      }
+    }
+    if (!inspectedQuantity) {
+      inspectedQuantity = extractSingleNumericValue(
+        lines,
+        bodyText,
+        /\bInspected\s*(?:Sample\s*(?:Size|Qty|Quantity)|Qty|Quantity)\b/i
+      );
     }
   }
 

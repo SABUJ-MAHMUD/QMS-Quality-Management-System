@@ -423,13 +423,21 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-500 font-medium mb-1">Inspected Sample Size (Qty)</label>
+                <label htmlFor="validation-inspected-qty" className="block text-slate-500 font-medium mb-1">
+                  Inspected Sample Size (Qty)
+                </label>
                 <input
+                  id="validation-inspected-qty"
                   type="number"
                   value={inspectedQuantity}
                   onChange={(e) => setInspectedQuantity(Number(e.target.value))}
                   className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
                 />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  {reportSource === 'AQC'
+                    ? 'AQC source: auto-collected from Sample Qty'
+                    : "BSQC source: auto-collected after '/' in Planned Sample Qty/Inspected"}
+                </span>
               </div>
 
               {/* Inspector Conclusion Option (User Requirement 5) */}
