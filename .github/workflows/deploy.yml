@@ -32,6 +32,8 @@ jobs:
           npm install react-is --no-save --legacy-peer-deps
 
       - name: Build
+        env:
+          VITE_BASE_PATH: /QMS-Quality-Management-System/
         run: npm run build
 
       - name: Upload artifact

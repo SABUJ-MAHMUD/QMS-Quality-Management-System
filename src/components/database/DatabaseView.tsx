@@ -20,6 +20,7 @@ import {
 import { findDuplicateReportIds } from '../../utils/dashboardAnalytics';
 import { getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
 import { ReportSource } from '../../types';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 export const DatabaseView: React.FC = () => {
   const {
@@ -311,9 +312,21 @@ export const DatabaseView: React.FC = () => {
       </div>
 
       {/* Main Database Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
+      <ExpandablePanel
+        title="Inspection Database Records"
+        buttonTone="on-light"
+        className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col"
+      >
+        {({ expandControls }) => (
+          <>
+            <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                Inspection Database Records ({displayReports.length})
+              </span>
+              {expandControls}
+            </div>
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 select-none">
               <tr>
                 {canManageData && (
@@ -600,10 +613,12 @@ export const DatabaseView: React.FC = () => {
                   </tr>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </ExpandablePanel>
 
       {/* View Report Details Modal */}
       {selectedReport && (

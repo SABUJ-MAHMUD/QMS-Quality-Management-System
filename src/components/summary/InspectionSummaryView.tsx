@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 import { formatPctText } from '../../utils/dashboardAnalytics';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 export const InspectionSummaryView: React.FC = () => {
   const { filteredReports, settings, setActiveTab, defectGroups, kpiMetrics, canUpload } = useApp();
@@ -184,31 +185,46 @@ export const InspectionSummaryView: React.FC = () => {
           {/* Charts Row: Gorgeous Column Chart & Severity Pie Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Column Chart (2 cols) */}
-            <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-4 transition-colors">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                    Defect Category Comparison (Descending Order)
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Defect quantities &amp; percentages displayed directly on each category column
-                  </p>
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-3">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="w-3 h-3 bg-rose-600 rounded-xs" /> Critical
-                  </span>
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="w-3 h-3 bg-amber-600 rounded-xs" /> Major
-                  </span>
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <span className="w-3 h-3 bg-sky-600 rounded-xs" /> Minor
-                  </span>
-                </div>
-              </div>
+            <ExpandablePanel
+              title="Defect Category Comparison"
+              buttonTone="on-light"
+              className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-4 transition-colors flex flex-col"
+            >
+              {({ isExpanded, expandSize, expandControls }) => (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                        Defect Category Comparison (Descending Order)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Defect quantities &amp; percentages displayed directly on each category column
+                      </p>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-3 shrink-0">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className="w-3 h-3 bg-rose-600 rounded-xs" /> Critical
+                      </span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className="w-3 h-3 bg-amber-600 rounded-xs" /> Major
+                      </span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className="w-3 h-3 bg-sky-600 rounded-xs" /> Minor
+                      </span>
+                      {expandControls}
+                    </div>
+                  </div>
 
-              <div className="h-72 w-full">
+                  <div
+                    className={
+                      isExpanded
+                        ? expandSize === 'large'
+                          ? 'h-[420px] sm:h-[54vh] w-full'
+                          : 'h-[350px] w-full'
+                        : 'h-72 w-full'
+                    }
+                  >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={sortedGroupData}
@@ -293,49 +309,70 @@ export const InspectionSummaryView: React.FC = () => {
                       </div>
                     ))}
                 </div>
-              </div>
-            </div>
+                </div>
+                </>
+              )}
+            </ExpandablePanel>
 
             {/* Pie Chart (1 col) with Visible Data Labels */}
-            <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                  <PieChartIcon className="w-4 h-4 text-emerald-600" />
-                  Defect Severity Distribution
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Critical, Major, and Minor proportions with direct labels
-                </p>
+            <ExpandablePanel
+              title="Defect Severity Distribution"
+              buttonTone="on-light"
+              className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between"
+            >
+              {({ isExpanded, expandSize, expandControls }) => (
+                <>
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <PieChartIcon className="w-4 h-4 text-emerald-600" />
+                          Defect Severity Distribution
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Critical, Major, and Minor proportions with direct labels
+                        </p>
+                      </div>
+                      {expandControls}
+                    </div>
 
-                <div className="h-60 w-full mt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={severityPieData}
-                        cx="50%"
-                        cy="50%"
-                        isAnimationActive={false}
-                        innerRadius={40}
-                        outerRadius={70}
-                        paddingAngle={3}
-                        dataKey="value"
-                        label={({ name, percent, value }: any) =>
-                          `${name}: ${value} (${(((percent ?? 0) as number) * 100).toFixed(0)}%)`
-                        }
-                        labelLine={true}
-                      >
-                        {severityPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value: any, name: any) => [`${value} defects`, name]}
-                        contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                    <div
+                      className={
+                        isExpanded
+                          ? expandSize === 'large'
+                            ? 'h-[380px] sm:h-[48vh] w-full mt-2'
+                            : 'h-[310px] w-full mt-2'
+                          : 'h-60 w-full mt-2'
+                      }
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={severityPieData}
+                            cx="50%"
+                            cy="50%"
+                            isAnimationActive={false}
+                            innerRadius={isExpanded ? 55 : 40}
+                            outerRadius={isExpanded ? 105 : 70}
+                            paddingAngle={3}
+                            dataKey="value"
+                            label={({ name, percent, value }: any) =>
+                              `${name}: ${value} (${(((percent ?? 0) as number) * 100).toFixed(0)}%)`
+                            }
+                            labelLine={true}
+                          >
+                            {severityPieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: any, name: any) => [`${value} defects`, name]}
+                            contentStyle={{ backgroundColor: '#ffffff', borderRadius: 8, fontSize: 12, border: '1px solid #cbd5e1' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
 
               <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div className="flex items-center justify-between">
@@ -357,31 +394,42 @@ export const InspectionSummaryView: React.FC = () => {
                   <span className="font-bold text-slate-900 dark:text-white">{kpiMetrics.minorDefects}</span>
                 </div>
               </div>
-            </div>
+                </>
+              )}
+            </ExpandablePanel>
           </div>
 
           {/* Individual Inspection Reports Table */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors">
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <FileCheck2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                  Individual Inspection Reports &amp; Extracted Data
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Each inspection report retains its inspector name, PDF file, after-slash quantities, and calculated individual OQL.
-                </p>
-              </div>
-              {canUpload && (
-                <button
-                  onClick={() => setActiveTab('upload')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Upload New PDF
-                </button>
-              )}
-            </div>
+          <ExpandablePanel
+            title="Individual Inspection Reports"
+            buttonTone="on-light"
+            className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden transition-colors flex flex-col"
+          >
+            {({ expandControls }) => (
+              <>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <FileCheck2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                      Individual Inspection Reports &amp; Extracted Data
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Each inspection report retains its inspector name, PDF file, after-slash quantities, and calculated individual OQL.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canUpload && (
+                      <button
+                        onClick={() => setActiveTab('upload')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Upload New PDF
+                      </button>
+                    )}
+                    {expandControls}
+                  </div>
+                </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -479,7 +527,9 @@ export const InspectionSummaryView: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </div>
+              </>
+            )}
+          </ExpandablePanel>
         </>
       )}
 

@@ -38,6 +38,7 @@ import { getFinancialYear } from '../../utils/oqlCalculator';
 import { getCanonicalDefectInfo } from '../../data/defectMasterData';
 import { formatQtyAndPct, formatPctText } from '../../utils/dashboardAnalytics';
 import { DefectAxisTick } from '../common/DefectAxisTick';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 const SEVERITY_COLORS = {
   Critical: '#ef4444',
@@ -308,212 +309,270 @@ export const OqlAnalyticsView: React.FC = () => {
 
       {/* TAB 1: DEFECT-WISE COLUMN CHART (User Requirement 4) */}
       {(activeTab === 'defect_chart' || activeTab === 'trend') && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-sky-600" />
-                Defect-wise Column Chart &amp; Rate (% of Inspected Qty)
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Frequency and defect rate ((Defect Qty &divide; Total Inspected Qty) &times; 100) across active reports.
-              </p>
-            </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
-              {defectWiseData.length} Defect Categories
-            </span>
-          </div>
-
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={defectWiseData} margin={{ top: 28, right: 20, left: 12, bottom: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
-                <XAxis
-                  dataKey="codeAndName"
-                  tick={<DefectAxisTick maxCharsPerLine={15} maxNameLines={2} />}
-                  height={58}
-                  interval={0}
-                />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} width={34} />
-                <Tooltip
-                  formatter={(val: any, _name: any, item: any) => [
-                    `${val} defects (${formatPctText(item.payload.percentage)} of inspected)`,
-                    item.payload.codeAndName,
-                  ]}
-                  contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }}
-                />
-                <Bar dataKey="quantity" isAnimationActive={false} fill="#0284c7" radius={[6, 6, 0, 0]}>
-                  {defectWiseData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                  <LabelList
-                    dataKey="barLabel"
-                    position="top"
-                    style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {defectWiseData.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-              {defectWiseData.map((d, i) => (
-                <div
-                  key={`${d.code}-${i}`}
-                  className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 rounded"
-                >
-                  <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
-                    <strong className="text-sky-700 dark:text-sky-400">[{d.code}]</strong> {d.defectName}
-                  </span>
-                  <span className="font-black text-slate-900 dark:text-white shrink-0">{d.barLabel}</span>
+        <ExpandablePanel
+          title="Defect-wise Column Chart & Rate"
+          buttonTone="on-light"
+          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col"
+        >
+          {({ isExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-sky-600" />
+                    Defect-wise Column Chart &amp; Rate (% of Inspected Qty)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Frequency and defect rate ((Defect Qty &divide; Total Inspected Qty) &times; 100) across active reports.
+                  </p>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                    {defectWiseData.length} Defect Categories
+                  </span>
+                  {expandControls}
+                </div>
+              </div>
+
+              <div
+                className={
+                  isExpanded
+                    ? expandSize === 'large'
+                      ? 'h-[430px] sm:h-[56vh] w-full'
+                      : 'h-[360px] w-full'
+                    : 'h-80 w-full'
+                }
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={defectWiseData} margin={{ top: 28, right: 20, left: 12, bottom: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
+                    <XAxis
+                      dataKey="codeAndName"
+                      tick={<DefectAxisTick maxCharsPerLine={15} maxNameLines={2} />}
+                      height={58}
+                      interval={0}
+                    />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} width={34} />
+                    <Tooltip
+                      formatter={(val: any, _name: any, item: any) => [
+                        `${val} defects (${formatPctText(item.payload.percentage)} of inspected)`,
+                        item.payload.codeAndName,
+                      ]}
+                      contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }}
+                    />
+                    <Bar dataKey="quantity" isAnimationActive={false} fill="#0284c7" radius={[6, 6, 0, 0]}>
+                      {defectWiseData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                      <LabelList
+                        dataKey="barLabel"
+                        position="top"
+                        style={{ fontSize: 10, fontWeight: 'bold', fill: '#0f172a' }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {defectWiseData.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  {defectWiseData.map((d, i) => (
+                    <div
+                      key={`${d.code}-${i}`}
+                      className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 rounded"
+                    >
+                      <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
+                        <strong className="text-sky-700 dark:text-sky-400">[{d.code}]</strong> {d.defectName}
+                      </span>
+                      <span className="font-black text-slate-900 dark:text-white shrink-0">{d.barLabel}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
-        </div>
+        </ExpandablePanel>
       )}
 
       {/* TAB 2: STYLE-WISE DEFECT PERCENTAGE (User Requirement 4) */}
       {(activeTab === 'style_matrix' || activeTab === 'trend') && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-600" />
-                Style-wise Defect Percentage &amp; OQL Performance Matrix
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Detailed audit parameters, defect counts, defect percentage of total, and compliance per style.
-              </p>
-            </div>
-          </div>
+        <ExpandablePanel
+          title="Style-wise Defect Percentage Matrix"
+          buttonTone="on-light"
+          className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col"
+        >
+          {({ expandControls }) => (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-600" />
+                    Style-wise Defect Percentage &amp; OQL Performance Matrix
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Detailed audit parameters, defect counts, defect percentage of total, and compliance per style.
+                  </p>
+                </div>
+                {expandControls}
+              </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-2.5 px-3">Brand</th>
-                  <th className="py-2.5 px-3">Style Number</th>
-                  <th className="py-2.5 px-3">Style Description</th>
-                  <th className="py-2.5 px-3 text-right">Inspected Qty</th>
-                  <th className="py-2.5 px-3 text-right">Defects</th>
-                  <th className="py-2.5 px-3 text-right">Defect Share (%)</th>
-                  <th className="py-2.5 px-3 text-right">Observed OQL (%)</th>
-                  <th className="py-2.5 px-3 text-center">Benchmark Result</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {styleWiseData.map((s, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60">
-                    <td className="py-2 px-3 font-bold text-sky-800 dark:text-sky-300">
-                      {s.brand}
-                    </td>
-                    <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
-                      {s.styleNumber}
-                    </td>
-                    <td className="py-2 px-3 text-slate-600 dark:text-slate-300 truncate max-w-xs">
-                      {s.styleName}
-                    </td>
-                    <td className="py-2 px-3 text-right font-medium text-slate-700 dark:text-slate-300">
-                      {s.inspected}
-                    </td>
-                    <td className="py-2 px-3 text-right font-black text-amber-600 dark:text-amber-400">
-                      {s.defects}
-                    </td>
-                    <td className="py-2 px-3 text-right font-bold text-sky-600 dark:text-sky-400">
-                      {s.defectShare}%
-                    </td>
-                    <td className="py-2 px-3 text-right font-black">
-                      <span className={s.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
-                        {s.oql.toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          s.status === 'PASSED'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                        }`}
-                      >
-                        {s.status === 'PASSED' ? 'PASSED (<= 4.5%)' : 'EXCEEDED (> 4.5%)'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="py-2.5 px-3">Brand</th>
+                      <th className="py-2.5 px-3">Style Number</th>
+                      <th className="py-2.5 px-3">Style Description</th>
+                      <th className="py-2.5 px-3 text-right">Inspected Qty</th>
+                      <th className="py-2.5 px-3 text-right">Defects</th>
+                      <th className="py-2.5 px-3 text-right">Defect Share (%)</th>
+                      <th className="py-2.5 px-3 text-right">Observed OQL (%)</th>
+                      <th className="py-2.5 px-3 text-center">Benchmark Result</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {styleWiseData.map((s, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60">
+                        <td className="py-2 px-3 font-bold text-sky-800 dark:text-sky-300">
+                          {s.brand}
+                        </td>
+                        <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">
+                          {s.styleNumber}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-300 truncate max-w-xs">
+                          {s.styleName}
+                        </td>
+                        <td className="py-2 px-3 text-right font-medium text-slate-700 dark:text-slate-300">
+                          {s.inspected}
+                        </td>
+                        <td className="py-2 px-3 text-right font-black text-amber-600 dark:text-amber-400">
+                          {s.defects}
+                        </td>
+                        <td className="py-2 px-3 text-right font-bold text-sky-600 dark:text-sky-400">
+                          {s.defectShare}%
+                        </td>
+                        <td className="py-2 px-3 text-right font-black">
+                          <span className={s.oql <= settings.targetOql ? 'text-emerald-600' : 'text-rose-600'}>
+                            {s.oql.toFixed(2)}%
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              s.status === 'PASSED'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                            }`}
+                          >
+                            {s.status === 'PASSED' ? 'PASSED (<= 4.5%)' : 'EXCEEDED (> 4.5%)'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
       )}
 
       {/* TAB 3: INSPECTION PERFORMANCE (Pass/Fail Rate & Severity) */}
       {(activeTab === 'performance' || activeTab === 'trend') && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          <div className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Inspection Performance &amp; Pass Rate
-            </h3>
+          <ExpandablePanel
+            title="Inspection Performance & Pass Rate"
+            buttonTone="on-light"
+            className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col"
+          >
+            {({ expandControls }) => (
+              <>
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Inspection Performance &amp; Pass Rate
+                  </h3>
+                  {expandControls}
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
-                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase">Passed Audits</span>
-                <div className="text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">{passedAudits}</div>
-                <span className="text-[10px] text-emerald-600">{passRate}% Pass Rate</span>
-              </div>
-              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center">
-                <span className="text-xs font-bold text-rose-800 dark:text-rose-300 uppercase">Failed Audits</span>
-                <div className="text-3xl font-black text-rose-700 dark:text-rose-400 mt-1">{failedAudits}</div>
-                <span className="text-[10px] text-rose-600">{(100 - passRate).toFixed(1)}% Rejection Rate</span>
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
+                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase">Passed Audits</span>
+                    <div className="text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">{passedAudits}</div>
+                    <span className="text-[10px] text-emerald-600">{passRate}% Pass Rate</span>
+                  </div>
+                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center">
+                    <span className="text-xs font-bold text-rose-800 dark:text-rose-300 uppercase">Failed Audits</span>
+                    <div className="text-3xl font-black text-rose-700 dark:text-rose-400 mt-1">{failedAudits}</div>
+                    <span className="text-[10px] text-rose-600">{(100 - passRate).toFixed(1)}% Rejection Rate</span>
+                  </div>
+                </div>
 
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-              <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                <span>Total Inspected Garments:</span>
-                <strong className="text-slate-900 dark:text-white">{kpiMetrics.totalInspectedQuantity} pcs</strong>
-              </div>
-              <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                <span>Factory Target OQL:</span>
-                <strong className="text-emerald-600">{settings.targetOql}%</strong>
-              </div>
-              <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                <span>Observed Quality Level:</span>
-                <strong className="text-sky-600">{kpiMetrics.aggregatedOql.toFixed(2)}%</strong>
-              </div>
-            </div>
-          </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>Total Inspected Garments:</span>
+                    <strong className="text-slate-900 dark:text-white">{kpiMetrics.totalInspectedQuantity} pcs</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>Factory Target OQL:</span>
+                    <strong className="text-emerald-600">{settings.targetOql}%</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>Observed Quality Level:</span>
+                    <strong className="text-sky-600">{kpiMetrics.aggregatedOql.toFixed(2)}%</strong>
+                  </div>
+                </div>
+              </>
+            )}
+          </ExpandablePanel>
 
-          <div className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Defect Severity Distribution
-            </h3>
+          <ExpandablePanel
+            title="Defect Severity Distribution"
+            buttonTone="on-light"
+            className="lg:col-span-6 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 flex flex-col"
+          >
+            {({ isExpanded, expandSize, expandControls }) => (
+              <>
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                    Defect Severity Distribution
+                  </h3>
+                  {expandControls}
+                </div>
 
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={severityData}
-                    dataKey="value"
-                    nameKey="name"
-                    isAnimationActive={false}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={75}
-                    innerRadius={40}
-                    label={(entry) => `${entry.name}: ${entry.percent}%`}
-                  >
-                    {severityData.map((entry, index) => (
-                      <Cell key={`sev-cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+                <div
+                  className={
+                    isExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[400px] sm:h-[52vh] w-full'
+                        : 'h-[320px] w-full'
+                      : 'h-56 w-full'
+                  }
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={severityData}
+                        dataKey="value"
+                        nameKey="name"
+                        isAnimationActive={false}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={isExpanded ? 110 : 75}
+                        innerRadius={isExpanded ? 55 : 40}
+                        label={(entry) => `${entry.name}: ${entry.percent}%`}
+                      >
+                        {severityData.map((entry, index) => (
+                          <Cell key={`sev-cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', borderRadius: 8, fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </ExpandablePanel>
         </div>
       )}
     </div>

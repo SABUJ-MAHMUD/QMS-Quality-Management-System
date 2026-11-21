@@ -14,6 +14,7 @@ import {
   FileText,
   AlertTriangle,
 } from 'lucide-react';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 export const MonitoringView: React.FC = () => {
   const { monitoringRecords, addMonitoringRecord, deleteMonitoringRecord, capas, canManageData } = useApp();
@@ -131,15 +132,24 @@ export const MonitoringView: React.FC = () => {
       </div>
 
       {/* Monitoring Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Effectiveness Verification Records ({monitoringRecords.length})
-          </h3>
-          <span className="text-[11px] text-slate-500 font-mono">
-            Formula: ((Prev Qty - Curr Qty) / Prev Qty) &times; 100
-          </span>
-        </div>
+      <ExpandablePanel
+        title="Effectiveness Verification Records"
+        buttonTone="on-light"
+        className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col"
+      >
+        {({ expandControls }) => (
+          <>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                Effectiveness Verification Records ({monitoringRecords.length})
+              </h3>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                  Formula: ((Prev Qty - Curr Qty) / Prev Qty) &times; 100
+                </span>
+                {expandControls}
+              </div>
+            </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
@@ -238,7 +248,9 @@ export const MonitoringView: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+          </>
+        )}
+      </ExpandablePanel>
 
       {/* Add Monitoring Modal */}
       {showAddModal && (

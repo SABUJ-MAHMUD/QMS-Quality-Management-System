@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { MASTER_DEFECT_23_CATEGORIES, classifyRawDefect, resolveDefectAccurate } from '../../data/defectMasterData';
 import { formatPctText } from '../../utils/dashboardAnalytics';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 export const DefectAnalyticsView: React.FC = () => {
   const { filteredReports, setFilters, setActiveTab, addNotification, setPendingCapaDefect } = useApp();
@@ -331,16 +332,25 @@ export const DefectAnalyticsView: React.FC = () => {
       {/* Main Grid: Left 23 Categories Table | Right Defect Column Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column (7 cols): Main Defect Category Name Accordion Table */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs">
-          <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 flex items-center justify-between">
-            <span>Main Defect Category Name (23 Master Classifications)</span>
-            <span className="text-[11px] bg-sky-800 text-sky-200 px-2 py-0.5 rounded">
-              {filteredCategoryStats.length} Categories
-            </span>
-          </div>
+        <ExpandablePanel
+          title="Main Defect Category Name (23 Master Classifications)"
+          buttonTone="on-dark"
+          className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          {({ isExpanded: isPanelExpanded, expandControls }) => (
+            <>
+              <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 flex items-center justify-between gap-2">
+                <span>Main Defect Category Name (23 Master Classifications)</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] bg-sky-800 text-sky-200 px-2 py-0.5 rounded">
+                    {filteredCategoryStats.length} Categories
+                  </span>
+                  {expandControls}
+                </div>
+              </div>
 
-          <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
-            <table className="w-full text-left text-xs border-collapse">
+              <div className={`overflow-x-auto overflow-y-auto ${isPanelExpanded ? 'max-h-none flex-1' : 'max-h-[720px]'}`}>
+                <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 text-[11px] font-black uppercase z-10">
                 <tr>
                   <th className="p-2.5 w-16 text-center whitespace-nowrap">Code</th>
@@ -519,27 +529,44 @@ export const DefectAnalyticsView: React.FC = () => {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
-        </div>
+                </table>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
 
         {/* Right Column (5 cols): Defect Column Chart - 100% Dynamic Parallel Sync with Left Table */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
-          <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 text-center uppercase tracking-wider flex items-center justify-between">
-            <span className="w-full text-center">Parallel Defect Category Chart (Live Sync)</span>
-          </div>
-          <div className="p-4 flex-1 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                Paralleled live volume &amp; defect rate (% of {totalInspectedQty.toLocaleString()} inspected pcs)
-              </p>
-              <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800">
-                <Zap className="w-3 h-3 text-emerald-600" />
-                Live Parallel
-              </span>
-            </div>
+        <ExpandablePanel
+          title="Parallel Defect Category Chart (Live Sync)"
+          buttonTone="on-dark"
+          className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          {({ isExpanded: isPanelExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="bg-sky-900 text-white font-black text-sm py-2 px-3 uppercase tracking-wider flex items-center justify-between gap-2">
+                <span className="truncate">Parallel Defect Category Chart (Live Sync)</span>
+                {expandControls}
+              </div>
+              <div className="p-4 flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    Paralleled live volume &amp; defect rate (% of {totalInspectedQty.toLocaleString()} inspected pcs)
+                  </p>
+                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800">
+                    <Zap className="w-3 h-3 text-emerald-600" />
+                    Live Parallel
+                  </span>
+                </div>
 
-            <div className="h-96 w-full">
+                <div
+                  className={
+                    isPanelExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[440px] sm:h-[56vh] w-full'
+                        : 'h-[380px] w-full'
+                      : 'h-96 w-full'
+                  }
+                >
               {chartData.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
@@ -646,8 +673,10 @@ export const DefectAnalyticsView: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
       </div>
     </div>
   );

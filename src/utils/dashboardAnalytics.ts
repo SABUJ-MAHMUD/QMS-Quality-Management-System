@@ -3,6 +3,7 @@ import { getCanonicalDefectInfo } from '../data/defectMasterData';
 import {
   getFiscalWeekInfo,
   normalizeFloorName,
+  normalizeMultiSelect,
   formatWeekDateRange,
   formatWeekOptionLabel,
 } from './oqlCalculator';
@@ -187,7 +188,7 @@ export function computeTopSingleDefects(
  */
 export function computeMonthToMonthTopDefects(
   reports: InspectionReport[],
-  selectedMonth: string = 'ALL',
+  selectedMonth: string | string[] = 'ALL',
   now: Date = new Date(),
   maxCount: number = 5
 ): MonthToMonthComparisonResult {
@@ -196,9 +197,13 @@ export function computeMonthToMonthTopDefects(
     new Set(reports.map(getReportMonthKey).filter((ym) => /^\d{4}-\d{2}$/.test(ym)))
   ).sort((a, b) => b.localeCompare(a));
 
+  const validSelectedMonths = normalizeMultiSelect(selectedMonth)
+    .filter((ym) => /^\d{4}-\d{2}$/.test(ym))
+    .sort((a, b) => b.localeCompare(a));
+
   let currMonthKey = nowMonthKey;
-  if (selectedMonth && selectedMonth !== 'ALL' && /^\d{4}-\d{2}$/.test(selectedMonth)) {
-    currMonthKey = selectedMonth;
+  if (validSelectedMonths.length > 0) {
+    currMonthKey = validSelectedMonths[0];
   } else if (reportMonths.length > 0) {
     const prevOfNow = getPreviousMonthKey(nowMonthKey);
     const hasNowOrPrev = reportMonths.includes(nowMonthKey) || reportMonths.includes(prevOfNow);
@@ -369,6 +374,38 @@ export function computeWeeklyOqlTrend(
     }));
 }
 
+export function weekOverlapsAnyMonth(
+  week: Pick<WeekFilterOption, 'weekStartDate' | 'weekEndDate'>,
+  months: string | string[] | undefined
+): boolean {
+  const selectedMonths = normalizeMultiSelect(months);
+  if (selectedMonths.length === 0) return true;
+  return selectedMonths.some(
+    (m) => week.weekStartDate.startsWith(m) || week.weekEndDate.startsWith(m)
+  );
+}
+
+export function formatSelectedPeriodLabel(
+  months: string | string[] | undefined,
+  weeks: string | string[] | undefined,
+  availableWeeksAll: WeekFilterOption[] = []
+): string | undefined {
+  const selWeeks = normalizeMultiSelect(weeks);
+  if (selWeeks.length > 0) {
+    return selWeeks
+      .map((wkKey) => {
+        const found = availableWeeksAll.find((w) => w.weekKey === wkKey);
+        return found ? found.optionLabel : wkKey;
+      })
+      .join(', ');
+  }
+  const selMonths = normalizeMultiSelect(months);
+  if (selMonths.length > 0) {
+    return selMonths.join(', ');
+  }
+  return undefined;
+}
+
 /**
  * Builds distinct Monday–Sunday ISO week filter options derived from reports,
  * sorted newest-week-first (matching the Month dropdown sort order).
@@ -376,18 +413,17 @@ export function computeWeeklyOqlTrend(
 export function buildAvailableWeeks(
   reports: InspectionReport[],
   fyStartMonth: number = 8,
-  monthFilter: string = 'ALL'
+  monthFilter: string | string[] = 'ALL'
 ): WeekFilterOption[] {
   const weekMap = new Map<string, WeekFilterOption>();
+  const selectedMonths = normalizeMultiSelect(monthFilter);
 
   reports.forEach((r) => {
     if (!r.inspectionDate) return;
     const info = getFiscalWeekInfo(r.inspectionDate, fyStartMonth);
     if (
-      monthFilter &&
-      monthFilter !== 'ALL' &&
-      !info.weekStartDate.startsWith(monthFilter) &&
-      !info.weekEndDate.startsWith(monthFilter)
+      selectedMonths.length > 0 &&
+      !selectedMonths.some((m) => info.weekStartDate.startsWith(m) || info.weekEndDate.startsWith(m))
     ) {
       return;
     }

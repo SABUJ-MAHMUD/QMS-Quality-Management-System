@@ -313,6 +313,19 @@ export function computeParetoAnalysis(
   });
 }
 
+export function normalizeMultiSelect(val: string | string[] | undefined): string[] {
+  if (Array.isArray(val)) {
+    return Array.from(
+      new Set(val.map((v) => String(v || '').trim()).filter((v) => v !== '' && v !== 'ALL'))
+    );
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed && trimmed !== 'ALL') return [trimmed];
+  }
+  return [];
+}
+
 /**
  * Filter reports according to global filters
  */
@@ -323,8 +336,8 @@ export function filterReports(
     financialYear?: string | string[];
     floors?: string[];
     reportSource?: 'ALL' | ReportSource;
-    month?: string;
-    week?: string;
+    month?: string | string[];
+    week?: string | string[];
     dateFrom?: string;
     dateTo?: string;
     orderNumber?: string;
@@ -336,6 +349,9 @@ export function filterReports(
   },
   fyStartMonth: number = 8
 ): InspectionReport[] {
+  const selectedMonths = normalizeMultiSelect(filters.month);
+  const selectedWeeks = normalizeMultiSelect(filters.week);
+
   return reports.filter((report) => {
     if (Array.isArray(filters.buyer)) {
       if (filters.buyer.length > 0 && !filters.buyer.includes('ALL')) {
@@ -367,19 +383,24 @@ export function filterReports(
       if (getReportSource(report) !== filters.reportSource) return false;
     }
 
-    if (filters.month && filters.month !== 'ALL') {
+    if (selectedMonths.length > 0) {
       // Month format: 'YYYY-MM'
-      if (!report.inspectionDate.startsWith(filters.month)) return false;
+      const repMonth = report.targetMonth && /^\d{4}-\d{2}$/.test(report.targetMonth)
+        ? report.targetMonth
+        : (report.inspectionDate || '').slice(0, 7);
+      const monthMatched = selectedMonths.some(
+        (m) => report.inspectionDate.startsWith(m) || repMonth === m
+      );
+      if (!monthMatched) return false;
     }
 
-    if (filters.week && filters.week !== 'ALL') {
+    if (selectedWeeks.length > 0) {
       // Week format: 'YYYY-Www' (ISO 8601 Monday–Sunday week) or 'Www'
       const repWeekInfo = getFiscalWeekInfo(report.inspectionDate, fyStartMonth);
-      if (filters.week.includes('-W')) {
-        if (repWeekInfo.weekKey !== filters.week) return false;
-      } else if (repWeekInfo.weekLabel !== filters.week) {
-        return false;
-      }
+      const weekMatched = selectedWeeks.some((w) =>
+        w.includes('-W') ? repWeekInfo.weekKey === w : repWeekInfo.weekLabel === w
+      );
+      if (!weekMatched) return false;
     }
 
     if (filters.dateFrom && report.inspectionDate < filters.dateFrom) {

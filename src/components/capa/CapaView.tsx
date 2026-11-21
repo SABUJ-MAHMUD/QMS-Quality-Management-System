@@ -25,9 +25,13 @@ import {
   buildDefaultCapaGuidance,
   computeDynamicCapaRows,
   buildAvailableWeeks,
+  formatMonthShort,
+  weekOverlapsAnyMonth,
 } from '../../utils/dashboardAnalytics';
-import { filterReports, normalizeFloorName } from '../../utils/oqlCalculator';
+import { filterReports, normalizeFloorName, normalizeMultiSelect } from '../../utils/oqlCalculator';
 import { ReportSource } from '../../types';
+import { MultiSelectCheckboxFilter } from '../common/MultiSelectCheckboxFilter';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 
 const normalizeDefectTitleKey = (name: string): string => {
   return name
@@ -81,6 +85,9 @@ export const CapaView: React.FC = () => {
     return filters.floors.filter((f) => f && f !== 'ALL').map((f) => normalizeFloorName(f));
   }, [filters.floors]);
 
+  const selectedMonths = useMemo(() => normalizeMultiSelect(filters.month), [filters.month]);
+  const selectedWeeks = useMemo(() => normalizeMultiSelect(filters.week), [filters.week]);
+
   const activeReportSource: 'ALL' | ReportSource = filters.reportSource || 'ALL';
   const hasBuyerFilter = Array.isArray(filters.buyer)
     ? filters.buyer.length > 0 && !filters.buyer.includes('ALL')
@@ -90,8 +97,8 @@ export const CapaView: React.FC = () => {
     hasBuyerFilter ||
     selectedFloors.length > 0 ||
     activeReportSource !== 'ALL' ||
-    filters.month !== 'ALL' ||
-    (filters.week !== undefined && filters.week !== 'ALL') ||
+    selectedMonths.length > 0 ||
+    selectedWeeks.length > 0 ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
     filters.defectGroup !== 'ALL' ||
@@ -104,8 +111,23 @@ export const CapaView: React.FC = () => {
       const ym = r.targetMonth || (r.inspectionDate ? r.inspectionDate.slice(0, 7) : '');
       if (ym) set.add(ym);
     });
+    selectedMonths.forEach((m) => set.add(m));
     return Array.from(set).sort((a, b) => b.localeCompare(a));
-  }, [reports]);
+  }, [reports, selectedMonths]);
+
+  const nonMonthFilteredReports = useMemo(
+    () => filterReports(reports, { ...filters, month: 'ALL', week: 'ALL', dateFrom: '', dateTo: '' }, 8),
+    [reports, filters]
+  );
+
+  const monthReportCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    nonMonthFilteredReports.forEach((r) => {
+      const ym = (r.inspectionDate || '').slice(0, 7) || r.targetMonth || '';
+      if (ym) map.set(ym, (map.get(ym) || 0) + 1);
+    });
+    return map;
+  }, [nonMonthFilteredReports]);
 
   const fyScopedReports = useMemo(
     () => filterReports(reports, { financialYear: filters.financialYear }, 8),
@@ -117,10 +139,47 @@ export const CapaView: React.FC = () => {
     [fyScopedReports]
   );
 
-  const availableWeeks = useMemo(
-    () => buildAvailableWeeks(fyScopedReports, 8, filters.month),
-    [fyScopedReports, filters.month]
-  );
+  const availableWeeks = useMemo(() => {
+    const sourceReports = nonMonthFilteredReports.length > 0 ? nonMonthFilteredReports : fyScopedReports;
+    return buildAvailableWeeks(sourceReports, 8, selectedMonths);
+  }, [nonMonthFilteredReports, fyScopedReports, selectedMonths]);
+
+  const toggleMonthSelection = (ym: string) => {
+    const exists = selectedMonths.includes(ym);
+    const nextMonths = exists ? selectedMonths.filter((m) => m !== ym) : [...selectedMonths, ym];
+    setFilters((prev) => {
+      const curWeeks = normalizeMultiSelect(prev.week);
+      if (nextMonths.length === 0 || curWeeks.length === 0) {
+        return { ...prev, month: nextMonths.length > 0 ? nextMonths : 'ALL' };
+      }
+      const keptWeeks = curWeeks.filter((wkKey) => {
+        const wk = availableWeeksAll.find((w) => w.weekKey === wkKey);
+        return wk ? weekOverlapsAnyMonth(wk, nextMonths) : false;
+      });
+      return {
+        ...prev,
+        month: nextMonths,
+        week: keptWeeks.length > 0 ? keptWeeks : 'ALL',
+      };
+    });
+  };
+
+  const selectAllMonths = () => {
+    setFilters((prev) => ({ ...prev, month: 'ALL' }));
+  };
+
+  const toggleWeekSelection = (weekKey: string) => {
+    const exists = selectedWeeks.includes(weekKey);
+    const nextWeeks = exists ? selectedWeeks.filter((w) => w !== weekKey) : [...selectedWeeks, weekKey];
+    setFilters((prev) => ({
+      ...prev,
+      week: nextWeeks.length > 0 ? nextWeeks : 'ALL',
+    }));
+  };
+
+  const selectAllWeeks = () => {
+    setFilters((prev) => ({ ...prev, week: 'ALL' }));
+  };
 
   const availableFloors = useMemo(() => {
     const set = new Set<string>(['SEW-1', 'SEW-2', 'SEW-3']);
@@ -656,46 +715,59 @@ export const CapaView: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5">
-            <span className="text-[11px] font-bold text-slate-500">Month:</span>
-            <select
-              aria-label="Filter CAPA by Month"
-              value={filters.month}
-              onChange={(e) => {
-                const nextMonth = e.target.value;
-                setFilters((prev) => {
-                  if (nextMonth === 'ALL' || !prev.week || prev.week === 'ALL') {
-                    return { ...prev, month: nextMonth };
-                  }
-                  const wk = availableWeeksAll.find((w) => w.weekKey === prev.week);
-                  const overlaps =
-                    wk && (wk.weekStartDate.startsWith(nextMonth) || wk.weekEndDate.startsWith(nextMonth));
-                  return { ...prev, month: nextMonth, week: overlaps ? prev.week : 'ALL' };
-                });
-              }}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">All Months</option>
-              {availableMonths.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectCheckboxFilter
+            label="Month"
+            allLabel="All Months"
+            headerTitle="Select Months (Multi-Check)"
+            ariaLabel="Filter CAPA by Months"
+            allCount={nonMonthFilteredReports.length}
+            selectedValues={selectedMonths}
+            options={availableMonths.map((m) => ({
+              value: m,
+              label: formatMonthShort(m),
+              count: monthReportCounts.get(m) || 0,
+            }))}
+            onToggle={toggleMonthSelection}
+            onSelectAll={selectAllMonths}
+            buttonSummary={
+              selectedMonths.length === 0
+                ? 'All Months'
+                : selectedMonths.length === 1
+                ? formatMonthShort(selectedMonths[0])
+                : `${selectedMonths.slice(0, 2).map(formatMonthShort).join(', ')}${
+                    selectedMonths.length > 2 ? ` +${selectedMonths.length - 2}` : ''
+                  }`
+            }
+            maxWidthClass="max-w-[140px]"
+            menuWidthClass="w-60"
+            buttonClassName="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-sky-500 rounded-lg px-2 py-0.5 cursor-pointer transition-colors text-xs whitespace-nowrap"
+          />
 
-          <div className="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5">
-            <span className="text-[11px] font-bold text-slate-500">Week:</span>
-            <select
-              aria-label="Filter CAPA by Week"
-              value={filters.week || 'ALL'}
-              onChange={(e) => setFilters((prev) => ({ ...prev, week: e.target.value }))}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[185px] truncate"
-            >
-              <option value="ALL">All Weeks</option>
-              {availableWeeks.map((w) => (
-                <option key={w.weekKey} value={w.weekKey}>{w.optionLabel}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectCheckboxFilter
+            label="Week"
+            allLabel="All Weeks"
+            headerTitle="ISO Weeks (Mon–Sun)"
+            ariaLabel="Filter CAPA by Weeks"
+            allCount={availableWeeks.reduce((s, w) => s + w.reportCount, 0)}
+            selectedValues={selectedWeeks}
+            options={availableWeeks.map((w) => ({
+              value: w.weekKey,
+              label: w.optionLabel,
+              count: w.reportCount,
+            }))}
+            onToggle={toggleWeekSelection}
+            onSelectAll={selectAllWeeks}
+            buttonSummary={
+              selectedWeeks.length === 0
+                ? 'All Weeks'
+                : selectedWeeks.length === 1
+                ? availableWeeksAll.find((w) => w.weekKey === selectedWeeks[0])?.optionLabel || selectedWeeks[0]
+                : `${selectedWeeks.length} Weeks`
+            }
+            maxWidthClass="max-w-[165px]"
+            menuWidthClass="w-72"
+            buttonClassName="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-sky-500 rounded-lg px-2 py-0.5 cursor-pointer transition-colors text-xs whitespace-nowrap"
+          />
 
           <div className="flex items-center gap-1 bg-white/95 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5">
             <span className="text-[11px] font-bold text-slate-500">Floor:</span>
@@ -870,9 +942,22 @@ export const CapaView: React.FC = () => {
       </div>
 
       {/* CAPA Table matching User Format */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
+      <ExpandablePanel
+        title="RCA & CAPA Registry Table"
+        buttonTone="on-light"
+        className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col"
+      >
+        {({ expandControls }) => (
+          <>
+            <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100">
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
+                <span>RCA &amp; CAPA Action Log ({filteredDynamicRows.length} items)</span>
+              </div>
+              {expandControls}
+            </div>
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-center">SL</th>
@@ -1042,10 +1127,12 @@ export const CapaView: React.FC = () => {
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </ExpandablePanel>
 
       {/* View 5-Why Details Modal */}
       {selectedCapa && (

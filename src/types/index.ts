@@ -158,8 +158,8 @@ export interface GlobalFilterState {
   financialYear: string | string[];
   floors: string[];
   reportSource: 'ALL' | ReportSource;
-  month: string;
-  week: string;
+  month: string | string[];
+  week: string | string[];
   dateFrom: string;
   dateTo: string;
   orderNumber: string;

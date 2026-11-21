@@ -7,7 +7,15 @@ import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const BASE_PATH = '/QMS-Quality-Management-System/';
+function resolveBasePath(): string {
+  const raw =
+    process.env.VITE_BASE_PATH ||
+    (process.env.GITHUB_ACTIONS === 'true' ? '/QMS-Quality-Management-System/' : '/');
+  const withLeading = raw.startsWith('/') ? raw : `/${raw}`;
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
+}
+
+const BASE_PATH = resolveBasePath();
 const appBuildId = process.env.VITE_APP_BUILD_ID || Date.now().toString();
 const appBuiltAt = new Date().toISOString();
 

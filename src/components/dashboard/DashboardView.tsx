@@ -35,8 +35,10 @@ import {
 } from 'recharts';
 import { SpeedometerGauge } from '../common/SpeedometerGauge';
 import { DefectAxisTick } from '../common/DefectAxisTick';
+import { MultiSelectCheckboxFilter } from '../common/MultiSelectCheckboxFilter';
+import { ExpandablePanel } from '../common/ExpandablePanel';
 import { MASTER_DEFECT_23_CATEGORIES } from '../../data/defectMasterData';
-import { filterReports, getReportSource, normalizeFloorName } from '../../utils/oqlCalculator';
+import { filterReports, getReportSource, normalizeFloorName, normalizeMultiSelect } from '../../utils/oqlCalculator';
 import {
   computeTopSingleDefects,
   computeMonthToMonthTopDefects,
@@ -45,6 +47,9 @@ import {
   computeDynamicCapaRows,
   selectDashboardCapaRows,
   buildAvailableWeeks,
+  formatMonthShort,
+  formatSelectedPeriodLabel,
+  weekOverlapsAnyMonth,
   formatPctText,
 } from '../../utils/dashboardAnalytics';
 import { ReportSource } from '../../types';
@@ -99,6 +104,9 @@ export const DashboardView: React.FC = () => {
     };
   }, [showFloorMenu]);
 
+  const selectedMonths = useMemo(() => normalizeMultiSelect(filters.month), [filters.month]);
+  const selectedWeeks = useMemo(() => normalizeMultiSelect(filters.week), [filters.week]);
+
   // Dynamic Months list from uploaded reports
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
@@ -106,12 +114,33 @@ export const DashboardView: React.FC = () => {
       const ym = r.targetMonth || (r.inspectionDate ? r.inspectionDate.slice(0, 7) : '');
       if (ym) set.add(ym);
     });
+    selectedMonths.forEach((m) => set.add(m));
     // Add known months if empty
     ['2026-11', '2026-10', '2026-09', '2026-08'].forEach((m) => set.add(m));
     return Array.from(set).sort((a, b) => b.localeCompare(a));
-  }, [reports]);
+  }, [reports, selectedMonths]);
 
-  // Dynamic Monday–Sunday ISO weeks derived from uploaded/previous reports (scoped by active FY)
+  // Reports matching all filters EXCEPT month & week (for dropdown counts & trend charts)
+  const nonMonthFilteredReports = useMemo(
+    () =>
+      filterReports(
+        reports,
+        { ...filters, month: 'ALL', week: 'ALL', dateFrom: '', dateTo: '' },
+        settings.financialYearStartMonth
+      ),
+    [reports, filters, settings.financialYearStartMonth]
+  );
+
+  const monthReportCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    nonMonthFilteredReports.forEach((r) => {
+      const ym = (r.inspectionDate || '').slice(0, 7) || r.targetMonth || '';
+      if (ym) map.set(ym, (map.get(ym) || 0) + 1);
+    });
+    return map;
+  }, [nonMonthFilteredReports]);
+
+  // Dynamic Monday–Sunday ISO weeks derived from uploaded/previous reports (scoped by active slice)
   const fyScopedReports = useMemo(
     () =>
       filterReports(
@@ -127,10 +156,10 @@ export const DashboardView: React.FC = () => {
     [fyScopedReports, settings.financialYearStartMonth]
   );
 
-  const availableWeeks = useMemo(
-    () => buildAvailableWeeks(fyScopedReports, settings.financialYearStartMonth, filters.month),
-    [fyScopedReports, settings.financialYearStartMonth, filters.month]
-  );
+  const availableWeeks = useMemo(() => {
+    const sourceReports = nonMonthFilteredReports.length > 0 ? nonMonthFilteredReports : fyScopedReports;
+    return buildAvailableWeeks(sourceReports, settings.financialYearStartMonth, selectedMonths);
+  }, [nonMonthFilteredReports, fyScopedReports, settings.financialYearStartMonth, selectedMonths]);
 
   // Dynamic Styles list from uploaded reports
   const availableStyles = useMemo(() => {
@@ -236,12 +265,45 @@ export const DashboardView: React.FC = () => {
     hasBuyerFilter ||
     selectedFloors.length > 0 ||
     activeReportSource !== 'ALL' ||
-    filters.month !== 'ALL' ||
-    (filters.week !== undefined && filters.week !== 'ALL') ||
+    selectedMonths.length > 0 ||
+    selectedWeeks.length > 0 ||
     filters.styleNumber !== '' ||
     filters.orderNumber !== '' ||
     filters.defectGroup !== 'ALL' ||
     filters.inspectionResult !== 'ALL';
+
+  const toggleMonthSelection = (monthValue: string) => {
+    const exists = selectedMonths.includes(monthValue);
+    const nextMonths = exists
+      ? selectedMonths.filter((m) => m !== monthValue)
+      : [...selectedMonths, monthValue];
+    setFilters((prev) => {
+      const currentWeeks = normalizeMultiSelect(prev.week);
+      if (nextMonths.length === 0 || currentWeeks.length === 0) {
+        return { ...prev, month: nextMonths.length === 0 ? 'ALL' : nextMonths };
+      }
+      const keptWeeks = currentWeeks.filter((wkKey) => {
+        const wk = availableWeeksAll.find((w) => w.weekKey === wkKey);
+        return wk ? weekOverlapsAnyMonth(wk, nextMonths) : false;
+      });
+      return {
+        ...prev,
+        month: nextMonths,
+        week: keptWeeks.length === 0 ? 'ALL' : keptWeeks,
+      };
+    });
+  };
+
+  const toggleWeekSelection = (weekKey: string) => {
+    const exists = selectedWeeks.includes(weekKey);
+    const nextWeeks = exists
+      ? selectedWeeks.filter((w) => w !== weekKey)
+      : [...selectedWeeks, weekKey];
+    setFilters((prev) => ({
+      ...prev,
+      week: nextWeeks.length === 0 ? 'ALL' : nextWeeks,
+    }));
+  };
 
   // Top 9 KPI calculations
   const totalReports = filteredReports.length;
@@ -262,17 +324,6 @@ export const DashboardView: React.FC = () => {
 
   // Active floor & distinct style breakdown for INSPECTION REPORTS card
   const floorStats = useMemo(() => computeFloorStats(filteredReports), [filteredReports]);
-
-  // Non-month/week filtered slice (respects FY, Floor, Buyer, ReportSource, Style, Order, Group, Result, Search)
-  const nonMonthFilteredReports = useMemo(
-    () =>
-      filterReports(
-        reports,
-        { ...filters, month: 'ALL', week: 'ALL', dateFrom: '', dateTo: '' },
-        settings.financialYearStartMonth
-      ),
-    [reports, filters, settings.financialYearStartMonth]
-  );
 
   // Middle Left: Highest Single Defects column chart data (max 5, single defects with official PDF code & % of Inspected Qty)
   const highestDefectsData = useMemo(
@@ -426,71 +477,66 @@ export const DashboardView: React.FC = () => {
               <span>Filters:</span>
             </div>
 
-            {/* 1. Month Filter */}
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-              <span className="text-slate-500 dark:text-slate-400 font-semibold">Month:</span>
-              <select
-                aria-label="Filter by Month"
-                value={filters.month}
-                onChange={(e) => {
-                  const nextMonth = e.target.value;
-                  setFilters((prev) => {
-                    if (nextMonth === 'ALL' || !prev.week || prev.week === 'ALL') {
-                      return { ...prev, month: nextMonth };
-                    }
-                    const wk = availableWeeksAll.find((w) => w.weekKey === prev.week);
-                    const overlaps =
-                      wk && (wk.weekStartDate.startsWith(nextMonth) || wk.weekEndDate.startsWith(nextMonth));
-                    return { ...prev, month: nextMonth, week: overlaps ? prev.week : 'ALL' };
-                  });
-                }}
-                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Months</option>
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 1. Multi-Select Month Checkbox Filter */}
+            <MultiSelectCheckboxFilter
+              testId="dashboard-month-filter"
+              label="Month"
+              allLabel="All Months"
+              headerTitle="Select Months (Multi)"
+              ariaLabel="Filter by Month"
+              allCount={nonMonthFilteredReports.length}
+              selectedValues={selectedMonths}
+              options={availableMonths.map((m) => ({
+                value: m,
+                label: `${formatMonthShort(m)} (${m})`,
+                count: monthReportCounts.get(m) || 0,
+              }))}
+              buttonSummary={
+                selectedMonths.length === 0
+                  ? 'All Months'
+                  : selectedMonths.length === 1
+                  ? selectedMonths[0]
+                  : `${selectedMonths.length} Months`
+              }
+              maxWidthClass="max-w-[115px]"
+              menuWidthClass="w-64"
+              onToggle={toggleMonthSelection}
+              onSelectAll={() => setFilters((prev) => ({ ...prev, month: 'ALL', week: 'ALL' }))}
+            />
 
-            {/* 2. Week Filter (ISO 8601 Monday–Sunday Schedule) */}
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shadow-2xs">
-              <span className="text-slate-500 dark:text-slate-400 font-semibold">Week:</span>
-              <select
-                aria-label="Filter by Week"
-                value={filters.week || 'ALL'}
-                onChange={(e) => {
-                  const nextWeek = e.target.value;
-                  setFilters((prev) => {
-                    if (nextWeek !== 'ALL' && prev.month !== 'ALL') {
-                      const wk = availableWeeksAll.find((w) => w.weekKey === nextWeek);
-                      const overlaps =
-                        wk && (wk.weekStartDate.startsWith(prev.month) || wk.weekEndDate.startsWith(prev.month));
-                      if (!overlaps) {
-                        return { ...prev, week: nextWeek, month: 'ALL' };
-                      }
-                    }
-                    return { ...prev, week: nextWeek };
-                  });
-                }}
-                title="Monday to Sunday ISO Week Schedule (matching BESTSELLER Inspection Portal)"
-                className="bg-transparent font-bold text-slate-900 dark:text-slate-100 focus:outline-none cursor-pointer max-w-[195px] truncate"
-              >
-                <option value="ALL">All Weeks</option>
-                {availableWeeks.map((w) => (
-                  <option key={w.weekKey} value={w.weekKey}>
-                    {w.optionLabel}
-                  </option>
-                ))}
-                {filters.week &&
-                  filters.week !== 'ALL' &&
-                  !availableWeeks.some((w) => w.weekKey === filters.week) && (
-                    <option value={filters.week}>{filters.week}</option>
-                  )}
-              </select>
-            </div>
+            {/* 2. Multi-Select Week Checkbox Filter (ISO 8601 Monday–Sunday Schedule) */}
+            <MultiSelectCheckboxFilter
+              testId="dashboard-week-filter"
+              label="Week"
+              allLabel="All Weeks"
+              headerTitle="Select Weeks (Mon–Sun)"
+              ariaLabel="Filter by Week"
+              allCount={availableWeeks.reduce((s, w) => s + w.reportCount, 0)}
+              selectedValues={selectedWeeks}
+              options={[
+                ...availableWeeks.map((w) => ({
+                  value: w.weekKey,
+                  label: w.optionLabel,
+                  count: w.reportCount,
+                })),
+                ...selectedWeeks
+                  .filter((wk) => !availableWeeks.some((w) => w.weekKey === wk))
+                  .map((wk) => ({ value: wk, label: wk })),
+              ]}
+              buttonSummary={
+                selectedWeeks.length === 0
+                  ? 'All Weeks'
+                  : selectedWeeks.length === 1
+                  ? availableWeeksAll.find((w) => w.weekKey === selectedWeeks[0])?.optionLabel ||
+                    selectedWeeks[0]
+                  : `${selectedWeeks.length} Weeks`
+              }
+              maxWidthClass="max-w-[180px]"
+              menuWidthClass="w-72"
+              title="Monday to Sunday ISO Week Schedule (matching BESTSELLER Inspection Portal)"
+              onToggle={toggleWeekSelection}
+              onSelectAll={() => setFilters((prev) => ({ ...prev, week: 'ALL' }))}
+            />
 
             {/* 2. Multi-Select All Floors Checkbox Filter (SEW-1, SEW-2, SEW-3) */}
             <div className="relative" ref={floorMenuRef}>
@@ -680,17 +726,11 @@ export const DashboardView: React.FC = () => {
             <button
               onClick={async () => {
                 const { exportDashboardToPptx } = await import('../../utils/exportUtils');
-                const selectedWeekInfo =
-                  filters.week && filters.week !== 'ALL'
-                    ? availableWeeksAll.find((w) => w.weekKey === filters.week)
-                    : undefined;
-                const periodLabel = selectedWeekInfo
-                  ? selectedWeekInfo.optionLabel
-                  : filters.week && filters.week !== 'ALL'
-                  ? filters.week
-                  : filters.month !== 'ALL'
-                  ? filters.month
-                  : undefined;
+                const periodLabel = formatSelectedPeriodLabel(
+                  filters.month,
+                  filters.week,
+                  availableWeeksAll
+                );
                 await exportDashboardToPptx(filteredReports, capas, periodLabel);
               }}
               title="Download full quality audit PowerPoint (.pptx) presentation"
@@ -885,498 +925,569 @@ export const DashboardView: React.FC = () => {
       {/* MIDDLE ROW: Highest Defects Column Chart | Weekly OQL Trend (W32 start) | Month Wise OQL Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         {/* Left (4 cols): HIGHEST DEFECTS CATEGORY (Top 5 Single Defects with Code, Name, Qty & % of Inspected) */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
-          <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider">
-            HIGHEST DEFECTS CATEGORY
-          </div>
-          <div className="p-3 flex-1 flex flex-col">
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mb-1 font-semibold">
-              Top 5 Single Defects &mdash; Defect Qty &amp; Rate (% of Inspected Qty)
-            </p>
-            <div className="h-64 w-full">
-              {highestDefectsData.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
-                    <BarChart3 className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Defects Recorded in Current Slice
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload factory PDF inspection reports to automatically populate live single-defect rankings.
-                  </p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={highestDefectsData} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis
-                      dataKey="codeAndName"
-                      interval={0}
-                      tick={<DefectAxisTick maxCharsPerLine={13} maxNameLines={2} />}
-                      height={58}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
-                    <Tooltip
-                      formatter={(val: any, _name: any, item: any) => [
-                        `${val} defects (${formatPctText(item?.payload?.percentage ?? 0)} of inspected)`,
-                        item?.payload?.codeAndName || 'Single Defect',
-                      ]}
-                    />
-                    <Bar dataKey="count" isAnimationActive={false} fill="#0284c7" radius={[4, 4, 0, 0]}>
-                      {highestDefectsData.map((_, index) => {
-                        const barColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
-                        return <Cell key={`cell-${index}`} fill={barColors[index % barColors.length]} />;
-                      })}
-                      <LabelList
-                        dataKey="barLabel"
-                        position="top"
-                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#0f172a' }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            {highestDefectsData.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                {highestDefectsData.map((item, idx) => {
-                  const badgeColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
-                  return (
-                    <div
-                      key={`${item.code}-${idx}`}
-                      className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
-                    >
-                      <div className="flex items-start gap-1.5 min-w-0">
-                        <span
-                          className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black text-white shrink-0"
-                          style={{ backgroundColor: badgeColors[idx % badgeColors.length] }}
-                        >
-                          {item.code}
-                        </span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
-                          {item.name}
-                        </span>
-                      </div>
-                      <span className="font-black text-slate-900 dark:text-white shrink-0">
-                        {item.barLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Center (4 cols): WEEKLY OQL TREND (BESTSELLER International Week starting Aug = W32) */}
-        <div
-          data-testid="weekly-oql-trend-card"
+        <ExpandablePanel
+          title="HIGHEST DEFECTS CATEGORY"
+          testId="highest-defects-card"
           className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
         >
-          <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider w-full">
-            WEEKLY OQL TREND (LAST WEEK OQL)
-          </div>
-          <div className="p-3 flex-1 flex flex-col">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                ISO Mon&ndash;Sun (Aug W32 &rarr; Jul W31)
-              </h4>
-              {latestWeekPoint && (
-                <span
-                  title={`Mon–Sun: ${latestWeekPoint.dateRangeLabel}`}
-                  className="text-[10px] font-black px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0"
+          {({ isExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="bg-sky-900 text-white font-black text-sm py-1.5 px-3 uppercase tracking-wider flex items-center justify-between gap-2">
+                <span className="truncate">HIGHEST DEFECTS CATEGORY</span>
+                {expandControls}
+              </div>
+              <div className="p-3 flex-1 flex flex-col">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mb-1 font-semibold">
+                  Top 5 Single Defects &mdash; Defect Qty &amp; Rate (% of Inspected Qty)
+                </p>
+                <div
+                  className={
+                    isExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[420px] sm:h-[52vh] w-full'
+                        : 'h-[360px] w-full'
+                      : 'h-64 w-full'
+                  }
                 >
-                  Latest {latestWeekPoint.weekLabel}: {latestWeekPoint.oql.toFixed(2)}%
-                </span>
-              )}
-            </div>
-            <div className="h-72 w-full">
-              {weeklyOqlTrendData.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
-                    <Calendar className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Weekly OQL Data in Current FY Slice
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload inspection reports to track Monday&ndash;Sunday weekly OQL progression starting Week 32 (August).
-                  </p>
+                  {highestDefectsData.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
+                        <BarChart3 className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        No Defects Recorded in Current Slice
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                        Upload factory PDF inspection reports to automatically populate live single-defect rankings.
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={highestDefectsData} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                        <XAxis
+                          dataKey="codeAndName"
+                          interval={0}
+                          tick={<DefectAxisTick maxCharsPerLine={isExpanded ? 20 : 13} maxNameLines={2} />}
+                          height={58}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
+                        <Tooltip
+                          formatter={(val: any, _name: any, item: any) => [
+                            `${val} defects (${formatPctText(item?.payload?.percentage ?? 0)} of inspected)`,
+                            item?.payload?.codeAndName || 'Single Defect',
+                          ]}
+                        />
+                        <Bar dataKey="count" isAnimationActive={false} fill="#0284c7" radius={[4, 4, 0, 0]}>
+                          {highestDefectsData.map((_, index) => {
+                            const barColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
+                            return <Cell key={`cell-${index}`} fill={barColors[index % barColors.length]} />;
+                          })}
+                          <LabelList
+                            dataKey="barLabel"
+                            position="top"
+                            style={{ fontSize: isExpanded ? 11 : 9.5, fontWeight: 'bold', fill: '#0f172a' }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weeklyOqlTrendData} margin={{ top: 24, right: 18, left: -6, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis
-                      dataKey="weekLabel"
-                      interval={0}
-                      padding={{ left: 16, right: 16 }}
-                      angle={weeklyOqlTrendData.length > 8 ? -35 : 0}
-                      textAnchor={weeklyOqlTrendData.length > 8 ? 'end' : 'middle'}
-                      height={weeklyOqlTrendData.length > 8 ? 36 : 24}
-                      tick={{ fontSize: 9, fontWeight: 'bold' }}
-                    />
-                    <YAxis
-                      domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
-                      tickCount={4}
-                      tickFormatter={(v) => `${v}%`}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <ReferenceLine
-                      y={settings.targetOql || 4.5}
-                      stroke="#16a34a"
-                      strokeDasharray="4 4"
-                      label={{
-                        value: `Target ${settings.targetOql || 4.5}%`,
-                        position: 'insideTopRight',
-                        fill: '#15803d',
-                        fontSize: 10,
-                        fontWeight: 'bold',
-                      }}
-                    />
-                    <Tooltip
-                      formatter={(val: any) => [`${Number(val).toFixed(2)}%`, 'Weekly OQL']}
-                      labelFormatter={(label: any, payload: any) => {
-                        const row = payload?.[0]?.payload;
-                        if (!row) return String(label);
-                        return `${label} (Mon–Sun: ${row.dateRangeLabel || `${row.weekStartDate} to ${row.weekEndDate}`}) • ${row.reportCount} rpt(s)`;
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="oql"
-                      isAnimationActive={false}
-                      stroke="#0284c7"
-                      strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#dc2626', stroke: '#0284c7', strokeWidth: 2 }}
-                      activeDot={{ r: 6 }}
-                    >
-                      <LabelList
-                        dataKey="oql"
-                        content={(props: any) => {
-                          const { x, y, value, index } = props;
-                          if (x == null || y == null || value == null) return null;
-                          const dense = weeklyOqlTrendData.length > 7;
-                          const dy = dense && index % 2 === 1 ? 15 : -9;
-                          return (
-                            <text
-                              x={x}
-                              y={y + dy}
-                              textAnchor="middle"
-                              fontSize={dense ? 8.5 : 10}
-                              fontWeight="bold"
-                              fill="#0369a1"
-                              stroke="#ffffff"
-                              strokeWidth={2.5}
-                              paintOrder="stroke"
+                {highestDefectsData.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    {highestDefectsData.map((item, idx) => {
+                      const badgeColors = ['#0284c7', '#ea580c', '#10b981', '#f59e0b', '#8b5cf6'];
+                      return (
+                        <div
+                          key={`${item.code}-${idx}`}
+                          className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
+                        >
+                          <div className="flex items-start gap-1.5 min-w-0">
+                            <span
+                              className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black text-white shrink-0"
+                              style={{ backgroundColor: badgeColors[idx % badgeColors.length] }}
                             >
-                              {`${Number(value).toFixed(2)}%`}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Line>
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
+                              {item.code}
+                            </span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
+                              {item.name}
+                            </span>
+                          </div>
+                          <span className="font-black text-slate-900 dark:text-white shrink-0">
+                            {item.barLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
+
+        {/* Center (4 cols): WEEKLY OQL TREND (BESTSELLER International Week starting Aug = W32) */}
+        <ExpandablePanel
+          title="WEEKLY OQL TREND (LAST WEEK OQL)"
+          testId="weekly-oql-trend-card"
+          className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          {({ isExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="bg-sky-900 text-white font-black text-sm py-1.5 px-3 uppercase tracking-wider w-full flex items-center justify-between gap-2">
+                <span className="truncate">WEEKLY OQL TREND (LAST WEEK OQL)</span>
+                {expandControls}
+              </div>
+              <div className="p-3 flex-1 flex flex-col">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-[11px] font-black text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                    ISO Mon&ndash;Sun (Aug W32 &rarr; Jul W31)
+                  </h4>
+                  {latestWeekPoint && (
+                    <span
+                      title={`Mon–Sun: ${latestWeekPoint.dateRangeLabel}`}
+                      className="text-[10px] font-black px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0"
+                    >
+                      Latest {latestWeekPoint.weekLabel}: {latestWeekPoint.oql.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+                <div
+                  className={
+                    isExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[450px] sm:h-[58vh] w-full'
+                        : 'h-[380px] w-full'
+                      : 'h-72 w-full'
+                  }
+                >
+                  {weeklyOqlTrendData.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-sky-600 mb-2">
+                        <Calendar className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        No Weekly OQL Data in Current FY Slice
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                        Upload inspection reports to track Monday&ndash;Sunday weekly OQL progression starting Week 32 (August).
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={weeklyOqlTrendData} margin={{ top: 24, right: 18, left: -6, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis
+                          dataKey="weekLabel"
+                          interval={0}
+                          padding={{ left: 16, right: 16 }}
+                          angle={!isExpanded && weeklyOqlTrendData.length > 8 ? -35 : 0}
+                          textAnchor={!isExpanded && weeklyOqlTrendData.length > 8 ? 'end' : 'middle'}
+                          height={!isExpanded && weeklyOqlTrendData.length > 8 ? 36 : 24}
+                          tick={{ fontSize: isExpanded ? 11 : 9, fontWeight: 'bold' }}
+                        />
+                        <YAxis
+                          domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
+                          tickCount={4}
+                          tickFormatter={(v) => `${v}%`}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <ReferenceLine
+                          y={settings.targetOql || 4.5}
+                          stroke="#16a34a"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: `Target ${settings.targetOql || 4.5}%`,
+                            position: 'insideTopRight',
+                            fill: '#15803d',
+                            fontSize: 10,
+                            fontWeight: 'bold',
+                          }}
+                        />
+                        <Tooltip
+                          formatter={(val: any) => [`${Number(val).toFixed(2)}%`, 'Weekly OQL']}
+                          labelFormatter={(label: any, payload: any) => {
+                            const row = payload?.[0]?.payload;
+                            if (!row) return String(label);
+                            return `${label} (Mon–Sun: ${row.dateRangeLabel || `${row.weekStartDate} to ${row.weekEndDate}`}) • ${row.reportCount} rpt(s)`;
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="oql"
+                          isAnimationActive={false}
+                          stroke="#0284c7"
+                          strokeWidth={2.5}
+                          dot={{ r: 4, fill: '#dc2626', stroke: '#0284c7', strokeWidth: 2 }}
+                          activeDot={{ r: 6 }}
+                        >
+                          <LabelList
+                            dataKey="oql"
+                            content={(props: any) => {
+                              const { x, y, value, index } = props;
+                              if (x == null || y == null || value == null) return null;
+                              const dense = !isExpanded && weeklyOqlTrendData.length > 7;
+                              const dy = dense && index % 2 === 1 ? 15 : -9;
+                              return (
+                                <text
+                                  x={x}
+                                  y={y + dy}
+                                  textAnchor="middle"
+                                  fontSize={dense ? 8.5 : 10.5}
+                                  fontWeight="bold"
+                                  fill="#0369a1"
+                                  stroke="#ffffff"
+                                  strokeWidth={2.5}
+                                  paintOrder="stroke"
+                                >
+                                  {`${Number(value).toFixed(2)}%`}
+                                </text>
+                              );
+                            }}
+                          />
+                        </Line>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
 
         {/* Right (4 cols): MONTH WISE OQL PERFORMANCE */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
-          <div className="bg-amber-600 dark:bg-amber-700 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider">
-            MONTH WISE OQL PERFORMANCE
-          </div>
-          <div className="p-3 flex-1 flex flex-col">
-            <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 text-center mb-1">
-              Month wise OQL Performance (OBH Only)
-            </h4>
-            <div className="h-72 w-full">
-              {monthlyPerformanceData.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 mb-2">
-                    <TrendingUp className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Monthly Inspection Data Uploaded
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload monthly PDF reports (e.g. October, November) to generate live OQL performance trend.
-                  </p>
+        <ExpandablePanel
+          title="MONTH WISE OQL PERFORMANCE"
+          testId="monthly-oql-card"
+          className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          {({ isExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="bg-amber-600 dark:bg-amber-700 text-white font-black text-sm py-1.5 px-3 uppercase tracking-wider flex items-center justify-between gap-2">
+                <span className="truncate">MONTH WISE OQL PERFORMANCE</span>
+                {expandControls}
+              </div>
+              <div className="p-3 flex-1 flex flex-col">
+                <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 text-center mb-1">
+                  Month wise OQL Performance (OBH Only)
+                </h4>
+                <div
+                  className={
+                    isExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[450px] sm:h-[58vh] w-full'
+                        : 'h-[380px] w-full'
+                      : 'h-72 w-full'
+                  }
+                >
+                  {monthlyPerformanceData.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 mb-2">
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        No Monthly Inspection Data Uploaded
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                        Upload monthly PDF reports (e.g. October, November) to generate live OQL performance trend.
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={monthlyPerformanceData} margin={{ top: 25, right: 25, left: -5, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis
+                          dataKey="month"
+                          padding={{ left: 35, right: 25 }}
+                          tick={{ fontSize: isExpanded ? 12 : 10, fontWeight: 'bold' }}
+                        />
+                        <YAxis
+                          domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
+                          tickCount={4}
+                          tickFormatter={(v) => `${v}%`}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <ReferenceLine
+                          y={settings.targetOql || 4.5}
+                          stroke="#16a34a"
+                          strokeDasharray="4 4"
+                        />
+                        <Tooltip formatter={(val: any) => [`${val}%`, 'Observed OQL']} />
+                        <Line
+                          type="monotone"
+                          dataKey="oql"
+                          isAnimationActive={false}
+                          stroke="#dc2626"
+                          strokeWidth={3}
+                          dot={{ r: 5, fill: '#0284c7', stroke: '#dc2626', strokeWidth: 2 }}
+                          activeDot={{ r: 7 }}
+                        >
+                          <LabelList
+                            dataKey="oql"
+                            position="top"
+                            formatter={(val: any) => `${Number(val).toFixed(2)}%`}
+                            style={{ fontSize: isExpanded ? 12 : 11, fontWeight: 'bold', fill: '#b91c1c' }}
+                          />
+                        </Line>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyPerformanceData} margin={{ top: 25, right: 25, left: -5, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis
-                      dataKey="month"
-                      padding={{ left: 35, right: 25 }}
-                      tick={{ fontSize: 10, fontWeight: 'bold' }}
-                    />
-                    <YAxis
-                      domain={[0, (dataMax: number) => Math.max(9, Math.ceil(((dataMax || 0) + 1) / 3) * 3)]}
-                      tickCount={4}
-                      tickFormatter={(v) => `${v}%`}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <ReferenceLine
-                      y={settings.targetOql || 4.5}
-                      stroke="#16a34a"
-                      strokeDasharray="4 4"
-                    />
-                    <Tooltip formatter={(val: any) => [`${val}%`, 'Observed OQL']} />
-                    <Line
-                      type="monotone"
-                      dataKey="oql"
-                      isAnimationActive={false}
-                      stroke="#dc2626"
-                      strokeWidth={3}
-                      dot={{ r: 5, fill: '#0284c7', stroke: '#dc2626', strokeWidth: 2 }}
-                      activeDot={{ r: 7 }}
-                    >
-                      <LabelList
-                        dataKey="oql"
-                        position="top"
-                        formatter={(val: any) => `${Number(val).toFixed(2)}%`}
-                        style={{ fontSize: 11, fontWeight: 'bold', fill: '#b91c1c' }}
-                      />
-                    </Line>
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
       </div>
 
       {/* BOTTOM ROW: Month-to-Month TOP Single Defects Comparison | Root Cause Analysis & CAPA Summary Table */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         {/* Left (5 cols): Month-to-Month TOP Single Defects Comparison */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col">
-          <div className="bg-sky-900 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider">
-            Month-to-Month TOP Defects Comparison
-          </div>
-          <div className="p-3 flex-1 flex flex-col">
-            <p className="text-[11px] font-bold text-center text-red-600 dark:text-red-400 mb-1">
-              {monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel} &mdash; Single Defect Qty &amp; Rate (% of Inspected Qty)
-            </p>
-            <div className="h-64 w-full">
-              {monthComparison.items.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 mb-2">
-                    <Layers className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    No Defect Comparison Available ({monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel})
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                    Upload inspection reports for consecutive months ({monthComparison.prevMonthLabel} &amp; {monthComparison.currMonthLabel}) to generate single-defect comparisons.
-                  </p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthComparison.items} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis
-                      dataKey="codeAndName"
-                      interval={0}
-                      tick={<DefectAxisTick maxCharsPerLine={14} maxNameLines={2} />}
-                      height={58}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
-                    <Tooltip
-                      formatter={(val: any, name: any, item: any) => {
-                        const isCurr = String(name).includes(monthComparison.currMonthLabel);
-                        const pct = isCurr ? item?.payload?.currentPct : item?.payload?.previousPct;
-                        return [`${val} defects (${formatPctText(pct ?? 0)} of inspected)`, name];
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      iconSize={10}
-                      wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }}
-                    />
-                    {/* Current Month: Pink / Magenta */}
-                    <Bar
-                      dataKey="current"
-                      name={`${monthComparison.currMonthLabel} (Current)`}
-                      isAnimationActive={false}
-                      fill="#ec4899"
-                      radius={[3, 3, 0, 0]}
-                    >
-                      <LabelList
-                        dataKey="currentLabel"
-                        position="top"
-                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#be185d' }}
-                      />
-                    </Bar>
-                    {/* Previous Month: Yellow / Gold */}
-                    <Bar
-                      dataKey="previous"
-                      name={`${monthComparison.prevMonthLabel} (Previous)`}
-                      isAnimationActive={false}
-                      fill="#eab308"
-                      radius={[3, 3, 0, 0]}
-                    >
-                      <LabelList
-                        dataKey="previousLabel"
-                        position="top"
-                        style={{ fontSize: 9.5, fontWeight: 'bold', fill: '#854d0e' }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            {monthComparison.items.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                {monthComparison.items.map((item) => (
-                  <div
-                    key={item.code}
-                    className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
-                  >
-                    <div className="flex items-start gap-1.5 min-w-0">
-                      <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black bg-indigo-600 text-white shrink-0">
-                        {item.code}
-                      </span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
-                        {item.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 font-bold">
-                      <span className="text-pink-600 dark:text-pink-400">
-                        {monthComparison.currMonthLabel.split(' ')[0]}: {item.current} ({formatPctText(item.currentPct)})
-                      </span>
-                      <span className="text-amber-700 dark:text-amber-400">
-                        {monthComparison.prevMonthLabel.split(' ')[0]}: {item.previous} ({formatPctText(item.previousPct)})
-                      </span>
-                    </div>
-                  </div>
-                ))}
+        <ExpandablePanel
+          title="Month-to-Month TOP Defects Comparison"
+          testId="month-comparison-card"
+          className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
+        >
+          {({ isExpanded, expandSize, expandControls }) => (
+            <>
+              <div className="bg-sky-900 text-white font-black text-sm py-1.5 px-3 uppercase tracking-wider flex items-center justify-between gap-2">
+                <span className="truncate">Month-to-Month TOP Defects Comparison</span>
+                {expandControls}
               </div>
-            )}
-          </div>
-        </div>
+              <div className="p-3 flex-1 flex flex-col">
+                <p className="text-[11px] font-bold text-center text-red-600 dark:text-red-400 mb-1">
+                  {monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel} &mdash; Single Defect Qty &amp; Rate (% of Inspected Qty)
+                </p>
+                <div
+                  className={
+                    isExpanded
+                      ? expandSize === 'large'
+                        ? 'h-[420px] sm:h-[52vh] w-full'
+                        : 'h-[360px] w-full'
+                      : 'h-64 w-full'
+                  }
+                >
+                  {monthComparison.items.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 mb-2">
+                        <Layers className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        No Defect Comparison Available ({monthComparison.currMonthLabel} vs {monthComparison.prevMonthLabel})
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                        Upload inspection reports for consecutive months ({monthComparison.prevMonthLabel} &amp; {monthComparison.currMonthLabel}) to generate single-defect comparisons.
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={monthComparison.items} margin={{ top: 28, right: 16, left: 10, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis
+                          dataKey="codeAndName"
+                          interval={0}
+                          tick={<DefectAxisTick maxCharsPerLine={isExpanded ? 20 : 14} maxNameLines={2} />}
+                          height={58}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} allowDecimals={false} width={32} />
+                        <Tooltip
+                          formatter={(val: any, name: any, item: any) => {
+                            const isCurr = String(name).includes(monthComparison.currMonthLabel);
+                            const pct = isCurr ? item?.payload?.currentPct : item?.payload?.previousPct;
+                            return [`${val} defects (${formatPctText(pct ?? 0)} of inspected)`, name];
+                          }}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          iconSize={10}
+                          wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }}
+                        />
+                        {/* Current Month: Pink / Magenta */}
+                        <Bar
+                          dataKey="current"
+                          name={`${monthComparison.currMonthLabel} (Current)`}
+                          isAnimationActive={false}
+                          fill="#ec4899"
+                          radius={[3, 3, 0, 0]}
+                        >
+                          <LabelList
+                            dataKey="currentLabel"
+                            position="top"
+                            style={{ fontSize: isExpanded ? 11 : 9.5, fontWeight: 'bold', fill: '#be185d' }}
+                          />
+                        </Bar>
+                        {/* Previous Month: Yellow / Gold */}
+                        <Bar
+                          dataKey="previous"
+                          name={`${monthComparison.prevMonthLabel} (Previous)`}
+                          isAnimationActive={false}
+                          fill="#eab308"
+                          radius={[3, 3, 0, 0]}
+                        >
+                          <LabelList
+                            dataKey="previousLabel"
+                            position="top"
+                            style={{ fontSize: isExpanded ? 11 : 9.5, fontWeight: 'bold', fill: '#854d0e' }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+                {monthComparison.items.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    {monthComparison.items.map((item) => (
+                      <div
+                        key={item.code}
+                        className="flex items-start justify-between gap-2 text-[11px] leading-snug bg-slate-50 dark:bg-slate-800/60 px-2 py-1 rounded"
+                      >
+                        <div className="flex items-start gap-1.5 min-w-0">
+                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-black bg-indigo-600 text-white shrink-0">
+                            {item.code}
+                          </span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200 break-words">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-bold">
+                          <span className="text-pink-600 dark:text-pink-400">
+                            {monthComparison.currMonthLabel.split(' ')[0]}: {item.current} ({formatPctText(item.currentPct)})
+                          </span>
+                          <span className="text-amber-700 dark:text-amber-400">
+                            {monthComparison.prevMonthLabel.split(' ')[0]}: {item.previous} ({formatPctText(item.previousPct)})
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
 
         {/* Right (7 cols): Root Cause Analysis & CAPA Summary Table */}
-        <div
-          data-testid="dashboard-capa-card"
+        <ExpandablePanel
+          title="Root Cause Analysis & CAPA (RCA & CAPA)"
+          testId="dashboard-capa-card"
           className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs flex flex-col"
         >
-          <div className="bg-emerald-700 text-white font-black text-center text-sm py-1.5 uppercase tracking-wider flex flex-wrap items-center justify-between gap-2 px-3">
-            <div className="flex items-center gap-2">
-              <span>Root Cause Analysis &amp; CAPA (RCA &amp; CAPA)</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-100 border border-emerald-500/40 normal-case">
-                On Dashboard: {dashboardCapaList.length} ({totalReports} Reports &bull; Highest First)
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setActiveTab('capa')}
-                className="text-[10px] bg-white text-emerald-800 font-extrabold px-2.5 py-1 rounded shadow-xs hover:bg-emerald-50 cursor-pointer"
-              >
-                Manage in RCA &amp; CAPA Page &rarr;
-              </button>
-            </div>
-          </div>
-          <div className="p-2 flex-1 overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-b border-slate-300 dark:border-slate-700 text-[10px] font-black uppercase">
-                  <th className="p-1.5 w-8 text-center">SL</th>
-                  <th className="p-1.5 min-w-[120px]">Defect Name</th>
-                  <th className="p-1.5 min-w-[140px]">Root Cause</th>
-                  <th className="p-1.5 min-w-[140px]">Corrective Action</th>
-                  <th className="p-1.5 min-w-[140px]">Preventive Action</th>
-                  <th className="p-1.5 min-w-[100px]">Responsible Person</th>
-                  <th className="p-1.5 w-16 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {dashboardCapaList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-10 text-center">
-                      <div className="max-w-md mx-auto space-y-2">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 mx-auto">
-                          <ShieldCheck className="w-5 h-5" />
-                        </div>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          {topSliceDefect
-                            ? 'No Pinned CAPA Items in Current Filter Slice'
-                            : 'No Defects Recorded for Current Filter Slice'}
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          {topSliceDefect
-                            ? `Highest defect in this slice is "${topSliceDefect.capaRecord.defectName}" (Qty: ${topSliceDefect.capaRecord.defectQuantity}). Use "+ Push to Dashboard" in RCA & CAPA to pin defects here.`
-                            : 'The selected Month, Floor, BSQC/AQC, or Style slice currently has 0 defects.'}
-                        </p>
-                        <button
-                          onClick={() => setActiveTab('capa')}
-                          className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
-                        >
-                          Open RCA &amp; CAPA Page &rarr;
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  dashboardCapaList.map((row) => (
-                    <tr
-                      key={row.rowKey}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                    >
-                      <td className="p-1.5 text-center font-bold text-slate-500">
-                        {row.serial}
-                      </td>
-                      <td className="p-1.5 font-bold text-slate-800 dark:text-slate-100">
-                        <div>{row.defectName}</div>
-                        <div className="text-[10px] font-black text-rose-600 dark:text-rose-400">
-                          Total Qty: {row.defectQuantity}
-                          {row.reportNumber ? (
-                            <span className="text-slate-400 dark:text-slate-500 font-semibold ml-1">
-                              &bull; {row.reportNumber}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
-                        {row.rootCause}
-                      </td>
-                      <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
-                        {row.correctiveAction}
-                      </td>
-                      <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
-                        {row.preventiveAction}
-                      </td>
-                      <td className="p-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                        {row.responsiblePerson}
-                      </td>
-                      <td className="p-1.5 text-center whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                            {row.status}
-                          </span>
-                          {canManageData && !row.isVirtual && row.existingCapaId && (
-                            <button
-                              type="button"
-                              onClick={() => updateCapa(row.existingCapaId!, { showOnDashboard: false })}
-                              title="Unpin from Dashboard"
-                              className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
-                            >
-                              &minus;
-                            </button>
-                          )}
-                        </div>
-                      </td>
+          {({ expandControls }) => (
+            <>
+              <div className="bg-emerald-700 text-white font-black text-sm py-1.5 uppercase tracking-wider flex flex-wrap items-center justify-between gap-2 px-3">
+                <div className="flex items-center gap-2">
+                  <span>Root Cause Analysis &amp; CAPA (RCA &amp; CAPA)</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-100 border border-emerald-500/40 normal-case">
+                    On Dashboard: {dashboardCapaList.length} ({totalReports} Reports &bull; Highest First)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setActiveTab('capa')}
+                    className="text-[10px] bg-white text-emerald-800 font-extrabold px-2.5 py-1 rounded shadow-xs hover:bg-emerald-50 cursor-pointer"
+                  >
+                    Manage in RCA &amp; CAPA Page &rarr;
+                  </button>
+                  {expandControls}
+                </div>
+              </div>
+              <div className="p-2 flex-1 overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-b border-slate-300 dark:border-slate-700 text-[10px] font-black uppercase">
+                      <th className="p-1.5 w-8 text-center">SL</th>
+                      <th className="p-1.5 min-w-[120px]">Defect Name</th>
+                      <th className="p-1.5 min-w-[140px]">Root Cause</th>
+                      <th className="p-1.5 min-w-[140px]">Corrective Action</th>
+                      <th className="p-1.5 min-w-[140px]">Preventive Action</th>
+                      <th className="p-1.5 min-w-[100px]">Responsible Person</th>
+                      <th className="p-1.5 w-16 text-center">Status</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {dashboardCapaList.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-10 text-center">
+                          <div className="max-w-md mx-auto space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 mx-auto">
+                              <ShieldCheck className="w-5 h-5" />
+                            </div>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                              {topSliceDefect
+                                ? 'No Pinned CAPA Items in Current Filter Slice'
+                                : 'No Defects Recorded for Current Filter Slice'}
+                            </p>
+                            <p className="text-[11px] text-slate-400">
+                              {topSliceDefect
+                                ? `Highest defect in this slice is "${topSliceDefect.capaRecord.defectName}" (Qty: ${topSliceDefect.capaRecord.defectQuantity}). Use "+ Push to Dashboard" in RCA & CAPA to pin defects here.`
+                                : 'The selected Month, Floor, BSQC/AQC, or Style slice currently has 0 defects.'}
+                            </p>
+                            <button
+                              onClick={() => setActiveTab('capa')}
+                              className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                            >
+                              Open RCA &amp; CAPA Page &rarr;
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      dashboardCapaList.map((row) => (
+                        <tr
+                          key={row.rowKey}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <td className="p-1.5 text-center font-bold text-slate-500">
+                            {row.serial}
+                          </td>
+                          <td className="p-1.5 font-bold text-slate-800 dark:text-slate-100">
+                            <div>{row.defectName}</div>
+                            <div className="text-[10px] font-black text-rose-600 dark:text-rose-400">
+                              Total Qty: {row.defectQuantity}
+                              {row.reportNumber ? (
+                                <span className="text-slate-400 dark:text-slate-500 font-semibold ml-1">
+                                  &bull; {row.reportNumber}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+                            {row.rootCause}
+                          </td>
+                          <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+                            {row.correctiveAction}
+                          </td>
+                          <td className="p-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+                            {row.preventiveAction}
+                          </td>
+                          <td className="p-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            {row.responsiblePerson}
+                          </td>
+                          <td className="p-1.5 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                                {row.status}
+                              </span>
+                              {canManageData && !row.isVirtual && row.existingCapaId && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateCapa(row.existingCapaId!, { showOnDashboard: false })}
+                                  title="Unpin from Dashboard"
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
+                                >
+                                  &minus;
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </ExpandablePanel>
       </div>
     </div>
   );

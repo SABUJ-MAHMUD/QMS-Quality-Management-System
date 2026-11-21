@@ -1,5 +1,5 @@
 {
-  "id": "/QMS-Quality-Management-System/",
+  "id": "./",
   "name": "OQL: Analysis (NFL)",
   "short_name": "OQL: Analysis (NFL)",
   "description": "OQL: Analysis (Garments Quality) for Northern Fashions Ltd. Real-time OQL inspection analysis, defect classification, and CAPA compliance.",
@@ -7,8 +7,8 @@
   "background_color": "#07182e",
   "display": "standalone",
   "orientation": "portrait",
-  "start_url": "/QMS-Quality-Management-System/",
-  "scope": "/QMS-Quality-Management-System/",
+  "start_url": "./",
+  "scope": "./",
   "icons": [
     {
       "src": "pwa-192x192.png",

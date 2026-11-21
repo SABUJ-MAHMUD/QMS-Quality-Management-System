@@ -12,8 +12,10 @@ import {
   selectDashboardCapaRows,
   buildAvailableWeeks,
   formatQtyAndPct,
+  weekOverlapsAnyMonth,
+  formatSelectedPeriodLabel,
 } from '../src/utils/dashboardAnalytics';
-import { getFiscalWeekInfo, filterReports, formatWeekDateRange } from '../src/utils/oqlCalculator';
+import { getFiscalWeekInfo, filterReports, formatWeekDateRange, normalizeMultiSelect } from '../src/utils/oqlCalculator';
 import { getCanonicalDefectInfo } from '../src/data/defectMasterData';
 
 function makeDefect(partial: Partial<InspectionDefect> & { originalDefectName: string }): InspectionDefect {
@@ -544,5 +546,73 @@ describe('Dashboard Single Defect & Month-to-Month Analytics', () => {
     const emptyDynamic = computeDynamicCapaRows([], savedWithBothPinned, { includeUnmatchedSaved: false });
     assert.deepEqual(emptyDynamic, []);
     assert.deepEqual(selectDashboardCapaRows(emptyDynamic), []);
+  });
+
+  it('filterReports, buildAvailableWeeks, computeMonthToMonthTopDefects support multi-select Month and Week arrays', () => {
+    const reports: InspectionReport[] = [
+      makeReport({ id: 'sep', inspectionDate: '2026-09-14', targetMonth: '2026-09', inspectedQuantity: 50, totalDefectQuantity: 2 }),
+      makeReport({ id: 'oct-w42', inspectionDate: '2026-10-14', targetMonth: '2026-10', inspectedQuantity: 50, totalDefectQuantity: 3 }),
+      makeReport({ id: 'nov-w46', inspectionDate: '2026-11-11', targetMonth: '2026-11', inspectedQuantity: 50, totalDefectQuantity: 1 }),
+      makeReport({
+        id: 'nov-w47',
+        inspectionDate: '2026-11-18',
+        targetMonth: '2026-11',
+        inspectedQuantity: 50,
+        totalDefectQuantity: 4,
+        defects: [
+          makeDefect({
+            id: 'd-se2',
+            originalDefectName: 'Se-2: Skipped stitch',
+            standardDefectName: 'Skipped stitch',
+            defectQuantity: 4,
+          }),
+        ],
+      }),
+    ];
+
+    assert.deepEqual(normalizeMultiSelect('ALL'), []);
+    assert.deepEqual(normalizeMultiSelect(['2026-10', '2026-11', 'ALL']), ['2026-10', '2026-11']);
+
+    // Multi-month filtering combines Oct + Nov
+    const octNov = filterReports(reports, { month: ['2026-10', '2026-11'] }, 8);
+    assert.deepEqual(
+      octNov.map((r) => r.id),
+      ['oct-w42', 'nov-w46', 'nov-w47']
+    );
+
+    // Multi-week filtering combines W42 + W47
+    const twoWeeks = filterReports(reports, { week: ['2026-W42', '2026-W47'] }, 8);
+    assert.deepEqual(
+      twoWeeks.map((r) => r.id),
+      ['oct-w42', 'nov-w47']
+    );
+
+    // Combined multi-month + multi-week
+    const multiBoth = filterReports(reports, { month: ['2026-11'], week: ['2026-W46', '2026-W47'] }, 8);
+    assert.deepEqual(
+      multiBoth.map((r) => r.id),
+      ['nov-w46', 'nov-w47']
+    );
+
+    // buildAvailableWeeks accepts multi-month array
+    const sepAndNovWeeks = buildAvailableWeeks(reports, 8, ['2026-09', '2026-11']);
+    assert.deepEqual(
+      sepAndNovWeeks.map((w) => w.weekKey),
+      ['2026-W47', '2026-W46', '2026-W38']
+    );
+
+    // weekOverlapsAnyMonth checks whether a week touches any selected month
+    const w47 = sepAndNovWeeks.find((w) => w.weekKey === '2026-W47')!;
+    assert.equal(weekOverlapsAnyMonth(w47, ['2026-10', '2026-11']), true);
+    assert.equal(weekOverlapsAnyMonth(w47, ['2026-09']), false);
+
+    // computeMonthToMonthTopDefects uses newest selected month when passed an array
+    const comparison = computeMonthToMonthTopDefects(reports, ['2026-10', '2026-11'], new Date('2026-11-20T12:00:00Z'), 5);
+    assert.equal(comparison.currMonthKey, '2026-11');
+    assert.equal(comparison.prevMonthKey, '2026-10');
+
+    // formatSelectedPeriodLabel handles multi-month and multi-week safely
+    assert.equal(formatSelectedPeriodLabel(['2026-10', '2026-11'], 'ALL'), '2026-10, 2026-11');
+    assert.ok(formatSelectedPeriodLabel('2026-11', ['2026-W46', '2026-W47'], sepAndNovWeeks)?.includes('W46'));
   });
 });

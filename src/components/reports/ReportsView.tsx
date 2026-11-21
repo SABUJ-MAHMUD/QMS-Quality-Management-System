@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { exportReportsToExcel, exportCapaToExcel, printQualityReport, exportDashboardToPptx } from '../../utils/exportUtils';
 import { computeParetoAnalysis } from '../../utils/oqlCalculator';
+import { formatSelectedPeriodLabel } from '../../utils/dashboardAnalytics';
 
 export const ReportsView: React.FC = () => {
   const { filteredReports, capas, monitoringRecords, defectGroups, settings, kpiMetrics, filters } = useApp();
@@ -129,7 +130,7 @@ export const ReportsView: React.FC = () => {
               exportDashboardToPptx(
                 filteredReports,
                 capas,
-                filters.week && filters.week !== 'ALL' ? filters.week : filters.month
+                formatSelectedPeriodLabel(filters.month, filters.week)
               )
             }
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#b25900] hover:bg-[#964b00] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
