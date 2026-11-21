@@ -11,7 +11,7 @@ import {
   AppSettings,
 } from '../types';
 import { INITIAL_DEFECT_GROUPS, INITIAL_DEFECT_MASTER } from '../data/defectMasterData';
-import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource } from '../utils/oqlCalculator';
+import { calculateReportOql, calculateAggregatedOql, calculatePassRate, filterReports, getFinancialYear, normalizeFloorName, getReportSource, normalizeReportSourceSelection, buildResetFilterState } from '../utils/oqlCalculator';
 import { findDuplicateReportIds } from '../utils/dashboardAnalytics';
 import { firestoreService } from '../services/firestoreService';
 import { testConnection } from '../lib/firebase';
@@ -167,6 +167,7 @@ const STORAGE_KEYS = {
   AUTH: 'gqa_qms_auth_v3',
   THEME: 'gqa_qms_theme_v1',
   SELECTED_FY: 'gqa_qms_selected_fy_v1',
+  SELECTED_REPORT_SOURCE: 'gqa_qms_selected_report_source_v1',
 };
 
 const VALID_FY_OPTIONS = ['FY26/27', 'FY25/26'];
@@ -187,6 +188,16 @@ function loadSavedFinancialYears(): string[] {
     // ignore
   }
   return ['FY26/27'];
+}
+
+function loadSavedReportSource(): 'ALL' | 'BSQC' | 'AQC' {
+  try {
+    if (typeof window === 'undefined') return 'ALL';
+    const raw = localStorage.getItem(STORAGE_KEYS.SELECTED_REPORT_SOURCE);
+    return normalizeReportSourceSelection(raw);
+  } catch {
+    return 'ALL';
+  }
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -410,6 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [filters, setFilters] = useState<GlobalFilterState>(() => ({
     ...DEFAULT_FILTERS,
     financialYear: loadSavedFinancialYears(),
+    reportSource: loadSavedReportSource(),
   }));
 
   // Core Data States - Initialized completely FRESH with 0 demo data
@@ -609,6 +621,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : ['FY26/27'];
     return scheduleStorageWrite(STORAGE_KEYS.SELECTED_FY, fyArr.length > 0 ? fyArr : ['FY26/27']);
   }, [filters.financialYear]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.SELECTED_REPORT_SOURCE,
+        normalizeReportSourceSelection(filters.reportSource)
+      );
+    } catch {
+      // ignore
+    }
+  }, [filters.reportSource]);
 
   // Notification helper
   const addNotification = (type: NotificationItem['type'], message: string) => {
@@ -721,10 +743,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetFilters = () => {
-    setFilters((prev) => ({
-      ...DEFAULT_FILTERS,
-      financialYear: prev.financialYear,
-    }));
+    setFilters((prev) => buildResetFilterState(prev, DEFAULT_FILTERS));
   };
 
   // Filtered reports

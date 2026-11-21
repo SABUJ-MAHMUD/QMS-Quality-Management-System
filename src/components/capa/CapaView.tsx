@@ -96,7 +96,6 @@ export const CapaView: React.FC = () => {
   const hasActiveFilters =
     hasBuyerFilter ||
     selectedFloors.length > 0 ||
-    activeReportSource !== 'ALL' ||
     selectedMonths.length > 0 ||
     selectedWeeks.length > 0 ||
     filters.styleNumber !== '' ||
@@ -701,6 +700,7 @@ export const CapaView: React.FC = () => {
               <button
                 key={opt.id}
                 type="button"
+                aria-pressed={activeReportSource === opt.id}
                 onClick={() => setFilters((prev) => ({ ...prev, reportSource: opt.id }))}
                 className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
                   activeReportSource === opt.id

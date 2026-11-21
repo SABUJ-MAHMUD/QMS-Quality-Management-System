@@ -1,4 +1,4 @@
-import { InspectionReport, DefectGroup, ReportSource } from '../types';
+import { InspectionReport, DefectGroup, ReportSource, GlobalFilterState } from '../types';
 import { MASTER_DEFECT_23_CATEGORIES, resolveDefectAccurate } from '../data/defectMasterData';
 
 /**
@@ -117,6 +117,24 @@ export function getReportSource(
     `${report.reportNumber || ''} ${report.inspectionType || ''} ${report.inspectionLevel || ''}`,
     report.pdfFileName
   );
+}
+
+export function normalizeReportSourceSelection(raw: unknown): 'ALL' | ReportSource {
+  if (raw === 'BSQC' || raw === 'AQC' || raw === 'ALL') {
+    return raw;
+  }
+  return 'ALL';
+}
+
+export function buildResetFilterState(
+  prev: GlobalFilterState,
+  defaults: GlobalFilterState
+): GlobalFilterState {
+  return {
+    ...defaults,
+    financialYear: prev.financialYear,
+    reportSource: normalizeReportSourceSelection(prev.reportSource),
+  };
 }
 
 /**

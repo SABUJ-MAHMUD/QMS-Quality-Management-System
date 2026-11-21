@@ -6,6 +6,8 @@ import {
   calculateReductionPercentage,
   getFinancialYear,
   computeParetoAnalysis,
+  normalizeReportSourceSelection,
+  buildResetFilterState,
 } from './oqlCalculator';
 
 test('calculateReportOql satisfies BESTSELLER formula for single inspection', () => {
@@ -82,3 +84,57 @@ test('computeParetoAnalysis calculates descending defect rankings and cumulative
   // Final cumulative must reach 100%
   assert.equal(pareto[pareto.length - 1].cumulativePercentage, 100);
 });
+
+test('normalizeReportSourceSelection and buildResetFilterState preserve BSQC/AQC/ALL and FY across Reset', () => {
+  assert.equal(normalizeReportSourceSelection('BSQC'), 'BSQC');
+  assert.equal(normalizeReportSourceSelection('AQC'), 'AQC');
+  assert.equal(normalizeReportSourceSelection('ALL'), 'ALL');
+  assert.equal(normalizeReportSourceSelection('invalid'), 'ALL');
+  assert.equal(normalizeReportSourceSelection(null), 'ALL');
+
+  const defaults = {
+    buyer: 'ALL',
+    financialYear: ['FY26/27'],
+    floors: [],
+    reportSource: 'ALL' as const,
+    month: 'ALL',
+    week: 'ALL',
+    dateFrom: '',
+    dateTo: '',
+    orderNumber: '',
+    styleNumber: '',
+    defectGroup: 'ALL',
+    defectSeverity: 'ALL',
+    inspectionResult: 'ALL',
+    searchQuery: '',
+  };
+
+  const resetWithBsqc = buildResetFilterState(
+    {
+      ...defaults,
+      financialYear: ['FY25/26'],
+      reportSource: 'BSQC',
+      month: ['2026-10'],
+      floors: ['SEW-1'],
+      styleNumber: '22031973',
+    },
+    defaults
+  );
+  assert.equal(resetWithBsqc.reportSource, 'BSQC');
+  assert.deepEqual(resetWithBsqc.financialYear, ['FY25/26']);
+  assert.equal(resetWithBsqc.month, 'ALL');
+  assert.deepEqual(resetWithBsqc.floors, []);
+  assert.equal(resetWithBsqc.styleNumber, '');
+
+  const resetWithAqc = buildResetFilterState(
+    {
+      ...defaults,
+      reportSource: 'AQC',
+      week: ['2026-W47'],
+    },
+    defaults
+  );
+  assert.equal(resetWithAqc.reportSource, 'AQC');
+  assert.equal(resetWithAqc.week, 'ALL');
+});
+

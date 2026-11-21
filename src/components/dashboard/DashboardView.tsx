@@ -264,7 +264,6 @@ export const DashboardView: React.FC = () => {
   const hasActiveFilters =
     hasBuyerFilter ||
     selectedFloors.length > 0 ||
-    activeReportSource !== 'ALL' ||
     selectedMonths.length > 0 ||
     selectedWeeks.length > 0 ||
     filters.styleNumber !== '' ||
@@ -447,6 +446,8 @@ export const DashboardView: React.FC = () => {
                   <button
                     key={opt.id}
                     type="button"
+                    aria-pressed={isActive}
+                    data-testid={`report-source-${opt.id.toLowerCase()}`}
                     onClick={() => setFilters((prev) => ({ ...prev, reportSource: opt.id }))}
                     className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap ${
                       isActive
@@ -744,7 +745,7 @@ export const DashboardView: React.FC = () => {
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                title="Reset all filters to defaults (FY selection is preserved)"
+                title="Reset all filters to defaults (FY and All/BSQC/AQC selections are preserved)"
                 className="flex items-center gap-1 px-2 py-1 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold border border-rose-300 dark:border-rose-800 hover:bg-rose-200 cursor-pointer transition-colors shrink-0"
               >
                 <RotateCcw className="w-3 h-3" />
