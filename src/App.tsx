@@ -87,7 +87,7 @@ const MainLayout: React.FC = () => {
         <DemoBanner />
 
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto bg-slate-50/70 dark:bg-slate-950/80 focus:outline-none">
+        <main className="flex-1 min-h-0 overflow-y-auto bg-slate-50/70 dark:bg-slate-950/80 focus:outline-none">
           <Suspense fallback={<ViewLoadingFallback />}>
             {(activeTab === 'dashboard' || isRestrictedForViewer) && <DashboardView />}
             {activeTab === 'inspection_summary' && <InspectionSummaryView />}
