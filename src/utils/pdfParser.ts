@@ -484,6 +484,8 @@ async function openPdfDocumentResilient(pdfjsLib: any, dataBytes: Uint8Array): P
     console.warn('Primary PDF Web Worker unavailable, switching to in-bundle fallback:', primaryErr);
     // Stage B: Pre-populate globalThis.pdfjsWorker with bundled WorkerMessageHandler so PDF.js runs cleanly on shared proxy / strict CSP origins without external worker fetch
     try {
+      const { ensureBrowserCompatPolyfills } = await import('./browserCompat');
+      ensureBrowserCompatPolyfills();
       const workerMod = await import('pdfjs-dist/build/pdf.worker.min.mjs');
       (globalThis as any).pdfjsWorker = workerMod;
     } catch {
@@ -500,6 +502,8 @@ export async function extractTextFromPdfFile(
   // Method 1: Lazy-loaded PDF.js with resilient worker + in-bundle fallback
   try {
     onProgress?.(25, `Opening PDF document: ${file.name}...`);
+    const { ensureBrowserCompatPolyfills } = await import('./browserCompat');
+    ensureBrowserCompatPolyfills();
     const pdfjsLib = await import('pdfjs-dist');
     const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await openPdfDocumentResilient(pdfjsLib, new Uint8Array(arrayBuffer));

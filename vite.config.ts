@@ -6,6 +6,7 @@ import { transform as lightningTransform } from 'lightningcss';
 import { transformSync as esbuildTransformSync } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { BROWSER_COMPAT_POLYFILL_IIFE } from './src/utils/browserCompat.ts';
 
 function resolveBasePath(): string {
   const raw =
@@ -98,8 +99,8 @@ function cssCompatDownlevelPlugin(): Plugin {
 }
 
 /**
- * Ensures all emitted JS chunks compile down cleanly to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
- * (eliminating ES2022+ class static blocks in vendor-firebase, private fields, regex /v flags).
+ * Ensures all emitted JS chunks and PDF worker assets compile down cleanly to Chrome 88+ / Edge 88+ / Firefox 85+ / Safari 14+
+ * and have ES2022-ES2025 polyfills (e.g. global Iterator, Promise.try, URL.parse, Uint8Array.fromBase64) available even inside Web Workers.
  */
 function jsCompatDownlevelPlugin(): Plugin {
   return {
@@ -107,7 +108,8 @@ function jsCompatDownlevelPlugin(): Plugin {
     enforce: 'post',
     generateBundle(_options, bundle) {
       for (const [fileName, item] of Object.entries(bundle)) {
-        if (item.type === 'chunk' && (fileName.endsWith('.js') || fileName.endsWith('.mjs'))) {
+        if (item.type === 'chunk') {
+          if (!fileName.endsWith('.js') && !fileName.endsWith('.mjs')) continue;
           try {
             const transformed = esbuildTransformSync(item.code, {
               loader: 'js',
@@ -116,9 +118,40 @@ function jsCompatDownlevelPlugin(): Plugin {
               minify: true,
               legalComments: 'none',
             });
-            item.code = transformed.code;
+            const needsPolyfillBanner =
+              fileName.includes('vendor-pdfjs') || fileName.includes('index-');
+            item.code = needsPolyfillBanner
+              ? `${BROWSER_COMPAT_POLYFILL_IIFE}\n${transformed.code}`
+              : transformed.code;
           } catch (err) {
-            console.warn(`[qms-js-compat] skipped downlevel on ${fileName}:`, err instanceof Error ? err.message : err);
+            console.warn(
+              `[qms-js-compat] skipped downlevel on ${fileName}:`,
+              err instanceof Error ? err.message : err
+            );
+          }
+        } else if (
+          item.type === 'asset' &&
+          fileName.includes('pdf.worker') &&
+          (fileName.endsWith('.js') || fileName.endsWith('.mjs'))
+        ) {
+          try {
+            const sourceText =
+              typeof item.source === 'string'
+                ? item.source
+                : Buffer.from(item.source).toString('utf8');
+            const transformed = esbuildTransformSync(sourceText, {
+              loader: 'js',
+              target: COMPAT_ESBUILD_TARGETS,
+              format: 'esm',
+              minify: true,
+              legalComments: 'none',
+            });
+            item.source = `${BROWSER_COMPAT_POLYFILL_IIFE}\n${transformed.code}`;
+          } catch (err) {
+            console.warn(
+              `[qms-js-compat] skipped downlevel on ${fileName}:`,
+              err instanceof Error ? err.message : err
+            );
           }
         }
       }
@@ -265,6 +298,9 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id: string) {
+            if (id.includes('preload-helper') || id.startsWith('\0vite/') || id.startsWith('\0rolldown/')) {
+              return 'rolldown-runtime';
+            }
             if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) {
               return 'vendor-recharts';
             }
